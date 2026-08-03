@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>app.scribe.Scribe</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>GPL-3.0</project_license>
+  <name>Scribe</name>
+  <summary>Editor Markdown nativo para GNOME</summary>
+  <description>
+    <p>Scribe es un editor Markdown WYSIWYG diseñado para integrarse perfectamente con el escritorio GNOME.</p>
+    <p>Características:</p>
+    <ul>
+      <li>Edición WYSIWYG inline al estilo Typora</li>
+      <li>Modo código fuente con un solo clic</li>
+      <li>Barra lateral con notas recientes y tabla de contenidos</li>
+      <li>Temas claro/oscuro automáticos</li>
+      <li>Atajos de teclado completos</li>
+      <li>Exportación a múltiples formatos</li>
+    </ul>
+  </description>
+  <screenshots>
+    <screenshot type="default">
+      <caption>Vista principal del editor</caption>
+    </screenshot>
+  </screenshots>
+  <url type="homepage">https://github.com/gnacho/scribe</url>
+  <url type="bugtracker">https://github.com/gnacho/scribe/issues</url>
+  <developer_name>Tu nombre</developer_name>
+  <content_rating type="oars-1.1" />
+  <releases>
+    <release version="0.1.0" date="2026-08-03">
+      <description>
+        <p>Versión inicial con editor WYSIWYG, modo fuente, sidebar y temas.</p>
+      </description>
+    </release>
+  </releases>
+</component>

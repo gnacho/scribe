@@ -2,6 +2,7 @@ use gtk4::prelude::*;
 use libadwaita as adw;
 
 mod window;
+mod sidebar;
 mod editor;
 
 use window::ScribeWindow;

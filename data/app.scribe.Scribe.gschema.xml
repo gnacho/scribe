@@ -2,11 +2,11 @@
 <schemalist>
   <schema id="app.scribe.Scribe" path="/app/scribe/Scribe/">
     <key name="window-width" type="i">
-      <default>1000</default>
+      <default>1100</default>
       <summary>Window width</summary>
     </key>
     <key name="window-height" type="i">
-      <default>750</default>
+      <default>800</default>
       <summary>Window height</summary>
     </key>
     <key name="theme" type="s">
@@ -17,6 +17,18 @@
     <key name="font-size" type="i">
       <default>15</default>
       <summary>Editor font size</summary>
+    </key>
+    <key name="line-spacing" type="d">
+      <default>1.7</default>
+      <summary>Line spacing</summary>
+    </key>
+    <key name="show-sidebar" type="b">
+      <default>true</default>
+      <summary>Show sidebar</summary>
+    </key>
+    <key name="autosave" type="b">
+      <default>true</default>
+      <summary>Autosave</summary>
     </key>
   </schema>
 </schemalist>

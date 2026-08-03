@@ -6,6 +6,7 @@ use std::rc::Rc;
 pub struct EditorBridge {
     webview: webkit6::WebView,
     title_callbacks: RefCell<Vec<Box<dyn Fn(&str)>>>,
+    stats_callbacks: RefCell<Vec<Box<dyn Fn(u32, u32, u32)>>>,
 }
 
 impl EditorBridge {
@@ -13,6 +14,7 @@ impl EditorBridge {
         let bridge = Rc::new(Self {
             webview: webview.clone(),
             title_callbacks: RefCell::new(Vec::new()),
+            stats_callbacks: RefCell::new(Vec::new()),
         });
 
         let user_content = webview
@@ -49,6 +51,14 @@ impl EditorBridge {
                                     for cb in strong.title_callbacks.borrow().iter() {
                                         cb(title);
                                     }
+                                }
+                            }
+                            "statsChanged" => {
+                                let words = json.get("words").and_then(|v| v.as_u64()).unwrap_or(0) as u32;
+                                let lines = json.get("lines").and_then(|v| v.as_u64()).unwrap_or(0) as u32;
+                                let chars = json.get("chars").and_then(|v| v.as_u64()).unwrap_or(0) as u32;
+                                for cb in strong.stats_callbacks.borrow().iter() {
+                                    cb(words, lines, chars);
                                 }
                             }
                             "saveRequested" => {
@@ -101,5 +111,9 @@ impl EditorBridge {
 
     pub fn connect_title_changed<F: Fn(&str) + 'static>(&self, callback: F) {
         self.title_callbacks.borrow_mut().push(Box::new(callback));
+    }
+
+    pub fn connect_stats_changed<F: Fn(u32, u32, u32) + 'static>(&self, callback: F) {
+        self.stats_callbacks.borrow_mut().push(Box::new(callback));
     }
 }

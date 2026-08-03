@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<style>
+:root {
+  --bg: #fafafa; --fg: #1c1c1c; --muted: #5e5e5e; --accent: #1c71d8;
+  --border: rgba(0,0,0,0.08); --code-bg: #f6f6f6;
+  --font: 'Cantarell','Inter',-apple-system,sans-serif;
+  --font-mono: 'Source Code Pro','JetBrains Mono',monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #1e1e1e; --fg: #eeeeee; --muted: #a0a0a0; --accent: #78aeed;
+    --border: rgba(255,255,255,0.08); --code-bg: #2a2a2a;
+  }
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; background: var(--bg); color: var(--fg);
+  font-family: var(--font-mono); font-size: 14px; line-height: 1.6; }
+#source {
+  width: 100%; min-height: 100vh; border: none; outline: none;
+  background: var(--bg); color: var(--fg);
+  font-family: var(--font-mono); font-size: 14px; line-height: 1.6;
+  padding: 32px 24px; resize: none;
+}
+#source::placeholder { color: var(--muted); }
+</style>
+</head>
+<body>
+<textarea id="source" placeholder="# Sin título
+
+Empieza a escribir markdown..."></textarea>
+<script>
+(function(){
+  window.scribe = {
+    post: function(type, data) {
+      if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.scribe) {
+        window.webkit.messageHandlers.scribe.postMessage(JSON.stringify({type: type, ...data}));
+      }
+    }
+  };
+
+  const ta = document.getElementById('source');
+  ta.value = '# Sin título
+
+Empieza a escribir markdown...';
+
+  function extractTitle(text) {
+    const lines = text.split('\n');
+    for (const line of lines) {
+      const m = line.match(/^#\s+(.+)/);
+      if (m) return m[1].trim();
+    }
+    return 'Sin título';
+  }
+
+  function countStats(text) {
+    const words = text.trim().split(/\s+/).filter(w => w.length > 0).length;
+    const lines = text.split('\n').length;
+    const chars = text.length;
+    return { words, lines, chars };
+  }
+
+  function notify() {
+    const text = ta.value;
+    window.scribe.post('titleChanged', { title: extractTitle(text) });
+    window.scribe.post('statsChanged', countStats(text));
+  }
+
+  ta.addEventListener('input', notify);
+  setTimeout(notify, 100);
+
+  window.addEventListener('scribe-save', function() {
+    window.scribe.post('saveRequested', { content: ta.value });
+  });
+
+  window.addEventListener('scribe-theme', function(e) {
+    const theme = e.detail;
+    const r = document.documentElement;
+    if (theme === 'themedark') {
+      r.style.setProperty('--bg','#1e1e1e'); r.style.setProperty('--fg','#eeeeee');
+      r.style.setProperty('--muted','#a0a0a0'); r.style.setProperty('--accent','#78aeed');
+      r.style.setProperty('--border','rgba(255,255,255,0.08)'); r.style.setProperty('--code-bg','#2a2a2a');
+    } else {
+      r.style.setProperty('--bg','#fafafa'); r.style.setProperty('--fg','#1c1c1c');
+      r.style.setProperty('--muted','#5e5e5e'); r.style.setProperty('--accent','#1c71d8');
+      r.style.setProperty('--border','rgba(0,0,0,0.08)'); r.style.setProperty('--code-bg','#f6f6f6');
+    }
+  });
+})();
+</script>
+</body>
+</html>
