@@ -2,7 +2,6 @@ use gtk4::prelude::*;
 use libadwaita as adw;
 
 mod window;
-mod sidebar;
 mod editor;
 mod settings;
 mod file_manager;

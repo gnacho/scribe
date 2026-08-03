@@ -7,7 +7,6 @@ use std::cell::RefCell;
 use std::path::PathBuf;
 
 use crate::editor::EditorBridge;
-use crate::sidebar::Sidebar;
 use crate::settings::AppSettings;
 use crate::file_manager::FileManager;
 
@@ -16,25 +15,6 @@ const SOURCE_HTML: &str = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/dat
 
 pub struct ScribeWindow {
     pub window: adw::ApplicationWindow,
-    bridge: Rc<EditorBridge>,
-    webview: webkit6::WebView,
-    sidebar: Rc<Sidebar>,
-    is_source_mode: Rc<RefCell<bool>>,
-    is_focus_mode: Rc<RefCell<bool>>,
-    search_bar: gtk4::SearchBar,
-    search_entry: gtk4::SearchEntry,
-    info_popover: gtk4::Popover,
-    word_label: gtk4::Label,
-    line_label: gtk4::Label,
-    char_label: gtk4::Label,
-    settings: Rc<AppSettings>,
-    file_manager: Rc<FileManager>,
-    current_file: Rc<RefCell<Option<PathBuf>>>,
-    current_content: Rc<RefCell<String>>,
-    title_widget: adw::WindowTitle,
-    code_toggle: gtk4::ToggleButton,
-    split_view: adw::NavigationSplitView,
-    header: adw::HeaderBar,
 }
 
 impl ScribeWindow {
@@ -43,7 +23,10 @@ impl ScribeWindow {
         let file_manager = Rc::new(FileManager::new());
         let current_file = Rc::new(RefCell::new(None::<PathBuf>));
         let current_content = Rc::new(RefCell::new(String::new()));
+        let is_source_mode = Rc::new(RefCell::new(false));
+        let is_focus_mode = Rc::new(RefCell::new(false));
 
+        // === WINDOW ===
         let window = adw::ApplicationWindow::builder()
             .application(app)
             .default_width(settings_rc.window_width())
@@ -51,12 +34,70 @@ impl ScribeWindow {
             .build();
 
         // === SIDEBAR ===
-        let sidebar = Rc::new(Sidebar::new());
-        sidebar.add_note("Bienvenida.md", "~/Documentos");
-        sidebar.add_note("Proyecto.md", "~/Documentos");
-        sidebar.add_note("Ideas.md", "~/Notas");
+        let sidebar_widget = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
+        sidebar_widget.set_width_request(260);
+        sidebar_widget.add_css_class("sidebar");
 
-        // === WEBVIEW ===
+        // Sidebar header
+        let sidebar_header = adw::HeaderBar::new();
+        sidebar_header.set_title_widget(Some(&adw::WindowTitle::new("Notas", "")));
+        sidebar_header.add_css_class("flat");
+
+        let search_entry = gtk4::SearchEntry::builder()
+            .placeholder_text("Buscar notas...")
+            .margin_top(12)
+            .margin_bottom(6)
+            .margin_start(12)
+            .margin_end(12)
+            .build();
+
+        let notes_label = gtk4::Label::new(Some("Notas recientes"));
+        notes_label.add_css_class("caption-heading");
+        notes_label.set_halign(gtk4::Align::Start);
+        notes_label.set_margin_start(12);
+        notes_label.set_margin_top(12);
+
+        let notes_list = gtk4::ListBox::builder()
+            .selection_mode(gtk4::SelectionMode::Single)
+            .css_classes(vec!["navigation-sidebar".to_string()])
+            .build();
+
+        let toc_label = gtk4::Label::new(Some("Contenido"));
+        toc_label.add_css_class("caption-heading");
+        toc_label.set_halign(gtk4::Align::Start);
+        toc_label.set_margin_start(12);
+        toc_label.set_margin_top(12);
+
+        let toc_list = gtk4::ListBox::builder()
+            .selection_mode(gtk4::SelectionMode::None)
+            .css_classes(vec!["navigation-sidebar".to_string()])
+            .build();
+
+        // Add sample notes
+        for (title, subtitle) in [("Bienvenida.md", "~/Documentos"), ("Proyecto.md", "~/Documentos"), ("Ideas.md", "~/Notas")] {
+            let row = adw::ActionRow::builder()
+                .title(title)
+                .subtitle(subtitle)
+                .build();
+            notes_list.append(&row);
+        }
+
+        let sidebar_content = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
+        sidebar_content.append(&search_entry);
+        sidebar_content.append(&notes_label);
+        sidebar_content.append(&notes_list);
+        sidebar_content.append(&toc_label);
+        sidebar_content.append(&toc_list);
+
+        let sidebar_scrolled = gtk4::ScrolledWindow::builder()
+            .hscrollbar_policy(gtk4::PolicyType::Never)
+            .child(&sidebar_content)
+            .build();
+
+        sidebar_widget.append(&sidebar_header);
+        sidebar_widget.append(&sidebar_scrolled);
+
+        // === EDITOR CONTENT ===
         let webview = webkit6::WebView::new();
         webview.set_hexpand(true);
         webview.set_vexpand(true);
@@ -71,18 +112,18 @@ impl ScribeWindow {
 
         let bridge = EditorBridge::new(&webview);
 
-        // === SEARCH BAR ===
-        let search_entry = gtk4::SearchEntry::builder()
+        // Search bar
+        let search_entry_doc = gtk4::SearchEntry::builder()
             .placeholder_text("Buscar en el documento...")
             .width_request(300)
             .build();
         let search_bar = gtk4::SearchBar::builder()
-            .child(&search_entry)
+            .child(&search_entry_doc)
             .search_mode_enabled(false)
             .build();
         search_bar.set_key_capture_widget(Some(&window));
 
-        // === INFO POPOVER ===
+        // Info popover
         let word_label = gtk4::Label::new(Some("Palabras: 0"));
         word_label.set_halign(gtk4::Align::Start);
         let line_label = gtk4::Label::new(Some("Líneas: 0"));
@@ -103,10 +144,9 @@ impl ScribeWindow {
             .child(&info_box)
             .build();
 
-        // === HEADERBAR ===
+        // Headerbar
         let header = adw::HeaderBar::new();
 
-        // Menu hamburguesa
         let menu = gio::Menu::new();
         menu.append(Some("Nueva ventana"), Some("app.new-window"));
         menu.append(Some("Abrir..."), Some("win.open"));
@@ -130,11 +170,9 @@ impl ScribeWindow {
             .build();
         header.pack_start(&menu_button);
 
-        // Title
         let title_widget = adw::WindowTitle::new("Sin título", "Scribe");
         header.set_title_widget(Some(&title_widget));
 
-        // Right side buttons
         let search_btn = gtk4::ToggleButton::builder()
             .icon_name("system-search-symbolic")
             .tooltip_text("Buscar (Ctrl+F)")
@@ -154,7 +192,7 @@ impl ScribeWindow {
             .build();
         header.pack_end(&code_toggle);
 
-        // === CONTENT LAYOUT ===
+        // Content layout
         let content_box = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
         content_box.append(&search_bar);
         content_box.append(&webview);
@@ -163,24 +201,16 @@ impl ScribeWindow {
         toolbar_view.add_top_bar(&header);
         toolbar_view.set_content(Some(&content_box));
 
-        let content_page = adw::NavigationPage::builder()
-            .child(&toolbar_view)
-            .title("Editor")
+        // === OVERLAY SPLIT VIEW ===
+        let overlay_split = adw::OverlaySplitView::builder()
+            .sidebar(&sidebar_widget)
+            .content(&toolbar_view)
+            .show_sidebar(settings_rc.show_sidebar())
+            .pin_sidebar(false)
+            .enable_hide_gesture(true)
             .build();
 
-        // === SPLIT VIEW ===
-        let split_view = adw::NavigationSplitView::builder()
-            .sidebar(&sidebar.page)
-            .content(&content_page)
-            .show_content(true)
-            .collapsed(true)
-            .build();
-
-        window.set_content(Some(&split_view));
-
-        // === STATE ===
-        let is_source_mode = Rc::new(RefCell::new(false));
-        let is_focus_mode = Rc::new(RefCell::new(false));
+        window.set_content(Some(&overlay_split));
 
         // === ACTIONS ===
         let action_open = gio::SimpleAction::new("open", None);
@@ -237,14 +267,11 @@ impl ScribeWindow {
             if let Some(p) = path {
                 let bridge_inner = bridge_clone.clone();
                 let file_manager_inner = file_manager_clone.clone();
-                let current_file_inner = current_file_clone.clone();
                 bridge_inner.connect_save_requested(move |content| {
                     let _ = file_manager_inner.save_to_path(&p, content);
-                    *current_file_inner.borrow_mut() = Some(p.clone());
                 });
                 bridge_inner.request_save();
             } else {
-                // No file yet, do save-as
                 let current_file_inner = current_file_clone.clone();
                 let bridge_inner = bridge_clone.clone();
                 let file_manager_inner = file_manager_clone.clone();
@@ -311,9 +338,23 @@ impl ScribeWindow {
         });
 
         // === CONNECT: TOC changed ===
-        let sidebar_clone = sidebar.clone();
+        let toc_list_clone = toc_list.clone();
         bridge.connect_toc_changed(move |headings| {
-            sidebar_clone.update_toc(&headings);
+            while let Some(child) = toc_list_clone.first_child() {
+                toc_list_clone.remove(&child);
+            }
+            for (level, text) in headings {
+                let label = gtk4::Label::new(Some(&text));
+                label.set_halign(gtk4::Align::Start);
+                label.set_margin_start(12 + (level as i32 - 1) * 12);
+                label.set_margin_top(4);
+                label.set_margin_bottom(4);
+                label.add_css_class("body");
+                if level == 1 {
+                    label.add_css_class("heading");
+                }
+                toc_list_clone.append(&label);
+            }
         });
 
         // === CONNECT: Code toggle ===
@@ -351,9 +392,9 @@ impl ScribeWindow {
             search_btn_clone.set_active(enabled);
         });
 
-        let search_entry_clone = search_entry.clone();
+        let search_entry_doc_clone = search_entry_doc.clone();
         let webview_clone = webview.clone();
-        search_entry.connect_search_changed(move |entry| {
+        search_entry_doc.connect_search_changed(move |entry| {
             let text = entry.text();
             if !text.is_empty() {
                 let js = format!(r#"window.find("{}", false, false, true, false, true, false);"#, text);
@@ -383,18 +424,13 @@ impl ScribeWindow {
         });
 
         // === CONNECT: Toggle sidebar ===
-        let split_view_clone = split_view.clone();
+        let overlay_split_clone = overlay_split.clone();
         let settings_clone = settings_rc.clone();
         action_toggle_sidebar.connect_activate(move |_, _| {
-            let current = split_view_clone.shows_content();
-            split_view_clone.set_show_content(!current);
+            let current = overlay_split_clone.shows_sidebar();
+            overlay_split_clone.set_show_sidebar(!current);
             let _ = settings_clone.set_show_sidebar(!current);
         });
-
-        // Restore sidebar state
-        if settings_rc.show_sidebar() {
-            split_view.set_show_content(false);
-        }
 
         // === CONNECT: Preferences ===
         let window_clone = window.clone();
@@ -490,28 +526,7 @@ impl ScribeWindow {
             glib::Propagation::Proceed
         });
 
-        Self {
-            window,
-            bridge,
-            webview,
-            sidebar,
-            is_source_mode,
-            is_focus_mode,
-            search_bar,
-            search_entry,
-            info_popover,
-            word_label,
-            line_label,
-            char_label,
-            settings: settings_rc,
-            file_manager,
-            current_file,
-            current_content,
-            title_widget,
-            code_toggle,
-            split_view,
-            header,
-        }
+        Self { window }
     }
 
     pub fn present(&self) {
