@@ -69,8 +69,10 @@ impl FileManager {
         dialog.set_filters(Some(&filters));
 
         if let Some(path) = current_path {
-            if let Some(file) = gtk4::gio::File::for_path(path).parent() {
-                dialog.set_initial_folder(Some(&file));
+            if let Some(parent_dir) = path.parent() {
+                if let Some(file) = gtk4::gio::File::for_path(parent_dir).parent() {
+                    dialog.set_initial_folder(Some(&file));
+                }
             }
         }
 

@@ -1,8 +1,7 @@
 use gtk4::prelude::*;
-use gtk4::gio;
 use libadwaita::prelude::*;
-use webkit6::prelude::*;
 use libadwaita as adw;
+use webkit6::prelude::WebViewExt;
 use std::rc::Rc;
 use std::cell::RefCell;
 use std::path::PathBuf;
@@ -21,6 +20,7 @@ pub struct ScribeWindow {
     webview: webkit6::WebView,
     sidebar: Rc<Sidebar>,
     is_source_mode: Rc<RefCell<bool>>,
+    is_focus_mode: Rc<RefCell<bool>>,
     search_bar: gtk4::SearchBar,
     search_entry: gtk4::SearchEntry,
     info_popover: gtk4::Popover,
@@ -62,7 +62,7 @@ impl ScribeWindow {
         webview.set_vexpand(true);
         webview.set_background_color(&gdk4::RGBA::new(0.0, 0.0, 0.0, 0.0));
 
-        let wsettings = webkit6::prelude::WebViewExt::settings(&webview).expect("WebView debe tener settings");
+        let wsettings = WebViewExt::settings(&webview).expect("WebView debe tener settings");
         wsettings.set_enable_javascript(true);
         wsettings.set_enable_developer_extras(true);
         wsettings.set_javascript_can_access_clipboard(true);
@@ -103,7 +103,7 @@ impl ScribeWindow {
             .child(&info_box)
             .build();
 
-        // === HEADERBAR (estilo GNOME Text Editor) ===
+        // === HEADERBAR ===
         let header = adw::HeaderBar::new();
 
         // Menu hamburguesa
@@ -180,6 +180,7 @@ impl ScribeWindow {
 
         // === STATE ===
         let is_source_mode = Rc::new(RefCell::new(false));
+        let is_focus_mode = Rc::new(RefCell::new(false));
 
         // === ACTIONS ===
         let action_open = gio::SimpleAction::new("open", None);
@@ -213,12 +214,15 @@ impl ScribeWindow {
         action_open.connect_activate(move |_, _| {
             let current_file_inner = current_file_clone.clone();
             let bridge_inner = bridge_clone.clone();
-            let title_inner = title_widget_clone.clone();
+            let title_widget_inner = title_widget_clone.clone();
             file_manager_clone.open_file_dialog(&window_clone, move |path, content| {
                 if let (Some(p), Some(c)) = (path, content) {
                     *current_file_inner.borrow_mut() = Some(p.clone());
                     bridge_inner.set_content(&c);
-                    title_inner.set_title(p.file_stem().unwrap_or_default().to_str().unwrap_or("Sin título"));
+                    let title = p.file_stem()
+                        .and_then(|s| s.to_str())
+                        .unwrap_or("Sin título");
+                    title_widget_inner.set_title(title);
                 }
             });
         });
@@ -227,19 +231,30 @@ impl ScribeWindow {
         let window_clone = window.clone();
         let file_manager_clone = file_manager.clone();
         let current_file_clone = current_file.clone();
-        let current_content_clone = current_content.clone();
         let bridge_clone = bridge.clone();
         action_save.connect_activate(move |_, _| {
             let path = current_file_clone.borrow().clone();
             if let Some(p) = path {
-                bridge_clone.request_save();
+                let bridge_inner = bridge_clone.clone();
+                let file_manager_inner = file_manager_clone.clone();
+                let current_file_inner = current_file_clone.clone();
+                bridge_inner.connect_save_requested(move |content| {
+                    let _ = file_manager_inner.save_to_path(&p, content);
+                    *current_file_inner.borrow_mut() = Some(p.clone());
+                });
+                bridge_inner.request_save();
             } else {
                 // No file yet, do save-as
                 let current_file_inner = current_file_clone.clone();
                 let bridge_inner = bridge_clone.clone();
+                let file_manager_inner = file_manager_clone.clone();
                 file_manager_clone.save_file_dialog(&window_clone, None, move |path| {
                     if let Some(p) = path {
-                        *current_file_inner.borrow_mut() = Some(p);
+                        *current_file_inner.borrow_mut() = Some(p.clone());
+                        let fm = file_manager_inner.clone();
+                        bridge_inner.connect_save_requested(move |content| {
+                            let _ = fm.save_to_path(&p, content);
+                        });
                         bridge_inner.request_save();
                     }
                 });
@@ -255,9 +270,14 @@ impl ScribeWindow {
             let current = current_file_clone.borrow().clone();
             let current_file_inner = current_file_clone.clone();
             let bridge_inner = bridge_clone.clone();
+            let file_manager_inner = file_manager_clone.clone();
             file_manager_clone.save_file_dialog(&window_clone, current.as_ref(), move |path| {
                 if let Some(p) = path {
-                    *current_file_inner.borrow_mut() = Some(p);
+                    *current_file_inner.borrow_mut() = Some(p.clone());
+                    let fm = file_manager_inner.clone();
+                    bridge_inner.connect_save_requested(move |content| {
+                        let _ = fm.save_to_path(&p, content);
+                    });
                     bridge_inner.request_save();
                 }
             });
@@ -290,6 +310,12 @@ impl ScribeWindow {
             char_label_clone.set_text(&format!("Caracteres: {}", chars));
         });
 
+        // === CONNECT: TOC changed ===
+        let sidebar_clone = sidebar.clone();
+        bridge.connect_toc_changed(move |headings| {
+            sidebar_clone.update_toc(&headings);
+        });
+
         // === CONNECT: Code toggle ===
         let webview_clone = webview.clone();
         let is_source_clone = is_source_mode.clone();
@@ -320,8 +346,8 @@ impl ScribeWindow {
         search_btn.connect_toggled(move |btn| {
             search_bar_clone.set_search_mode(btn.is_active());
         });
-        search_bar.connect_notify_local(Some("search-mode-enabled"), move |bar, _| {
-            let enabled = bar.property::<bool>("search-mode-enabled");
+        search_bar.connect_notify_local(Some("search-mode"), move |bar, _| {
+            let enabled = bar.property::<bool>("search-mode");
             search_btn_clone.set_active(enabled);
         });
 
@@ -331,20 +357,28 @@ impl ScribeWindow {
             let text = entry.text();
             if !text.is_empty() {
                 let js = format!(r#"window.find("{}", false, false, true, false, true, false);"#, text);
-                webview_clone.evaluate_javascript(&js, None, None, None::<&gtk4::gio::Cancellable>, |_| {});
+                webview_clone.evaluate_javascript(
+                    &js,
+                    None,
+                    None,
+                    gtk4::gio::Cancellable::NONE,
+                    |_| {},
+                );
             }
         });
 
         // === CONNECT: Focus mode ===
         let header_clone = header.clone();
         let toolbar_view_clone = toolbar_view.clone();
+        let is_focus_clone = is_focus_mode.clone();
         action_focus_mode.connect_activate(move |_, _| {
-            let is_focus = !header_clone.is_visible();
-            header_clone.set_visible(is_focus);
-            toolbar_view_clone.set_top_bar_style(if is_focus {
-                adw::ToolbarStyle::Raised
-            } else {
+            let focus = !*is_focus_clone.borrow();
+            *is_focus_clone.borrow_mut() = focus;
+            header_clone.set_visible(!focus);
+            toolbar_view_clone.set_top_bar_style(if focus {
                 adw::ToolbarStyle::Flat
+            } else {
+                adw::ToolbarStyle::Raised
             });
         });
 
@@ -354,7 +388,7 @@ impl ScribeWindow {
         action_toggle_sidebar.connect_activate(move |_, _| {
             let current = split_view_clone.shows_content();
             split_view_clone.set_show_content(!current);
-            let _ = settings_clone.set_show_sidebar(current);
+            let _ = settings_clone.set_show_sidebar(!current);
         });
 
         // Restore sidebar state
@@ -422,7 +456,7 @@ impl ScribeWindow {
             about.present();
         });
 
-        // === Keyboard shortcuts ===
+        // Keyboard shortcuts
         let bridge_clone = bridge.clone();
         let controller = gtk4::EventControllerKey::new();
         controller.connect_key_pressed(move |_ctrl, keyval, _keycode, state| {
@@ -447,7 +481,7 @@ impl ScribeWindow {
         });
         window.add_controller(controller);
 
-        // === Window size persistence ===
+        // Window size persistence
         let settings_clone = settings_rc.clone();
         window.connect_close_request(move |win| {
             let (width, height) = win.default_size();
@@ -462,6 +496,7 @@ impl ScribeWindow {
             webview,
             sidebar,
             is_source_mode,
+            is_focus_mode,
             search_bar,
             search_entry,
             info_popover,

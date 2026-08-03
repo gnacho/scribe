@@ -70,16 +70,14 @@ impl Sidebar {
         let on_toc_clicked = Rc::new(RefCell::new(None::<Box<dyn Fn(&str)>>));
         let on_note_clicked = Rc::new(RefCell::new(None::<Box<dyn Fn(&str)>>));
 
-        let sidebar = Self {
+        Sidebar {
             page,
             toc_list,
             notes_list,
             search_entry,
             on_toc_clicked,
             on_note_clicked,
-        };
-
-        sidebar
+        }
     }
 
     pub fn update_toc(&self, headings: &[(u8, String)]) {

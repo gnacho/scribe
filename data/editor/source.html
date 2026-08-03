@@ -89,9 +89,9 @@ Empieza a escribir markdown...';
   });
 
   window.addEventListener('scribe-theme', function(e) {
-    const theme = e.detail;
+    const theme = e.detail.theme;
     const r = document.documentElement;
-    if (theme === 'themedark') {
+    if (theme === 'dark') {
       r.style.setProperty('--bg','#1e1e1e'); r.style.setProperty('--fg','#eeeeee');
       r.style.setProperty('--muted','#a0a0a0'); r.style.setProperty('--accent','#78aeed');
       r.style.setProperty('--border','rgba(255,255,255,0.08)'); r.style.setProperty('--code-bg','#2a2a2a');

@@ -21,9 +21,8 @@ impl EditorBridge {
             toc_callbacks: RefCell::new(Vec::new()),
         });
 
-        let user_content = webview
-            .user_content_manager()
-            .expect("WebView debe tener UserContentManager");
+        let user_content = webview.user_content_manager()
+            .expect("WebView must have a UserContentManager");
 
         let script = webkit6::UserScript::new(
             r#"
@@ -42,49 +41,50 @@ impl EditorBridge {
         );
         user_content.add_script(&script);
 
-        user_content.register_script_message_handler("scribe", None);
         let bridge_weak = Rc::downgrade(&bridge);
         user_content.connect_script_message_received(Some("scribe"), move |_ucm, value| {
             let s = value.to_str();
-            if let Ok(json) = serde_json::from_str::<serde_json::Value>(&s) {
-                if let Some(type_val) = json.get("type").and_then(|v| v.as_str()) {
-                    if let Some(strong) = bridge_weak.upgrade() {
-                        match type_val {
-                            "titleChanged" => {
-                                if let Some(title) = json.get("title").and_then(|v| v.as_str()) {
-                                    for cb in strong.title_callbacks.borrow().iter() {
-                                        cb(title);
+            {
+                if let Ok(json) = serde_json::from_str::<serde_json::Value>(&s) {
+                    if let Some(type_val) = json.get("type").and_then(|v| v.as_str()) {
+                        if let Some(strong) = bridge_weak.upgrade() {
+                            match type_val {
+                                "titleChanged" => {
+                                    if let Some(title) = json.get("title").and_then(|v| v.as_str()) {
+                                        for cb in strong.title_callbacks.borrow().iter() {
+                                            cb(title);
+                                        }
                                     }
                                 }
-                            }
-                            "statsChanged" => {
-                                let words = json.get("words").and_then(|v| v.as_u64()).unwrap_or(0) as u32;
-                                let lines = json.get("lines").and_then(|v| v.as_u64()).unwrap_or(0) as u32;
-                                let chars = json.get("chars").and_then(|v| v.as_u64()).unwrap_or(0) as u32;
-                                for cb in strong.stats_callbacks.borrow().iter() {
-                                    cb(words, lines, chars);
-                                }
-                            }
-                            "saveRequested" => {
-                                if let Some(content) = json.get("content").and_then(|v| v.as_str()) {
-                                    for cb in strong.save_callbacks.borrow().iter() {
-                                        cb(content);
+                                "statsChanged" => {
+                                    let words = json.get("words").and_then(|v| v.as_u64()).unwrap_or(0) as u32;
+                                    let lines = json.get("lines").and_then(|v| v.as_u64()).unwrap_or(0) as u32;
+                                    let chars = json.get("chars").and_then(|v| v.as_u64()).unwrap_or(0) as u32;
+                                    for cb in strong.stats_callbacks.borrow().iter() {
+                                        cb(words, lines, chars);
                                     }
                                 }
-                            }
-                            "tocChanged" => {
-                                if let Some(toc) = json.get("toc").and_then(|v| v.as_array()) {
-                                    let headings: Vec<(u8, String)> = toc.iter().filter_map(|item| {
-                                        let level = item.get("level").and_then(|v| v.as_u64())? as u8;
-                                        let text = item.get("text").and_then(|v| v.as_str())?.to_string();
-                                        Some((level, text))
-                                    }).collect();
-                                    for cb in strong.toc_callbacks.borrow().iter() {
-                                        cb(headings.clone());
+                                "saveRequested" => {
+                                    if let Some(content) = json.get("content").and_then(|v| v.as_str()) {
+                                        for cb in strong.save_callbacks.borrow().iter() {
+                                            cb(content);
+                                        }
                                     }
                                 }
+                                "tocChanged" => {
+                                    if let Some(toc) = json.get("toc").and_then(|v| v.as_array()) {
+                                        let headings: Vec<(u8, String)> = toc.iter().filter_map(|item| {
+                                            let level = item.get("level").and_then(|v| v.as_u64())? as u8;
+                                            let text = item.get("text").and_then(|v| v.as_str())?.to_string();
+                                            Some((level, text))
+                                        }).collect();
+                                        for cb in strong.toc_callbacks.borrow().iter() {
+                                            cb(headings.clone());
+                                        }
+                                    }
+                                }
+                                _ => {}
                             }
-                            _ => {}
                         }
                     }
                 }
@@ -95,15 +95,16 @@ impl EditorBridge {
     }
 
     pub fn exec_command(&self, command: &str) {
+        let event = serde_json::json!({ "command": command });
         let js = format!(
-            r#"window.dispatchEvent(new CustomEvent('scribe-command', {{ detail: {{ command: '{}' }} }}));"#,
-            command
+            "window.dispatchEvent(new CustomEvent('scribe-command', {{ detail: {} }}));",
+            event
         );
         self.webview.evaluate_javascript(
             &js,
             None,
             None,
-            None::<&gtk4::gio::Cancellable>,
+            gtk4::gio::Cancellable::NONE,
             move |result| {
                 if let Err(e) = result {
                     eprintln!("JS eval error: {:?}", e);
@@ -113,34 +114,55 @@ impl EditorBridge {
     }
 
     pub fn set_theme(&self, theme: &str) {
+        let event = serde_json::json!({ "theme": theme });
         let js = format!(
-            r#"window.dispatchEvent(new CustomEvent('scribe-theme', {{ detail: {{ theme: '{}' }} }}));"#,
-            theme
+            "window.dispatchEvent(new CustomEvent('scribe-theme', {{ detail: {} }}));",
+            event
         );
-        self.webview
-            .evaluate_javascript(&js, None, None, None::<&gtk4::gio::Cancellable>, |_| {});
+        self.webview.evaluate_javascript(
+            &js,
+            None,
+            None,
+            gtk4::gio::Cancellable::NONE,
+            |_| {},
+        );
     }
 
     pub fn set_content(&self, content: &str) {
-        let json_content = serde_json::to_string(content).unwrap_or_else(|_| "\"\"".to_string());
+        let event = serde_json::json!({ "content": content });
         let js = format!(
-            r#"window.dispatchEvent(new CustomEvent('scribe-set-content', {{ detail: {{ content: {} }} }}));"#,
-            json_content
+            "window.dispatchEvent(new CustomEvent('scribe-set-content', {{ detail: {} }}));",
+            event
         );
-        self.webview
-            .evaluate_javascript(&js, None, None, None::<&gtk4::gio::Cancellable>, |_| {});
+        self.webview.evaluate_javascript(
+            &js,
+            None,
+            None,
+            gtk4::gio::Cancellable::NONE,
+            |_| {},
+        );
     }
 
     pub fn request_save(&self) {
-        let js = r#"window.dispatchEvent(new CustomEvent('scribe-save'));"#;
-        self.webview
-            .evaluate_javascript(js, None, None, None::<&gtk4::gio::Cancellable>, |_| {});
+        let js = "window.dispatchEvent(new CustomEvent('scribe-save'));";
+        self.webview.evaluate_javascript(
+            js,
+            None,
+            None,
+            gtk4::gio::Cancellable::NONE,
+            |_| {},
+        );
     }
 
     pub fn request_toc(&self) {
-        let js = r#"window.dispatchEvent(new CustomEvent('scribe-get-toc'));"#;
-        self.webview
-            .evaluate_javascript(js, None, None, None::<&gtk4::gio::Cancellable>, |_| {});
+        let js = "window.dispatchEvent(new CustomEvent('scribe-get-toc'));";
+        self.webview.evaluate_javascript(
+            js,
+            None,
+            None,
+            gtk4::gio::Cancellable::NONE,
+            |_| {},
+        );
     }
 
     pub fn connect_title_changed<F: Fn(&str) + 'static>(&self, callback: F) {

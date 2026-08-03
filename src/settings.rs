@@ -2,62 +2,78 @@ use gio::prelude::*;
 use gtk4::prelude::*;
 
 pub struct AppSettings {
-    settings: gio::Settings,
+    settings: Option<gio::Settings>,
 }
 
 impl AppSettings {
     pub fn new() -> Self {
-        let settings = gio::Settings::new("app.scribe.Scribe");
+        // Try to load schema; if not installed, use defaults
+        let settings = gio::SettingsSchemaSource::default()
+            .and_then(|source| source.lookup("app.scribe.Scribe", false))
+            .map(|_| gio::Settings::new("app.scribe.Scribe"));
+
         Self { settings }
     }
 
+    fn with_settings<F, T>(&self, default: T, f: F) -> T
+    where
+        F: FnOnce(&gio::Settings) -> T,
+    {
+        match &self.settings {
+            Some(s) => f(s),
+            None => default,
+        }
+    }
+
     pub fn window_width(&self) -> i32 {
-        self.settings.int("window-width")
+        self.with_settings(1100, |s| s.int("window-width"))
     }
 
     pub fn set_window_width(&self, width: i32) {
-        let _ = self.settings.set_int("window-width", width);
+        if let Some(s) = &self.settings {
+            let _ = s.set_int("window-width", width);
+        }
     }
 
     pub fn window_height(&self) -> i32 {
-        self.settings.int("window-height")
+        self.with_settings(800, |s| s.int("window-height"))
     }
 
     pub fn set_window_height(&self, height: i32) {
-        let _ = self.settings.set_int("window-height", height);
+        if let Some(s) = &self.settings {
+            let _ = s.set_int("window-height", height);
+        }
     }
 
     pub fn theme(&self) -> String {
-        self.settings.string("theme").to_string()
+        self.with_settings("system".to_string(), |s| s.string("theme").to_string())
     }
 
     pub fn set_theme(&self, theme: &str) {
-        let _ = self.settings.set_string("theme", theme);
+        if let Some(s) = &self.settings {
+            let _ = s.set_string("theme", theme);
+        }
     }
 
     pub fn font_size(&self) -> i32 {
-        self.settings.int("font-size")
+        self.with_settings(15, |s| s.int("font-size"))
     }
 
     pub fn line_spacing(&self) -> f64 {
-        self.settings.double("line-spacing")
+        self.with_settings(1.7, |s| s.double("line-spacing"))
     }
 
     pub fn show_sidebar(&self) -> bool {
-        self.settings.boolean("show-sidebar")
+        self.with_settings(true, |s| s.boolean("show-sidebar"))
     }
 
     pub fn set_show_sidebar(&self, show: bool) {
-        let _ = self.settings.set_boolean("show-sidebar", show);
+        if let Some(s) = &self.settings {
+            let _ = s.set_boolean("show-sidebar", show);
+        }
     }
 
     pub fn autosave(&self) -> bool {
-        self.settings.boolean("autosave")
-    }
-
-    pub fn connect_changed<F: Fn(&str) + 'static>(&self, callback: F) {
-        self.settings.connect_changed(None, move |settings, key| {
-            callback(key);
-        });
+        self.with_settings(true, |s| s.boolean("autosave"))
     }
 }
