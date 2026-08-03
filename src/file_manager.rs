@@ -1,7 +1,5 @@
 use gtk4::prelude::*;
-use gtk4::gio;
 use std::path::PathBuf;
-use std::fs;
 
 pub struct FileManager;
 
@@ -10,7 +8,7 @@ impl FileManager {
         Self
     }
 
-    pub fn open_file_dialog<F: Fn(Option<PathBuf>, Option<String>) + 'static>(
+    pub fn open<F: Fn(Option<(PathBuf, String)>) + 'static>(
         &self,
         parent: &impl IsA<gtk4::Window>,
         callback: F,
@@ -31,31 +29,29 @@ impl FileManager {
 
         dialog.open(
             Some(parent),
-            gtk4::gio::Cancellable::NONE,
+            gio::Cancellable::NONE,
             move |result| {
-                match result {
-                    Ok(file) => {
-                        if let Some(path) = file.path() {
-                            match fs::read_to_string(&path) {
-                                Ok(content) => callback(Some(path), Some(content)),
-                                Err(_) => callback(Some(path), None),
-                            }
-                        } else {
-                            callback(None, None);
-                        }
-                    }
-                    Err(_) => callback(None, None),
-                }
+                let content = result.ok()
+                    .and_then(|file| file.path())
+                    .and_then(|path| std::fs::read_to_string(&path).ok().map(|c| (path, c)));
+                callback(content);
             },
         );
     }
 
-    pub fn save_file_dialog<F: Fn(Option<PathBuf>) + 'static>(
+    pub fn save<F: Fn(Option<PathBuf>) + 'static>(
         &self,
         parent: &impl IsA<gtk4::Window>,
-        current_path: Option<&PathBuf>,
+        current: Option<&PathBuf>,
+        content: &str,
         callback: F,
     ) {
+        if let Some(path) = current {
+            let _ = std::fs::write(path, content);
+            callback(Some(path.clone()));
+            return;
+        }
+
         let dialog = gtk4::FileDialog::builder()
             .title("Guardar documento")
             .build();
@@ -68,29 +64,23 @@ impl FileManager {
         filters.append(&filter);
         dialog.set_filters(Some(&filters));
 
-        if let Some(path) = current_path {
+        if let Some(path) = current {
             if let Some(parent_dir) = path.parent() {
-                if let Some(file) = gtk4::gio::File::for_path(parent_dir).parent() {
-                    dialog.set_initial_folder(Some(&file));
-                }
+                dialog.set_initial_folder(Some(&gio::File::for_path(parent_dir)));
             }
         }
 
+        let content = content.to_string();
         dialog.save(
             Some(parent),
-            gtk4::gio::Cancellable::NONE,
+            gio::Cancellable::NONE,
             move |result| {
-                match result {
-                    Ok(file) => {
-                        callback(file.path());
-                    }
-                    Err(_) => callback(None),
+                let path = result.ok().and_then(|file| file.path());
+                if let Some(ref p) = path {
+                    let _ = std::fs::write(p, &content);
                 }
+                callback(path);
             },
         );
-    }
-
-    pub fn save_to_path(&self, path: &PathBuf, content: &str) -> Result<(), std::io::Error> {
-        fs::write(path, content)
     }
 }

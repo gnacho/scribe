@@ -1,17 +1,14 @@
 use gtk4::prelude::*;
 use libadwaita::prelude::*;
 use libadwaita as adw;
-use webkit6::prelude::WebViewExt;
 use std::rc::Rc;
 use std::cell::RefCell;
 use std::path::PathBuf;
 
-use crate::editor::EditorBridge;
+use crate::editor::Editor;
+use crate::preview::PreviewPanel;
 use crate::settings::AppSettings;
 use crate::file_manager::FileManager;
-
-const EDITOR_HTML: &str = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/data/editor/index.html"));
-const SOURCE_HTML: &str = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/data/editor/source.html"));
 
 pub struct ScribeWindow {
     pub window: adw::ApplicationWindow,
@@ -22,9 +19,7 @@ impl ScribeWindow {
         let settings_rc = Rc::new(AppSettings::new());
         let file_manager = Rc::new(FileManager::new());
         let current_file = Rc::new(RefCell::new(None::<PathBuf>));
-        let current_content = Rc::new(RefCell::new(String::new()));
-        let is_source_mode = Rc::new(RefCell::new(false));
-        let is_focus_mode = Rc::new(RefCell::new(false));
+        let is_modified = Rc::new(RefCell::new(false));
 
         // === WINDOW ===
         let window = adw::ApplicationWindow::builder()
@@ -33,12 +28,19 @@ impl ScribeWindow {
             .default_height(settings_rc.window_height())
             .build();
 
-        // === SIDEBAR ===
-        let sidebar_widget = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
-        sidebar_widget.set_width_request(260);
-        sidebar_widget.add_css_class("sidebar");
+        // === EDITOR ===
+        let editor = Rc::new(Editor::new());
+        editor.widget.set_hexpand(true);
+        editor.widget.set_vexpand(true);
 
-        // Sidebar header
+        // === PREVIEW ===
+        let preview = Rc::new(PreviewPanel::new());
+
+        // === SIDEBAR ===
+        let sidebar_box = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
+        sidebar_box.set_width_request(260);
+        sidebar_box.add_css_class("sidebar");
+
         let sidebar_header = adw::HeaderBar::new();
         sidebar_header.set_title_widget(Some(&adw::WindowTitle::new("Notas", "")));
         sidebar_header.add_css_class("flat");
@@ -73,7 +75,6 @@ impl ScribeWindow {
             .css_classes(vec!["navigation-sidebar".to_string()])
             .build();
 
-        // Add sample notes
         for (title, subtitle) in [("Bienvenida.md", "~/Documentos"), ("Proyecto.md", "~/Documentos"), ("Ideas.md", "~/Notas")] {
             let row = adw::ActionRow::builder()
                 .title(title)
@@ -94,116 +95,85 @@ impl ScribeWindow {
             .child(&sidebar_content)
             .build();
 
-        sidebar_widget.append(&sidebar_header);
-        sidebar_widget.append(&sidebar_scrolled);
+        sidebar_box.append(&sidebar_header);
+        sidebar_box.append(&sidebar_scrolled);
 
-        // === EDITOR CONTENT ===
-        let webview = webkit6::WebView::new();
-        webview.set_hexpand(true);
-        webview.set_vexpand(true);
-        webview.set_background_color(&gdk4::RGBA::new(0.0, 0.0, 0.0, 0.0));
+        // === CENTER PANED (Editor + Preview) ===
+        let paned = gtk4::Paned::new(gtk4::Orientation::Horizontal);
+        paned.set_start_child(Some(&editor.widget));
+        paned.set_end_child(Some(&preview.widget));
+        paned.set_wide_handle(true);
+        paned.set_position(600);
+        paned.set_hexpand(true);
+        paned.set_vexpand(true);
 
-        let wsettings = WebViewExt::settings(&webview).expect("WebView debe tener settings");
-        wsettings.set_enable_javascript(true);
-        wsettings.set_enable_developer_extras(true);
-        wsettings.set_javascript_can_access_clipboard(true);
+        // Show/hide preview based on settings
+        if !settings_rc.show_preview() {
+            paned.set_end_child(None::<&gtk4::Widget>);
+        }
 
-        webview.load_html(EDITOR_HTML, Some("file:///"));
-
-        let bridge = EditorBridge::new(&webview);
-
-        // Search bar
-        let search_entry_doc = gtk4::SearchEntry::builder()
-            .placeholder_text("Buscar en el documento...")
-            .width_request(300)
-            .build();
-        let search_bar = gtk4::SearchBar::builder()
-            .child(&search_entry_doc)
-            .search_mode_enabled(false)
-            .build();
-        search_bar.set_key_capture_widget(Some(&window));
-
-        // Info popover
-        let word_label = gtk4::Label::new(Some("Palabras: 0"));
-        word_label.set_halign(gtk4::Align::Start);
-        let line_label = gtk4::Label::new(Some("Líneas: 0"));
-        line_label.set_halign(gtk4::Align::Start);
-        let char_label = gtk4::Label::new(Some("Caracteres: 0"));
-        char_label.set_halign(gtk4::Align::Start);
-
-        let info_box = gtk4::Box::new(gtk4::Orientation::Vertical, 6);
-        info_box.set_margin_top(12);
-        info_box.set_margin_bottom(12);
-        info_box.set_margin_start(12);
-        info_box.set_margin_end(12);
-        info_box.append(&word_label);
-        info_box.append(&line_label);
-        info_box.append(&char_label);
-
-        let info_popover = gtk4::Popover::builder()
-            .child(&info_box)
-            .build();
-
-        // Headerbar
+        // === HEADERBAR (GNOME Text Editor style) ===
         let header = adw::HeaderBar::new();
 
+        // Left: New tab / Open
+        let new_tab_btn = gtk4::Button::from_icon_name("tab-new-symbolic");
+        new_tab_btn.set_tooltip_text(Some("Nueva pestaña (Ctrl+T)"));
+        header.pack_start(&new_tab_btn);
+
+        let open_btn = gtk4::Button::from_icon_name("document-open-symbolic");
+        open_btn.set_tooltip_text(Some("Abrir (Ctrl+O)"));
+        header.pack_start(&open_btn);
+
+        // Center: Title
+        let title_widget = adw::WindowTitle::new("Sin título", "Scribe");
+        header.set_title_widget(Some(&title_widget));
+
+        // Right: Preview toggle / Info / Menu
+        let preview_btn = gtk4::ToggleButton::builder()
+            .icon_name("document-preview-symbolic")
+            .tooltip_text("Mostrar previsualización (Ctrl+Shift+P)")
+            .active(settings_rc.show_preview())
+            .build();
+        header.pack_end(&preview_btn);
+
+        let info_btn = gtk4::Button::from_icon_name("info-symbolic");
+        info_btn.set_tooltip_text(Some("Estadísticas"));
+        header.pack_end(&info_btn);
+
+        let menu_btn = gtk4::MenuButton::builder()
+            .icon_name("open-menu-symbolic")
+            .primary(true)
+            .build();
+        header.pack_end(&menu_btn);
+
+        // === MENU ===
         let menu = gio::Menu::new();
         menu.append(Some("Nueva ventana"), Some("app.new-window"));
         menu.append(Some("Abrir..."), Some("win.open"));
         menu.append(Some("Guardar"), Some("win.save"));
         menu.append(Some("Guardar como..."), Some("win.save-as"));
         menu.append(None, None);
-        menu.append(Some("Modo foco"), Some("win.focus-mode"));
         menu.append(Some("Mostrar barra lateral"), Some("win.toggle-sidebar"));
+        menu.append(Some("Mostrar previsualización"), Some("win.toggle-preview"));
         menu.append(None, None);
         menu.append(Some("Preferencias"), Some("win.preferences"));
         menu.append(Some("Atajos de teclado"), Some("win.show-help-overlay"));
-        menu.append(Some("Ayuda"), Some("win.help"));
         menu.append(Some("Acerca de Scribe"), Some("win.about"));
         menu.append(None, None);
         menu.append(Some("Salir"), Some("app.quit"));
+        menu_btn.set_menu_model(Some(&menu));
 
-        let menu_button = gtk4::MenuButton::builder()
-            .icon_name("open-menu-symbolic")
-            .menu_model(&menu)
-            .primary(true)
-            .build();
-        header.pack_start(&menu_button);
-
-        let title_widget = adw::WindowTitle::new("Sin título", "Scribe");
-        header.set_title_widget(Some(&title_widget));
-
-        let search_btn = gtk4::ToggleButton::builder()
-            .icon_name("system-search-symbolic")
-            .tooltip_text("Buscar (Ctrl+F)")
-            .build();
-        header.pack_end(&search_btn);
-
-        let info_button = gtk4::MenuButton::builder()
-            .icon_name("info-symbolic")
-            .tooltip_text("Estadísticas del documento")
-            .popover(&info_popover)
-            .build();
-        header.pack_end(&info_button);
-
-        let code_toggle = gtk4::ToggleButton::builder()
-            .icon_name("code-symbolic")
-            .tooltip_text("Mostrar código fuente (Ctrl+Shift+C)")
-            .build();
-        header.pack_end(&code_toggle);
-
-        // Content layout
+        // === CONTENT ===
         let content_box = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
-        content_box.append(&search_bar);
-        content_box.append(&webview);
+        content_box.append(&paned);
 
         let toolbar_view = adw::ToolbarView::new();
         toolbar_view.add_top_bar(&header);
         toolbar_view.set_content(Some(&content_box));
 
-        // === OVERLAY SPLIT VIEW ===
+        // === OVERLAY SPLIT (Sidebar + Content) ===
         let overlay_split = adw::OverlaySplitView::builder()
-            .sidebar(&sidebar_widget)
+            .sidebar(&sidebar_box)
             .content(&toolbar_view)
             .show_sidebar(settings_rc.show_sidebar())
             .pin_sidebar(false)
@@ -216,211 +186,146 @@ impl ScribeWindow {
         let action_open = gio::SimpleAction::new("open", None);
         let action_save = gio::SimpleAction::new("save", None);
         let action_save_as = gio::SimpleAction::new("save-as", None);
-        let action_focus_mode = gio::SimpleAction::new("focus-mode", None);
         let action_toggle_sidebar = gio::SimpleAction::new("toggle-sidebar", None);
-        let action_toggle_search = gio::SimpleAction::new("toggle-search", None);
-        let action_toggle_code = gio::SimpleAction::new("toggle-code", None);
+        let action_toggle_preview = gio::SimpleAction::new("toggle-preview", None);
         let action_preferences = gio::SimpleAction::new("preferences", None);
-        let action_help = gio::SimpleAction::new("help", None);
         let action_about = gio::SimpleAction::new("about", None);
 
         window.add_action(&action_open);
         window.add_action(&action_save);
         window.add_action(&action_save_as);
-        window.add_action(&action_focus_mode);
         window.add_action(&action_toggle_sidebar);
-        window.add_action(&action_toggle_search);
-        window.add_action(&action_toggle_code);
+        window.add_action(&action_toggle_preview);
         window.add_action(&action_preferences);
-        window.add_action(&action_help);
         window.add_action(&action_about);
 
-        // === CONNECT: Open file ===
+        // === CONNECT: Open ===
         let window_clone = window.clone();
         let file_manager_clone = file_manager.clone();
         let current_file_clone = current_file.clone();
-        let bridge_clone = bridge.clone();
+        let editor_clone = editor.clone();
         let title_widget_clone = title_widget.clone();
+        let is_modified_clone = is_modified.clone();
         action_open.connect_activate(move |_, _| {
+            let editor_inner = editor_clone.clone();
             let current_file_inner = current_file_clone.clone();
-            let bridge_inner = bridge_clone.clone();
             let title_widget_inner = title_widget_clone.clone();
-            file_manager_clone.open_file_dialog(&window_clone, move |path, content| {
-                if let (Some(p), Some(c)) = (path, content) {
-                    *current_file_inner.borrow_mut() = Some(p.clone());
-                    bridge_inner.set_content(&c);
-                    let title = p.file_stem()
+            let is_modified_inner = is_modified_clone.clone();
+            file_manager_clone.open(&window_clone, move |result| {
+                if let Some((path, content)) = result {
+                    *current_file_inner.borrow_mut() = Some(path.clone());
+                    editor_inner.set_text(&content);
+                    let title = path.file_stem()
                         .and_then(|s| s.to_str())
                         .unwrap_or("Sin título");
                     title_widget_inner.set_title(title);
+                    *is_modified_inner.borrow_mut() = false;
                 }
             });
         });
+
+        open_btn.connect_clicked(glib::clone!(@weak action_open => move |_| {
+            action_open.activate(None);
+        }));
 
         // === CONNECT: Save ===
         let window_clone = window.clone();
         let file_manager_clone = file_manager.clone();
         let current_file_clone = current_file.clone();
-        let bridge_clone = bridge.clone();
+        let editor_clone = editor.clone();
+        let title_widget_clone = title_widget.clone();
+        let is_modified_clone = is_modified.clone();
         action_save.connect_activate(move |_, _| {
+            let content = editor_clone.text();
             let path = current_file_clone.borrow().clone();
-            if let Some(p) = path {
-                let bridge_inner = bridge_clone.clone();
-                let file_manager_inner = file_manager_clone.clone();
-                bridge_inner.connect_save_requested(move |content| {
-                    let _ = file_manager_inner.save_to_path(&p, content);
-                });
-                bridge_inner.request_save();
-            } else {
-                let current_file_inner = current_file_clone.clone();
-                let bridge_inner = bridge_clone.clone();
-                let file_manager_inner = file_manager_clone.clone();
-                file_manager_clone.save_file_dialog(&window_clone, None, move |path| {
-                    if let Some(p) = path {
-                        *current_file_inner.borrow_mut() = Some(p.clone());
-                        let fm = file_manager_inner.clone();
-                        bridge_inner.connect_save_requested(move |content| {
-                            let _ = fm.save_to_path(&p, content);
-                        });
-                        bridge_inner.request_save();
-                    }
-                });
-            }
+            let current_file_inner = current_file_clone.clone();
+            let title_widget_inner = title_widget_clone.clone();
+            let is_modified_inner = is_modified_clone.clone();
+            file_manager_clone.save(&window_clone, path.as_ref(), &content, move |saved_path| {
+                if let Some(p) = saved_path {
+                    *current_file_inner.borrow_mut() = Some(p.clone());
+                    let title = p.file_stem()
+                        .and_then(|s| s.to_str())
+                        .unwrap_or("Sin título");
+                    title_widget_inner.set_title(title);
+                    *is_modified_inner.borrow_mut() = false;
+                }
+            });
         });
 
         // === CONNECT: Save As ===
         let window_clone = window.clone();
         let file_manager_clone = file_manager.clone();
         let current_file_clone = current_file.clone();
-        let bridge_clone = bridge.clone();
+        let editor_clone = editor.clone();
+        let title_widget_clone = title_widget.clone();
+        let is_modified_clone = is_modified.clone();
         action_save_as.connect_activate(move |_, _| {
-            let current = current_file_clone.borrow().clone();
+            let content = editor_clone.text();
             let current_file_inner = current_file_clone.clone();
-            let bridge_inner = bridge_clone.clone();
-            let file_manager_inner = file_manager_clone.clone();
-            file_manager_clone.save_file_dialog(&window_clone, current.as_ref(), move |path| {
-                if let Some(p) = path {
+            let title_widget_inner = title_widget_clone.clone();
+            let is_modified_inner = is_modified_clone.clone();
+            file_manager_clone.save(&window_clone, None, &content, move |saved_path| {
+                if let Some(p) = saved_path {
                     *current_file_inner.borrow_mut() = Some(p.clone());
-                    let fm = file_manager_inner.clone();
-                    bridge_inner.connect_save_requested(move |content| {
-                        let _ = fm.save_to_path(&p, content);
-                    });
-                    bridge_inner.request_save();
+                    let title = p.file_stem()
+                        .and_then(|s| s.to_str())
+                        .unwrap_or("Sin título");
+                    title_widget_inner.set_title(title);
+                    *is_modified_inner.borrow_mut() = false;
                 }
             });
         });
 
-        // === CONNECT: Save callback from JS ===
-        let current_file_clone = current_file.clone();
-        let current_content_clone = current_content.clone();
-        let file_manager_clone = file_manager.clone();
-        bridge.connect_save_requested(move |content| {
-            *current_content_clone.borrow_mut() = content.to_string();
-            if let Some(path) = current_file_clone.borrow().as_ref() {
-                let _ = file_manager_clone.save_to_path(path, content);
-            }
-        });
-
-        // === CONNECT: Title changed ===
-        let title_widget_clone = title_widget.clone();
-        bridge.connect_title_changed(move |title| {
-            title_widget_clone.set_title(title);
-        });
-
-        // === CONNECT: Stats changed ===
-        let word_label_clone = word_label.clone();
-        let line_label_clone = line_label.clone();
-        let char_label_clone = char_label.clone();
-        bridge.connect_stats_changed(move |words, lines, chars| {
-            word_label_clone.set_text(&format!("Palabras: {}", words));
-            line_label_clone.set_text(&format!("Líneas: {}", lines));
-            char_label_clone.set_text(&format!("Caracteres: {}", chars));
-        });
-
-        // === CONNECT: TOC changed ===
+        // === CONNECT: Editor changed → update preview & stats ===
+        let preview_clone = preview.clone();
         let toc_list_clone = toc_list.clone();
-        bridge.connect_toc_changed(move |headings| {
+        let title_widget_clone = title_widget.clone();
+        let is_modified_clone = is_modified.clone();
+        editor.connect_changed(move |text| {
+            preview_clone.update(text);
+            *is_modified_clone.borrow_mut() = true;
+
+            // Update title from first heading
+            let lines = text.lines();
+            let mut title = "Sin título";
+            for line in lines {
+                if let Some(t) = line.strip_prefix("# ") {
+                    title = t.trim();
+                    break;
+                }
+            }
+            title_widget_clone.set_title(title);
+
+            // Update TOC
             while let Some(child) = toc_list_clone.first_child() {
                 toc_list_clone.remove(&child);
             }
-            for (level, text) in headings {
-                let label = gtk4::Label::new(Some(&text));
-                label.set_halign(gtk4::Align::Start);
-                label.set_margin_start(12 + (level as i32 - 1) * 12);
-                label.set_margin_top(4);
-                label.set_margin_bottom(4);
-                label.add_css_class("body");
-                if level == 1 {
+            for line in text.lines() {
+                if let Some(rest) = line.strip_prefix("# ") {
+                    let label = gtk4::Label::new(Some(rest.trim()));
+                    label.set_halign(gtk4::Align::Start);
+                    label.set_margin_start(12);
+                    label.set_margin_top(2);
+                    label.set_margin_bottom(2);
                     label.add_css_class("heading");
+                    toc_list_clone.append(&label);
+                } else if let Some(rest) = line.strip_prefix("## ") {
+                    let label = gtk4::Label::new(Some(rest.trim()));
+                    label.set_halign(gtk4::Align::Start);
+                    label.set_margin_start(24);
+                    label.set_margin_top(2);
+                    label.set_margin_bottom(2);
+                    toc_list_clone.append(&label);
+                } else if let Some(rest) = line.strip_prefix("### ") {
+                    let label = gtk4::Label::new(Some(rest.trim()));
+                    label.set_halign(gtk4::Align::Start);
+                    label.set_margin_start(36);
+                    label.set_margin_top(2);
+                    label.set_margin_bottom(2);
+                    toc_list_clone.append(&label);
                 }
-                toc_list_clone.append(&label);
             }
-        });
-
-        // === CONNECT: Code toggle ===
-        let webview_clone = webview.clone();
-        let is_source_clone = is_source_mode.clone();
-        let bridge_clone = bridge.clone();
-        code_toggle.connect_clicked(move |btn| {
-            let source = *is_source_clone.borrow();
-            if source {
-                webview_clone.load_html(EDITOR_HTML, Some("file:///"));
-                btn.set_icon_name("code-symbolic");
-                btn.set_tooltip_text(Some("Mostrar código fuente (Ctrl+Shift+C)"));
-            } else {
-                bridge_clone.request_save();
-                webview_clone.load_html(SOURCE_HTML, Some("file:///"));
-                btn.set_icon_name("document-edit-symbolic");
-                btn.set_tooltip_text(Some("Mostrar editor WYSIWYG (Ctrl+Shift+C)"));
-            }
-            *is_source_clone.borrow_mut() = !source;
-        });
-
-        let code_toggle_clone = code_toggle.clone();
-        action_toggle_code.connect_activate(move |_, _| {
-            code_toggle_clone.set_active(!code_toggle_clone.is_active());
-        });
-
-        // === CONNECT: Search ===
-        let search_bar_clone = search_bar.clone();
-        let search_btn_clone = search_btn.clone();
-        search_btn.connect_toggled(move |btn| {
-            search_bar_clone.set_search_mode(btn.is_active());
-        });
-        search_bar.connect_notify_local(Some("search-mode"), move |bar, _| {
-            let enabled = bar.property::<bool>("search-mode");
-            search_btn_clone.set_active(enabled);
-        });
-
-        let search_entry_doc_clone = search_entry_doc.clone();
-        let webview_clone = webview.clone();
-        search_entry_doc.connect_search_changed(move |entry| {
-            let text = entry.text();
-            if !text.is_empty() {
-                let js = format!(r#"window.find("{}", false, false, true, false, true, false);"#, text);
-                webview_clone.evaluate_javascript(
-                    &js,
-                    None,
-                    None,
-                    gtk4::gio::Cancellable::NONE,
-                    |_| {},
-                );
-            }
-        });
-
-        // === CONNECT: Focus mode ===
-        let header_clone = header.clone();
-        let toolbar_view_clone = toolbar_view.clone();
-        let is_focus_clone = is_focus_mode.clone();
-        action_focus_mode.connect_activate(move |_, _| {
-            let focus = !*is_focus_clone.borrow();
-            *is_focus_clone.borrow_mut() = focus;
-            header_clone.set_visible(!focus);
-            toolbar_view_clone.set_top_bar_style(if focus {
-                adw::ToolbarStyle::Flat
-            } else {
-                adw::ToolbarStyle::Raised
-            });
         });
 
         // === CONNECT: Toggle sidebar ===
@@ -431,6 +336,25 @@ impl ScribeWindow {
             overlay_split_clone.set_show_sidebar(!current);
             let _ = settings_clone.set_show_sidebar(!current);
         });
+
+        // === CONNECT: Toggle preview ===
+        let paned_clone = paned.clone();
+        let preview_clone = preview.clone();
+        let preview_btn_clone = preview_btn.clone();
+        let settings_clone = settings_rc.clone();
+        action_toggle_preview.connect_activate(move |_, _| {
+            let active = preview_btn_clone.is_active();
+            if active {
+                paned_clone.set_end_child(Some(&preview_clone.widget));
+            } else {
+                paned_clone.set_end_child(None::<&gtk4::Widget>);
+            }
+            let _ = settings_clone.set_show_preview(active);
+        });
+
+        preview_btn.connect_toggled(glib::clone!(@weak action_toggle_preview => move |btn| {
+            action_toggle_preview.activate(None);
+        }));
 
         // === CONNECT: Preferences ===
         let window_clone = window.clone();
@@ -453,7 +377,7 @@ impl ScribeWindow {
 
             let font_row = adw::ActionRow::builder()
                 .title("Fuente del editor")
-                .subtitle("Cantarell 15px")
+                .subtitle("Monospace 15px")
                 .build();
             group.add(&font_row);
 
@@ -484,7 +408,7 @@ impl ScribeWindow {
                 .application_name("Scribe")
                 .application_icon("app.scribe.Scribe")
                 .developer_name("Tu nombre")
-                .version("0.1.0")
+                .version("1.0.0")
                 .website("https://github.com/gnacho/scribe")
                 .issue_url("https://github.com/gnacho/scribe/issues")
                 .license_type(gtk4::License::Gpl30)
@@ -492,22 +416,13 @@ impl ScribeWindow {
             about.present();
         });
 
-        // Keyboard shortcuts
-        let bridge_clone = bridge.clone();
+        // === Keyboard shortcuts ===
         let controller = gtk4::EventControllerKey::new();
         controller.connect_key_pressed(move |_ctrl, keyval, _keycode, state| {
             if state.contains(gdk4::ModifierType::CONTROL_MASK) {
                 match keyval {
-                    gdk4::Key::b => {
-                        bridge_clone.exec_command("toggleBold");
-                        return glib::Propagation::Stop;
-                    }
-                    gdk4::Key::i => {
-                        bridge_clone.exec_command("toggleItalic");
-                        return glib::Propagation::Stop;
-                    }
-                    gdk4::Key::k => {
-                        bridge_clone.exec_command("toggleCode");
+                    gdk4::Key::t => {
+                        // New tab - placeholder
                         return glib::Propagation::Stop;
                     }
                     _ => {}

@@ -1,17 +1,18 @@
 [package]
 name = "scribe"
-version = "0.1.0"
+version = "1.0.0"
 edition = "2021"
 authors = ["gnacho"]
-description = "A native GNOME Markdown editor with inline WYSIWYG"
+description = "A native GNOME Markdown editor"
 license = "AGPL-3.0"
 
 [dependencies]
 gtk4 = { version = "0.9", features = ["v4_14"] }
 libadwaita = { version = "0.7", features = ["v1_5"] }
-webkit6 = { version = "0.4", package = "webkit6" }
+gtksourceview5 = { version = "0.9", package = "sourceview5", features = ["v5_10"] }
 glib = "0.20"
 gio = "0.20"
 gdk4 = "0.9"
+pulldown-cmark = "0.12"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"

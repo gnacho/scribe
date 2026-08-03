@@ -9,10 +9,17 @@
       <default>800</default>
       <summary>Window height</summary>
     </key>
+    <key name="show-sidebar" type="b">
+      <default>true</default>
+      <summary>Show sidebar</summary>
+    </key>
+    <key name="show-preview" type="b">
+      <default>false</default>
+      <summary>Show preview panel</summary>
+    </key>
     <key name="theme" type="s">
       <default>"system"</default>
       <summary>Color theme</summary>
-      <description>system, light, or dark</description>
     </key>
     <key name="font-size" type="i">
       <default>15</default>
@@ -21,10 +28,6 @@
     <key name="line-spacing" type="d">
       <default>1.7</default>
       <summary>Line spacing</summary>
-    </key>
-    <key name="show-sidebar" type="b">
-      <default>true</default>
-      <summary>Show sidebar</summary>
     </key>
     <key name="autosave" type="b">
       <default>true</default>
