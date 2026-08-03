@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<schemalist>
+  <schema id="app.scribe.Scribe" path="/app/scribe/Scribe/">
+    <key name="window-width" type="i">
+      <default>1000</default>
+      <summary>Window width</summary>
+    </key>
+    <key name="window-height" type="i">
+      <default>750</default>
+      <summary>Window height</summary>
+    </key>
+    <key name="theme" type="s">
+      <default>"system"</default>
+      <summary>Color theme</summary>
+      <description>system, light, or dark</description>
+    </key>
+    <key name="font-size" type="i">
+      <default>15</default>
+      <summary>Editor font size</summary>
+    </key>
+  </schema>
+</schemalist>

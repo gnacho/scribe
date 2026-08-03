@@ -1,0 +1,439 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Scribe Editor</title>
+
+<!-- Milkdown UMD bundles -->
+<script src="https://cdn.jsdelivr.net/npm/@milkdown/core@7.3.3/dist/core.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@milkdown/ctx@7.3.3/dist/ctx.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@milkdown/prose@7.3.3/dist/prose.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@milkdown/preset-commonmark@7.3.3/dist/preset-commonmark.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@milkdown/preset-gfm@7.3.3/dist/preset-gfm.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@milkdown/plugin-listener@7.3.3/dist/plugin-listener.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@milkdown/plugin-tooltip@7.3.3/dist/plugin-tooltip.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@milkdown/plugin-slash@7.3.3/dist/plugin-slash.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@milkdown/plugin-history@7.3.3/dist/plugin-history.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@milkdown/plugin-emoji@7.3.3/dist/plugin-emoji.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@milkdown/plugin-math@7.3.3/dist/plugin-math.umd.min.js"></script>
+
+<!-- KaTeX for math -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+<script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+
+<style>
+:root {
+  --bg: #fafafa;
+  --fg: #1c1c1c;
+  --muted: #5e5e5e;
+  --accent: #1c71d8;
+  --border: rgba(0,0,0,0.08);
+  --code-bg: #f6f6f6;
+  --pre-bg: #f0f0f0;
+  --row-alt: #fafafa;
+  --sel-bg: #1c71d8;
+  --sel-fg: #fff;
+  --font: 'Cantarell', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-mono: 'Source Code Pro', 'JetBrains Mono', 'Fira Code', monospace;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #1e1e1e;
+    --fg: #eeeeee;
+    --muted: #a0a0a0;
+    --accent: #78aeed;
+    --border: rgba(255,255,255,0.08);
+    --code-bg: #2a2a2a;
+    --pre-bg: #2a2a2a;
+    --row-alt: #262626;
+    --sel-bg: #78aeed;
+    --sel-fg: #1e1e1e;
+  }
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font);
+  font-size: 15px;
+  line-height: 1.7;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Editor container */
+#editor {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 32px 24px 120px 24px;
+  min-height: 100vh;
+}
+
+/* Milkdown overrides */
+.milkdown {
+  font-family: var(--font) !important;
+  color: var(--fg) !important;
+  background: transparent !important;
+}
+
+.milkdown .editor {
+  padding: 0 !important;
+  outline: none !important;
+}
+
+/* ProseMirror overrides */
+.ProseMirror {
+  outline: none !important;
+  caret-color: var(--accent);
+}
+
+.ProseMirror p {
+  margin: 0.6em 0 !important;
+  line-height: 1.7 !important;
+}
+
+.ProseMirror h1 {
+  font-size: 2em !important;
+  font-weight: 800 !important;
+  margin: 0.8em 0 0.4em !important;
+  letter-spacing: -0.02em !important;
+  line-height: 1.3 !important;
+  color: var(--fg) !important;
+}
+
+.ProseMirror h2 {
+  font-size: 1.5em !important;
+  font-weight: 700 !important;
+  margin: 0.7em 0 0.35em !important;
+  line-height: 1.35 !important;
+  color: var(--fg) !important;
+}
+
+.ProseMirror h3 {
+  font-size: 1.25em !important;
+  font-weight: 700 !important;
+  margin: 0.6em 0 0.3em !important;
+  line-height: 1.4 !important;
+  color: var(--fg) !important;
+}
+
+.ProseMirror h4 {
+  font-size: 1.1em !important;
+  font-weight: 600 !important;
+  margin: 0.5em 0 0.25em !important;
+  color: var(--fg) !important;
+}
+
+.ProseMirror blockquote {
+  border-left: 3px solid var(--accent) !important;
+  padding-left: 16px !important;
+  margin: 1em 0 !important;
+  color: var(--muted) !important;
+  font-style: italic !important;
+  background: transparent !important;
+}
+
+.ProseMirror code {
+  background: var(--code-bg) !important;
+  padding: 2px 6px !important;
+  border-radius: 4px !important;
+  font-family: var(--font-mono) !important;
+  font-size: 0.9em !important;
+  color: var(--fg) !important;
+}
+
+.ProseMirror pre {
+  background: var(--pre-bg) !important;
+  padding: 16px !important;
+  border-radius: 8px !important;
+  overflow-x: auto !important;
+  margin: 1em 0 !important;
+  border: 1px solid var(--border) !important;
+}
+
+.ProseMirror pre code {
+  background: none !important;
+  padding: 0 !important;
+  border-radius: 0 !important;
+  font-size: 0.85em !important;
+  line-height: 1.5 !important;
+}
+
+.ProseMirror ul, .ProseMirror ol {
+  padding-left: 1.5em !important;
+  margin: 0.6em 0 !important;
+}
+
+.ProseMirror li {
+  margin: 0.25em 0 !important;
+}
+
+.ProseMirror li > p {
+  margin: 0 !important;
+}
+
+.ProseMirror hr {
+  border: none !important;
+  border-top: 1px solid var(--border) !important;
+  margin: 2em 0 !important;
+  height: 0 !important;
+}
+
+.ProseMirror a {
+  color: var(--accent) !important;
+  text-decoration: none !important;
+}
+
+.ProseMirror a:hover {
+  text-decoration: underline !important;
+}
+
+.ProseMirror img {
+  max-width: 100% !important;
+  border-radius: 8px !important;
+  margin: 1em 0 !important;
+}
+
+.ProseMirror table {
+  width: 100% !important;
+  border-collapse: collapse !important;
+  margin: 1em 0 !important;
+  font-size: 0.95em !important;
+}
+
+.ProseMirror th, .ProseMirror td {
+  border: 1px solid var(--border) !important;
+  padding: 8px 12px !important;
+  text-align: left !important;
+  vertical-align: top !important;
+}
+
+.ProseMirror th {
+  background: var(--pre-bg) !important;
+  font-weight: 600 !important;
+}
+
+.ProseMirror tr:nth-child(even) {
+  background: var(--row-alt) !important;
+}
+
+/* Task lists */
+.ProseMirror li[data-type="taskItem"] {
+  list-style: none !important;
+  display: flex !important;
+  align-items: flex-start !important;
+  gap: 8px !important;
+}
+
+.ProseMirror li[data-type="taskItem"] > input {
+  margin-top: 4px !important;
+  accent-color: var(--accent) !important;
+}
+
+/* Selection */
+::selection {
+  background: var(--sel-bg) !important;
+  color: var(--sel-fg) !important;
+}
+
+/* Placeholder */
+.ProseMirror p.is-empty::before {
+  content: "Empieza a escribir...";
+  color: var(--muted);
+  float: left;
+  height: 0;
+  pointer-events: none;
+}
+
+/* Tooltip plugin */
+.milkdown-tooltip {
+  background: var(--bg) !important;
+  border: 1px solid var(--border) !important;
+  border-radius: 8px !important;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15) !important;
+  padding: 4px !important;
+}
+
+.milkdown-tooltip button {
+  background: transparent !important;
+  border: none !important;
+  color: var(--fg) !important;
+  padding: 6px 10px !important;
+  border-radius: 6px !important;
+  cursor: pointer !important;
+  font-family: var(--font) !important;
+}
+
+.milkdown-tooltip button:hover {
+  background: var(--code-bg) !important;
+}
+
+/* Slash menu */
+.milkdown-slash-menu {
+  background: var(--bg) !important;
+  border: 1px solid var(--border) !important;
+  border-radius: 8px !important;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15) !important;
+  font-family: var(--font) !important;
+}
+
+.milkdown-slash-menu .menu-item {
+  color: var(--fg) !important;
+  padding: 8px 12px !important;
+}
+
+.milkdown-slash-menu .menu-item:hover,
+.milkdown-slash-menu .menu-item.selected {
+  background: var(--code-bg) !important;
+}
+
+/* Math */
+.katex {
+  font-size: 1em !important;
+  color: var(--fg) !important;
+}
+
+/* Emoji */
+.ProseMirror .emoji {
+  height: 1.2em !important;
+  vertical-align: middle !important;
+}
+
+/* Scrollbar styling to match GTK */
+::-webkit-scrollbar {
+  width: 8px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--muted);
+}
+</style>
+</head>
+<body>
+<div id="editor"></div>
+
+<script>
+(function() {
+  // Bridge to Rust
+  window.scribe = {
+    post: function(type, data) {
+      if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.scribe) {
+        window.webkit.messageHandlers.scribe.postMessage(JSON.stringify({type: type, ...data}));
+      }
+    }
+  };
+
+  // Extract title from first heading
+  function extractTitle(markdown) {
+    const lines = markdown.split('\n');
+    for (const line of lines) {
+      const match = line.match(/^#\s+(.+)/);
+      if (match) return match[1].trim();
+    }
+    return 'Sin título';
+  }
+
+  // Initialize Milkdown
+  const { Editor, rootCtx, defaultValueCtx } = MilkdownCore;
+  const { commonmark } = MilkdownPresetCommonmark;
+  const { gfm } = MilkdownPresetGfm;
+  const { listener, listenerCtx } = MilkdownPluginListener;
+  const { tooltip } = MilkdownPluginTooltip;
+  const { slash } = MilkdownPluginSlash;
+  const { history } = MilkdownPluginHistory;
+  const { emoji } = MilkdownPluginEmoji;
+  const { math } = MilkdownPluginMath;
+
+  const defaultContent = '# Sin título\n\nEmpieza a escribir...';
+
+  const editor = Editor.make()
+    .config((ctx) => {
+      ctx.set(rootCtx, document.getElementById('editor'));
+      ctx.set(defaultValueCtx, defaultContent);
+
+      ctx.get(listenerCtx).markdownUpdated((ctx, markdown, prevMarkdown) => {
+        if (markdown === prevMarkdown) return;
+        const title = extractTitle(markdown);
+        window.scribe.post('titleChanged', { title: title });
+      });
+    })
+    .use(commonmark)
+    .use(gfm)
+    .use(listener)
+    .use(tooltip)
+    .use(slash)
+    .use(history)
+    .use(emoji)
+    .use(math);
+
+  editor.create().then(() => {
+    console.log('Scribe editor ready');
+    window.scribeEditor = editor;
+  });
+
+  // Listen for commands from Rust
+  window.addEventListener('scribe-command', function(e) {
+    const cmd = e.detail;
+    // Milkdown commands are accessed via action API
+    // For now we use document.execCommand as fallback
+    if (cmd === 'commandtoggleBold') {
+      document.execCommand('bold');
+    } else if (cmd === 'commandtoggleItalic') {
+      document.execCommand('italic');
+    } else if (cmd === 'commandtoggleCode') {
+      document.execCommand('formatBlock', false, 'pre');
+    }
+  });
+
+  // Theme switch
+  window.addEventListener('scribe-theme', function(e) {
+    const theme = e.detail;
+    const root = document.documentElement;
+    if (theme === 'themedark') {
+      root.style.setProperty('--bg', '#1e1e1e');
+      root.style.setProperty('--fg', '#eeeeee');
+      root.style.setProperty('--muted', '#a0a0a0');
+      root.style.setProperty('--accent', '#78aeed');
+      root.style.setProperty('--border', 'rgba(255,255,255,0.08)');
+      root.style.setProperty('--code-bg', '#2a2a2a');
+      root.style.setProperty('--pre-bg', '#2a2a2a');
+      root.style.setProperty('--row-alt', '#262626');
+      root.style.setProperty('--sel-bg', '#78aeed');
+      root.style.setProperty('--sel-fg', '#1e1e1e');
+    } else {
+      root.style.setProperty('--bg', '#fafafa');
+      root.style.setProperty('--fg', '#1c1c1c');
+      root.style.setProperty('--muted', '#5e5e5e');
+      root.style.setProperty('--accent', '#1c71d8');
+      root.style.setProperty('--border', 'rgba(0,0,0,0.08)');
+      root.style.setProperty('--code-bg', '#f6f6f6');
+      root.style.setProperty('--pre-bg', '#f0f0f0');
+      root.style.setProperty('--row-alt', '#fafafa');
+      root.style.setProperty('--sel-bg', '#1c71d8');
+      root.style.setProperty('--sel-fg', '#fff');
+    }
+  });
+
+  // Save request
+  window.addEventListener('scribe-save', function() {
+    if (window.scribeEditor) {
+      // Get markdown content
+      const content = window.scribeEditor.ctx.get(listenerCtx).getMarkdown?.() || '';
+      window.scribe.post('saveRequested', { content: content });
+    }
+  });
+})();
+</script>
+</body>
+</html>

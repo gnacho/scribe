@@ -1,29 +1,64 @@
-# Gnome MarkDown Editor
+# Scribe
 
-My vision of what I believe would be the best approach to a GTK3 markdown editor, following the GNOME Human Interface Guidelines.
+A native GNOME Markdown editor with inline WYSIWYG, built with Rust, GTK4, libadwaita and WebKitGTK.
 
-As GNOME provides already a text editor (not MD), it's based on Gedit, adding more functionality for rich text documents.
+**Status: pre-alpha.** It opens, renders and lets you write Markdown with live WYSIWYG, but core features (real file saving, open dialogs, preferences) are still missing. Expect rough edges.
 
-I got some inspiration from the great programs [Abricotine](http://abricotine.brrd.fr) and [Typora](https://typora.io). I consider distracting and a waste of space the "two windows" editors. 
+This repository continues the design exploration started in the old Gnome-MD mockups (now in [docs/mockups](docs/mockups/)): a distraction-free Markdown editor that follows the GNOME Human Interface Guidelines, inspired by Typora.
 
-Main view with toolbar and panel:
-![alt text](https://github.com/gnacho/Gnome-MD/blob/master/Main.png)
+## Features (so far)
 
-Showing code view (without the tool bar):
-![alt text](https://github.com/gnacho/Gnome-MD/blob/master/Code_View.png)
+- Inline WYSIWYG: type `# Title` and it becomes an editable heading instantly.
+- GNOME integration: libadwaita, automatic light/dark themes, adaptive headerbar.
+- Editor engine: Milkdown (ProseMirror) inside WebKitGTK 6.0.
+- Extensions: GFM tables, task lists, KaTeX math, emojis.
+- Keyboard shortcuts: Ctrl+B bold, Ctrl+I italic, Ctrl+K inline code.
 
-Even when shows code the style of the document persists.
+## Known gaps
 
-## Todo
+- The Save button only prints to stdout (no file dialog yet).
+- Milkdown loads from the jsDelivr CDN, so an internet connection is required. Vendoring the bundles is planned.
 
-- Preferences Window
-  - Modify CSS and add more styles 
-  - Font type and size
-  - Dark Theme option
-  - Tabulation width
-  - Autocompletion
-  - Autosave
-  - Import and export options
-  - And others ...
-  
-I'll look into it for the next update :)
+## Build requirements
+
+- Rust 1.78+
+- GTK4, libadwaita, WebKitGTK 6.0 and GLib development files
+- `glib-compile-resources`
+
+Arch/CachyOS:
+
+```bash
+sudo pacman -S rust gtk4 libadwaita webkitgtk-6.0 glib2
+```
+
+Debian/Ubuntu:
+
+```bash
+sudo apt install libgtk-4-dev libadwaita-1-dev libwebkitgtk-6.0-dev libglib2.0-dev
+```
+
+Fedora:
+
+```bash
+sudo dnf install gtk4-devel libadwaita-devel webkitgtk6.0-devel glib2-devel
+```
+
+## Build and run
+
+```bash
+cargo build --release
+cargo run
+```
+
+## Flatpak
+
+A Flatpak manifest is available at [build-aux/flatpak](build-aux/flatpak/) (work in progress):
+
+```bash
+cd build-aux/flatpak
+flatpak-builder --user --install build-dir app.scribe.Scribe.json --force-clean
+```
+
+## License
+
+AGPL-3.0. See [LICENSE](LICENSE).
