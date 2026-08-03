@@ -109,6 +109,18 @@ html, body { margin: 0; padding: 0; background: var(--bg); color: var(--fg);
     return { words, lines, chars };
   }
 
+  function extractToc(md) {
+    const toc = [];
+    const lines = md.split('\n');
+    for (const line of lines) {
+      const m = line.match(/^(#{1,6})\s+(.+)/);
+      if (m) {
+        toc.push({ level: m[1].length, text: m[2].trim() });
+      }
+    }
+    return toc;
+  }
+
   const { Editor, rootCtx, defaultValueCtx } = MilkdownCore;
   const { commonmark } = MilkdownPresetCommonmark;
   const { gfm } = MilkdownPresetGfm;
@@ -128,8 +140,8 @@ html, body { margin: 0; padding: 0; background: var(--bg); color: var(--fg);
       ctx.get(listenerCtx).markdownUpdated((ctx, md, prev) => {
         if (md === prev) return;
         window.scribe.post('titleChanged', { title: extractTitle(md) });
-        const s = countStats(md);
-        window.scribe.post('statsChanged', s);
+        window.scribe.post('statsChanged', countStats(md));
+        window.scribe.post('tocChanged', { toc: extractToc(md) });
       });
     })
     .use(commonmark)
@@ -174,6 +186,16 @@ html, body { margin: 0; padding: 0; background: var(--bg); color: var(--fg);
     if (window.scribeEditor) {
       const md = window.scribeEditor.ctx.get(listenerCtx).getMarkdown?.() || '';
       window.scribe.post('saveRequested', { content: md });
+    }
+  });
+
+  window.addEventListener('scribe-set-content', function(e) {
+    if (window.scribeEditor) {
+      // Reload editor with new content
+      const content = e.detail.content;
+      window.scribeEditor.ctx.set(defaultValueCtx, content);
+      // Trigger re-render
+      window.scribeEditor.create();
     }
   });
 })();

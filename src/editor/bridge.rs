@@ -7,6 +7,8 @@ pub struct EditorBridge {
     webview: webkit6::WebView,
     title_callbacks: RefCell<Vec<Box<dyn Fn(&str)>>>,
     stats_callbacks: RefCell<Vec<Box<dyn Fn(u32, u32, u32)>>>,
+    save_callbacks: RefCell<Vec<Box<dyn Fn(&str)>>>,
+    toc_callbacks: RefCell<Vec<Box<dyn Fn(Vec<(u8, String)>)>>>,
 }
 
 impl EditorBridge {
@@ -15,6 +17,8 @@ impl EditorBridge {
             webview: webview.clone(),
             title_callbacks: RefCell::new(Vec::new()),
             stats_callbacks: RefCell::new(Vec::new()),
+            save_callbacks: RefCell::new(Vec::new()),
+            toc_callbacks: RefCell::new(Vec::new()),
         });
 
         let user_content = webview
@@ -63,7 +67,21 @@ impl EditorBridge {
                             }
                             "saveRequested" => {
                                 if let Some(content) = json.get("content").and_then(|v| v.as_str()) {
-                                    println!("Save content ({} chars)", content.len());
+                                    for cb in strong.save_callbacks.borrow().iter() {
+                                        cb(content);
+                                    }
+                                }
+                            }
+                            "tocChanged" => {
+                                if let Some(toc) = json.get("toc").and_then(|v| v.as_array()) {
+                                    let headings: Vec<(u8, String)> = toc.iter().filter_map(|item| {
+                                        let level = item.get("level").and_then(|v| v.as_u64())? as u8;
+                                        let text = item.get("text").and_then(|v| v.as_str())?.to_string();
+                                        Some((level, text))
+                                    }).collect();
+                                    for cb in strong.toc_callbacks.borrow().iter() {
+                                        cb(headings.clone());
+                                    }
                                 }
                             }
                             _ => {}
@@ -103,8 +121,24 @@ impl EditorBridge {
             .evaluate_javascript(&js, None, None, None::<&gtk4::gio::Cancellable>, |_| {});
     }
 
+    pub fn set_content(&self, content: &str) {
+        let json_content = serde_json::to_string(content).unwrap_or_else(|_| "\"\"".to_string());
+        let js = format!(
+            r#"window.dispatchEvent(new CustomEvent('scribe-set-content', {{ detail: {{ content: {} }} }}));"#,
+            json_content
+        );
+        self.webview
+            .evaluate_javascript(&js, None, None, None::<&gtk4::gio::Cancellable>, |_| {});
+    }
+
     pub fn request_save(&self) {
         let js = r#"window.dispatchEvent(new CustomEvent('scribe-save'));"#;
+        self.webview
+            .evaluate_javascript(js, None, None, None::<&gtk4::gio::Cancellable>, |_| {});
+    }
+
+    pub fn request_toc(&self) {
+        let js = r#"window.dispatchEvent(new CustomEvent('scribe-get-toc'));"#;
         self.webview
             .evaluate_javascript(js, None, None, None::<&gtk4::gio::Cancellable>, |_| {});
     }
@@ -115,5 +149,13 @@ impl EditorBridge {
 
     pub fn connect_stats_changed<F: Fn(u32, u32, u32) + 'static>(&self, callback: F) {
         self.stats_callbacks.borrow_mut().push(Box::new(callback));
+    }
+
+    pub fn connect_save_requested<F: Fn(&str) + 'static>(&self, callback: F) {
+        self.save_callbacks.borrow_mut().push(Box::new(callback));
+    }
+
+    pub fn connect_toc_changed<F: Fn(Vec<(u8, String)>) + 'static>(&self, callback: F) {
+        self.toc_callbacks.borrow_mut().push(Box::new(callback));
     }
 }

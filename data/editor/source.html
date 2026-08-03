@@ -7,7 +7,7 @@
   --bg: #fafafa; --fg: #1c1c1c; --muted: #5e5e5e; --accent: #1c71d8;
   --border: rgba(0,0,0,0.08); --code-bg: #f6f6f6;
   --font: 'Cantarell','Inter',-apple-system,sans-serif;
-  --font-mono: 'Source Code Pro','JetBrains Mono',monospace;
+  --font-mono: 'Source Code Pro','JetBrains Mono','Fira Code',monospace;
 }
 @media (prefers-color-scheme: dark) {
   :root {
@@ -62,10 +62,23 @@ Empieza a escribir markdown...';
     return { words, lines, chars };
   }
 
+  function extractToc(text) {
+    const toc = [];
+    const lines = text.split('\n');
+    for (const line of lines) {
+      const m = line.match(/^(#{1,6})\s+(.+)/);
+      if (m) {
+        toc.push({ level: m[1].length, text: m[2].trim() });
+      }
+    }
+    return toc;
+  }
+
   function notify() {
     const text = ta.value;
     window.scribe.post('titleChanged', { title: extractTitle(text) });
     window.scribe.post('statsChanged', countStats(text));
+    window.scribe.post('tocChanged', { toc: extractToc(text) });
   }
 
   ta.addEventListener('input', notify);
@@ -87,6 +100,11 @@ Empieza a escribir markdown...';
       r.style.setProperty('--muted','#5e5e5e'); r.style.setProperty('--accent','#1c71d8');
       r.style.setProperty('--border','rgba(0,0,0,0.08)'); r.style.setProperty('--code-bg','#f6f6f6');
     }
+  });
+
+  window.addEventListener('scribe-set-content', function(e) {
+    ta.value = e.detail.content;
+    notify();
   });
 })();
 </script>

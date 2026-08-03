@@ -33,6 +33,7 @@
                 "install -Dm644 data/app.scribe.Scribe.desktop /app/share/applications/app.scribe.Scribe.desktop",
                 "install -Dm644 data/app.scribe.Scribe.gschema.xml /app/share/glib-2.0/schemas/app.scribe.Scribe.gschema.xml",
                 "install -Dm644 data/app.scribe.Scribe.metainfo.xml /app/share/metainfo/app.scribe.Scribe.metainfo.xml",
+                "install -Dm644 data/icons/hicolor/scalable/apps/app.scribe.Scribe.svg /app/share/icons/hicolor/scalable/apps/app.scribe.Scribe.svg",
                 "glib-compile-schemas /app/share/glib-2.0/schemas"
             ],
             "sources": [

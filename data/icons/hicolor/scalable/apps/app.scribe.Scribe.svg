@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg height="128" width="128" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="scrollGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#f5e6c8;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#e8d5a0;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="featherGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#ffffff;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#e0e0e0;stop-opacity:1" />
+    </linearGradient>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#000000" flood-opacity="0.15"/>
+    </filter>
+  </defs>
+
+  <!-- Background circle (Adwaita style) -->
+  <circle cx="64" cy="64" r="60" fill="#f6f5f4" stroke="#deddda" stroke-width="1"/>
+
+  <!-- Scroll / Parchment -->
+  <rect x="28" y="20" width="56" height="88" rx="4" ry="4"
+        fill="url(#scrollGradient)" stroke="#c9b896" stroke-width="1.5"
+        filter="url(#shadow)"/>
+
+  <!-- Scroll lines (text simulation) -->
+  <line x1="38" y1="38" x2="74" y2="38" stroke="#b0a080" stroke-width="2" stroke-linecap="round"/>
+  <line x1="38" y1="48" x2="68" y2="48" stroke="#b0a080" stroke-width="2" stroke-linecap="round"/>
+  <line x1="38" y1="58" x2="72" y2="58" stroke="#b0a080" stroke-width="2" stroke-linecap="round"/>
+  <line x1="38" y1="68" x2="66" y2="68" stroke="#b0a080" stroke-width="2" stroke-linecap="round"/>
+  <line x1="38" y1="78" x2="70" y2="78" stroke="#b0a080" stroke-width="2" stroke-linecap="round"/>
+
+  <!-- Heading line (bold) -->
+  <line x1="38" y1="32" x2="60" y2="32" stroke="#8b7355" stroke-width="3" stroke-linecap="round"/>
+
+  <!-- Quill / Feather pen -->
+  <g transform="translate(72, 24) rotate(-15)">
+    <!-- Feather body -->
+    <path d="M 0,0 C 8,-4 16,-2 20,4 C 22,8 20,14 16,18 C 12,22 6,24 2,22 C -2,20 -4,14 -2,8 C -1,4 0,0 0,0 Z"
+          fill="url(#featherGradient)" stroke="#b0b0b0" stroke-width="1"
+          filter="url(#shadow)"/>
+    <!-- Feather barbs -->
+    <path d="M 2,4 L 8,2 M 4,8 L 12,6 M 6,12 L 14,10 M 8,16 L 14,14"
+          stroke="#d0d0d0" stroke-width="1" fill="none"/>
+    <!-- Pen nib -->
+    <path d="M 0,0 L -2,8 L 2,8 Z" fill="#8b6914" stroke="#6b5010" stroke-width="0.5"/>
+    <circle cx="0" cy="6" r="0.8" fill="#4a3608"/>
+  </g>
+
+  <!-- Ink dot -->
+  <circle cx="82" cy="88" r="3" fill="#1c71d8" opacity="0.8"/>
+  <circle cx="84" cy="90" r="1.5" fill="#1c71d8" opacity="0.5"/>
+</svg>

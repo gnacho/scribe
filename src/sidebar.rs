@@ -8,12 +8,12 @@ pub struct Sidebar {
     pub toc_list: gtk4::ListBox,
     pub notes_list: gtk4::ListBox,
     pub search_entry: gtk4::SearchEntry,
-    pub on_toc_clicked: Rc<RefCell<Option<Box<dyn Fn(&str)>>>>,
+    on_toc_clicked: Rc<RefCell<Option<Box<dyn Fn(&str)>>>>,
+    on_note_clicked: Rc<RefCell<Option<Box<dyn Fn(&str)>>>>,
 }
 
 impl Sidebar {
     pub fn new() -> Self {
-        // Search
         let search_entry = gtk4::SearchEntry::builder()
             .placeholder_text("Buscar notas...")
             .margin_top(12)
@@ -22,19 +22,16 @@ impl Sidebar {
             .margin_end(12)
             .build();
 
-        // Notes list
         let notes_list = gtk4::ListBox::builder()
             .selection_mode(gtk4::SelectionMode::Single)
             .css_classes(vec!["navigation-sidebar".to_string()])
             .build();
 
-        // TOC list
         let toc_list = gtk4::ListBox::builder()
-            .selection_mode(gtk4::SelectionMode::None)
+            .selection_mode(gtk4::SelectionMode::Single)
             .css_classes(vec!["navigation-sidebar".to_string()])
             .build();
 
-        // Sections
         let notes_label = gtk4::Label::new(Some("Notas recientes"));
         notes_label.add_css_class("caption-heading");
         notes_label.set_halign(gtk4::Align::Start);
@@ -70,19 +67,22 @@ impl Sidebar {
             .title("Notas")
             .build();
 
+        let on_toc_clicked = Rc::new(RefCell::new(None::<Box<dyn Fn(&str)>>));
+        let on_note_clicked = Rc::new(RefCell::new(None::<Box<dyn Fn(&str)>>));
+
         let sidebar = Self {
             page,
             toc_list,
             notes_list,
             search_entry,
-            on_toc_clicked: Rc::new(RefCell::new(None)),
+            on_toc_clicked,
+            on_note_clicked,
         };
 
         sidebar
     }
 
     pub fn update_toc(&self, headings: &[(u8, String)]) {
-        // Clear existing
         while let Some(child) = self.toc_list.first_child() {
             self.toc_list.remove(&child);
         }
@@ -109,7 +109,17 @@ impl Sidebar {
         self.notes_list.append(&row);
     }
 
+    pub fn clear_notes(&self) {
+        while let Some(child) = self.notes_list.first_child() {
+            self.notes_list.remove(&child);
+        }
+    }
+
     pub fn connect_toc_clicked<F: Fn(&str) + 'static>(&self, callback: F) {
         *self.on_toc_clicked.borrow_mut() = Some(Box::new(callback));
+    }
+
+    pub fn connect_note_clicked<F: Fn(&str) + 'static>(&self, callback: F) {
+        *self.on_note_clicked.borrow_mut() = Some(Box::new(callback));
     }
 }
