@@ -1,5 +1,21 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <schemalist>
+  <enum id="app.scribe.Scribe.MarkupVisibility">
+    <value nick="hidden" value="0"/>
+    <value nick="focus" value="1"/>
+    <value nick="dim" value="2"/>
+  </enum>
+  <enum id="app.scribe.Scribe.ColorScheme">
+    <value nick="system" value="0"/>
+    <value nick="light" value="1"/>
+    <value nick="dark" value="2"/>
+  </enum>
+  <enum id="app.scribe.Scribe.FontFamily">
+    <value nick="sans" value="0"/>
+    <value nick="serif" value="1"/>
+    <value nick="mono" value="2"/>
+  </enum>
+
   <schema id="app.scribe.Scribe" path="/app/scribe/Scribe/">
     <key name="window-width" type="i">
       <default>1100</default>
@@ -9,29 +25,79 @@
       <default>800</default>
       <summary>Window height</summary>
     </key>
+    <key name="window-maximized" type="b">
+      <default>false</default>
+      <summary>Window is maximized</summary>
+    </key>
+
     <key name="show-sidebar" type="b">
       <default>false</default>
       <summary>Show sidebar</summary>
     </key>
     <key name="show-preview" type="b">
       <default>false</default>
-      <summary>Show preview panel</summary>
+      <summary>Show split preview</summary>
     </key>
-    <key name="theme" type="s">
-      <default>"system"</default>
-      <summary>Color theme</summary>
+
+    <key name="color-scheme" enum="app.scribe.Scribe.ColorScheme">
+      <default>'system'</default>
+      <summary>Color scheme</summary>
+    </key>
+    <key name="font-family" enum="app.scribe.Scribe.FontFamily">
+      <default>'sans'</default>
+      <summary>Editor font family</summary>
     </key>
     <key name="font-size" type="i">
       <default>16</default>
+      <range min="9" max="40"/>
       <summary>Editor font size</summary>
     </key>
     <key name="line-spacing" type="d">
       <default>1.7</default>
+      <range min="1.0" max="3.0"/>
       <summary>Line spacing</summary>
     </key>
+    <key name="column-width" type="i">
+      <default>720</default>
+      <range min="480" max="1400"/>
+      <summary>Maximum text column width in pixels</summary>
+    </key>
+
+    <key name="markup-visibility" enum="app.scribe.Scribe.MarkupVisibility">
+      <default>'focus'</default>
+      <summary>When to show Markdown syntax markers</summary>
+    </key>
+    <key name="focus-mode" type="b">
+      <default>false</default>
+      <summary>Dim everything except the current paragraph</summary>
+    </key>
+    <key name="typewriter-mode" type="b">
+      <default>false</default>
+      <summary>Keep the cursor line vertically centred</summary>
+    </key>
+    <key name="continue-lists" type="b">
+      <default>true</default>
+      <summary>Continue lists when pressing Enter</summary>
+    </key>
+    <key name="tab-width" type="i">
+      <default>4</default>
+      <range min="2" max="8"/>
+      <summary>Tab width</summary>
+    </key>
+
     <key name="autosave" type="b">
       <default>true</default>
       <summary>Autosave</summary>
+    </key>
+    <key name="autosave-interval" type="i">
+      <default>30</default>
+      <range min="5" max="600"/>
+      <summary>Autosave interval in seconds</summary>
+    </key>
+
+    <key name="default-template" type="s">
+      <default>''</default>
+      <summary>Template used for new documents (empty means blank)</summary>
     </key>
     <key name="recent-files" type="as">
       <default>[]</default>

@@ -1,57 +1,282 @@
 use gio::prelude::*;
 
+/// Cuándo se muestran las marcas de Markdown (`**`, `#`, backticks, URLs).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MarkupVisibility {
+    /// Siempre ocultas.
+    Hidden,
+    /// Ocultas salvo en la línea del cursor.
+    Focus,
+    /// Siempre visibles, pero atenuadas.
+    Dim,
+}
+
+impl MarkupVisibility {
+    fn from_nick(nick: &str) -> Self {
+        match nick {
+            "hidden" => Self::Hidden,
+            "dim" => Self::Dim,
+            _ => Self::Focus,
+        }
+    }
+    pub fn nick(self) -> &'static str {
+        match self {
+            Self::Hidden => "hidden",
+            Self::Focus => "focus",
+            Self::Dim => "dim",
+        }
+    }
+    pub fn index(self) -> u32 {
+        match self {
+            Self::Hidden => 0,
+            Self::Focus => 1,
+            Self::Dim => 2,
+        }
+    }
+    pub fn from_index(i: u32) -> Self {
+        match i {
+            0 => Self::Hidden,
+            2 => Self::Dim,
+            _ => Self::Focus,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FontFamily {
+    Sans,
+    Serif,
+    Mono,
+}
+
+impl FontFamily {
+    fn from_nick(nick: &str) -> Self {
+        match nick {
+            "serif" => Self::Serif,
+            "mono" => Self::Mono,
+            _ => Self::Sans,
+        }
+    }
+    pub fn nick(self) -> &'static str {
+        match self {
+            Self::Sans => "sans",
+            Self::Serif => "serif",
+            Self::Mono => "mono",
+        }
+    }
+    pub fn index(self) -> u32 {
+        match self {
+            Self::Sans => 0,
+            Self::Serif => 1,
+            Self::Mono => 2,
+        }
+    }
+    pub fn from_index(i: u32) -> Self {
+        match i {
+            1 => Self::Serif,
+            2 => Self::Mono,
+            _ => Self::Sans,
+        }
+    }
+    /// Pila de familias CSS. El cuerpo va en proporcional; la monoespaciada
+    /// queda reservada para el código aunque se elija "mono" como cuerpo.
+    pub fn css_stack(self) -> &'static str {
+        match self {
+            Self::Sans => "Cantarell, 'Adwaita Sans', 'Noto Sans', sans-serif",
+            Self::Serif => "'Source Serif 4', 'Noto Serif', 'Liberation Serif', serif",
+            Self::Mono => "'Adwaita Mono', 'Source Code Pro', 'Fira Mono', monospace",
+        }
+    }
+}
+
 pub struct AppSettings {
     settings: Option<gio::Settings>,
+}
+
+macro_rules! prop {
+    ($get:ident, $set:ident, $key:literal, i32, $default:expr) => {
+        pub fn $get(&self) -> i32 {
+            self.get($default, |s| s.int($key))
+        }
+        pub fn $set(&self, v: i32) {
+            self.set(|s| {
+                let _ = s.set_int($key, v);
+            });
+        }
+    };
+    ($get:ident, $set:ident, $key:literal, f64, $default:expr) => {
+        pub fn $get(&self) -> f64 {
+            self.get($default, |s| s.double($key))
+        }
+        pub fn $set(&self, v: f64) {
+            self.set(|s| {
+                let _ = s.set_double($key, v);
+            });
+        }
+    };
+    ($get:ident, $set:ident, $key:literal, bool, $default:expr) => {
+        pub fn $get(&self) -> bool {
+            self.get($default, |s| s.boolean($key))
+        }
+        pub fn $set(&self, v: bool) {
+            self.set(|s| {
+                let _ = s.set_boolean($key, v);
+            });
+        }
+    };
+    ($get:ident, $set:ident, $key:literal, String, $default:expr) => {
+        pub fn $get(&self) -> String {
+            self.get($default.to_string(), |s| s.string($key).to_string())
+        }
+        pub fn $set(&self, v: &str) {
+            self.set(|s| {
+                let _ = s.set_string($key, v);
+            });
+        }
+    };
 }
 
 impl AppSettings {
     pub fn new() -> Self {
         let settings = gio::SettingsSchemaSource::default()
-            .and_then(|source| source.lookup("app.scribe.Scribe", false))
+            .and_then(|source| source.lookup("app.scribe.Scribe", true))
             .map(|_| gio::Settings::new("app.scribe.Scribe"));
+        if settings.is_none() {
+            eprintln!(
+                "scribe: no se encontró el esquema GSettings 'app.scribe.Scribe'. \
+                 Se usan los valores por defecto y no se guardarán las preferencias. \
+                 En desarrollo: glib-compile-schemas data/ && \
+                 GSETTINGS_SCHEMA_DIR=$PWD/data cargo run"
+            );
+        }
         Self { settings }
     }
 
-    fn get<T: Clone>(&self, key: &str, default: T, f: impl FnOnce(&gio::Settings) -> T) -> T {
+    fn get<T>(&self, default: T, f: impl FnOnce(&gio::Settings) -> T) -> T {
         self.settings.as_ref().map(f).unwrap_or(default)
     }
 
-    pub fn window_width(&self) -> i32 { self.get("window-width", 1100, |s| s.int("window-width")) }
-    pub fn set_window_width(&self, v: i32) { if let Some(s) = &self.settings { let _ = s.set_int("window-width", v); } }
+    fn set(&self, f: impl FnOnce(&gio::Settings)) {
+        if let Some(s) = &self.settings {
+            f(s);
+        }
+    }
 
-    pub fn window_height(&self) -> i32 { self.get("window-height", 800, |s| s.int("window-height")) }
-    pub fn set_window_height(&self, v: i32) { if let Some(s) = &self.settings { let _ = s.set_int("window-height", v); } }
+    prop!(window_width, set_window_width, "window-width", i32, 1100);
+    prop!(window_height, set_window_height, "window-height", i32, 800);
+    prop!(
+        window_maximized,
+        set_window_maximized,
+        "window-maximized",
+        bool,
+        false
+    );
+    prop!(show_sidebar, set_show_sidebar, "show-sidebar", bool, false);
+    prop!(show_preview, set_show_preview, "show-preview", bool, false);
+    prop!(font_size, set_font_size, "font-size", i32, 16);
+    prop!(line_spacing, set_line_spacing, "line-spacing", f64, 1.7);
+    prop!(column_width, set_column_width, "column-width", i32, 720);
+    prop!(focus_mode, set_focus_mode, "focus-mode", bool, false);
+    prop!(
+        typewriter_mode,
+        set_typewriter_mode,
+        "typewriter-mode",
+        bool,
+        false
+    );
+    prop!(
+        continue_lists,
+        set_continue_lists,
+        "continue-lists",
+        bool,
+        true
+    );
+    prop!(tab_width, set_tab_width, "tab-width", i32, 4);
+    prop!(autosave, set_autosave, "autosave", bool, true);
+    prop!(
+        autosave_interval,
+        set_autosave_interval,
+        "autosave-interval",
+        i32,
+        30
+    );
+    prop!(
+        default_template,
+        set_default_template,
+        "default-template",
+        String,
+        ""
+    );
 
-    pub fn show_sidebar(&self) -> bool { self.get("show-sidebar", false, |s| s.boolean("show-sidebar")) }
-    pub fn set_show_sidebar(&self, v: bool) { if let Some(s) = &self.settings { let _ = s.set_boolean("show-sidebar", v); } }
+    pub fn markup_visibility(&self) -> MarkupVisibility {
+        MarkupVisibility::from_nick(&self.get("focus".to_string(), |s| {
+            s.string("markup-visibility").to_string()
+        }))
+    }
+    pub fn set_markup_visibility(&self, v: MarkupVisibility) {
+        self.set(|s| {
+            let _ = s.set_string("markup-visibility", v.nick());
+        });
+    }
 
-    pub fn show_preview(&self) -> bool { self.get("show-preview", false, |s| s.boolean("show-preview")) }
-    pub fn set_show_preview(&self, v: bool) { if let Some(s) = &self.settings { let _ = s.set_boolean("show-preview", v); } }
+    pub fn font_family(&self) -> FontFamily {
+        FontFamily::from_nick(
+            &self.get("sans".to_string(), |s| s.string("font-family").to_string()),
+        )
+    }
+    pub fn set_font_family(&self, v: FontFamily) {
+        self.set(|s| {
+            let _ = s.set_string("font-family", v.nick());
+        });
+    }
 
-    pub fn autosave(&self) -> bool { self.get("autosave", true, |s| s.boolean("autosave")) }
-    pub fn set_autosave(&self, v: bool) { if let Some(s) = &self.settings { let _ = s.set_boolean("autosave", v); } }
-    pub fn font_size(&self) -> i32 { self.get("font-size", 16, |s| s.int("font-size")) }
-    pub fn set_font_size(&self, v: i32) { if let Some(s) = &self.settings { let _ = s.set_int("font-size", v); } }
-    pub fn line_spacing(&self) -> f64 { self.get("line-spacing", 1.7, |s| s.double("line-spacing")) }
-    pub fn set_line_spacing(&self, v: f64) { if let Some(s) = &self.settings { let _ = s.set_double("line-spacing", v); } }
+    /// 0 = sistema, 1 = claro, 2 = oscuro.
+    pub fn color_scheme_index(&self) -> u32 {
+        match self
+            .get("system".to_string(), |s| {
+                s.string("color-scheme").to_string()
+            })
+            .as_str()
+        {
+            "light" => 1,
+            "dark" => 2,
+            _ => 0,
+        }
+    }
+    pub fn set_color_scheme_index(&self, index: u32) {
+        let nick = match index {
+            1 => "light",
+            2 => "dark",
+            _ => "system",
+        };
+        self.set(|s| {
+            let _ = s.set_string("color-scheme", nick);
+        });
+    }
 
     pub fn recent_files(&self) -> Vec<String> {
-        self.get("recent-files", vec![], |s| {
-            s.strv("recent-files").iter().map(|g| g.to_string()).collect()
+        self.get(Vec::new(), |s| {
+            s.strv("recent-files")
+                .iter()
+                .map(|g| g.to_string())
+                .collect()
         })
     }
 
     pub fn push_recent_file(&self, path: &str) {
-        if let Some(s) = &self.settings {
-            let mut list: Vec<String> = vec![path.to_string()];
-            for p in s.strv("recent-files").iter() {
-                let p = p.to_string();
-                if p != path {
-                    list.push(p);
-                }
-            }
-            list.truncate(20);
-            let _ = s.set_strv("recent-files", list);
-        }
+        let mut list = self.recent_files();
+        list.retain(|p| p != path);
+        list.insert(0, path.to_string());
+        list.truncate(20);
+        self.set(|s| {
+            let refs: Vec<&str> = list.iter().map(|s| s.as_str()).collect();
+            let _ = s.set_strv("recent-files", refs);
+        });
+    }
+
+    pub fn clear_recent_files(&self) {
+        self.set(|s| {
+            let _ = s.set_strv("recent-files", Vec::<&str>::new());
+        });
     }
 }

@@ -7,7 +7,7 @@
 //! backticks, la URL de un enlace…). El editor las oculta salvo cuando el cursor
 //! está en su línea, que es lo que hace que la edición se sienta WYSIWYG.
 
-use pulldown_cmark::{CodeBlockKind, Event, HeadingLevel, Options, Parser, Tag, TagEnd};
+use pulldown_cmark::{CodeBlockKind, Event, HeadingLevel, LinkType, Options, Parser, Tag, TagEnd};
 
 /// Por encima de este tamaño se deja de decorar en vivo, para no bloquear la UI.
 pub const MAX_LIVE_BYTES: usize = 400_000;
@@ -144,6 +144,20 @@ pub fn spans(text: &str) -> Vec<Span> {
                 if hashes > 0 {
                     let spaces = src[hashes..].bytes().take_while(|b| *b == b' ').count();
                     out.push(syn(range.start, range.start + hashes + spaces));
+                } else {
+                    // Cabecera setext: se oculta el subrayado `===` / `---`
+                    // junto con el salto de línea que lo separa del título,
+                    // para que no quede un renglón en blanco.
+                    let lines = line_ranges(text, range.start, end);
+                    if let Some(&(ls, le)) = lines.last() {
+                        let underline = text[ls..le].trim();
+                        let is_rule = !underline.is_empty()
+                            && (underline.bytes().all(|b| b == b'=')
+                                || underline.bytes().all(|b| b == b'-'));
+                        if is_rule && ls > range.start {
+                            out.push(syn(ls - 1, le));
+                        }
+                    }
                 }
             }
 
@@ -169,13 +183,24 @@ pub fn spans(text: &str) -> Vec<Span> {
                 mark_delims(&mut out, range.start, range.end, ticks);
             }
 
-            Event::Start(Tag::Link { .. }) => {
+            Event::Start(Tag::Link { link_type, .. }) => {
                 out.push(style(range.start, range.end, "link"));
                 let src = &text[range.start..range.end];
-                if src.starts_with('[') {
-                    if let Some(idx) = src.rfind("](") {
-                        out.push(syn(range.start, range.start + 1));
-                        out.push(syn(range.start + idx, range.end));
+                match link_type {
+                    // `<https://…>` y `<a@b.com>`: solo sobran los ángulos.
+                    LinkType::Autolink | LinkType::Email => {
+                        if src.starts_with('<') && src.ends_with('>') && src.len() > 2 {
+                            out.push(syn(range.start, range.start + 1));
+                            out.push(syn(range.end - 1, range.end));
+                        }
+                    }
+                    _ => {
+                        if src.starts_with('[') {
+                            if let Some(idx) = src.rfind("](") {
+                                out.push(syn(range.start, range.start + 1));
+                                out.push(syn(range.start + idx, range.end));
+                            }
+                        }
                     }
                 }
             }
@@ -235,6 +260,29 @@ pub fn spans(text: &str) -> Vec<Span> {
                     }
                 }
             }
+
+            Event::Start(Tag::Table(_)) => {
+                // Monoespaciada en todo el bloque: si el usuario alinea los
+                // pipes en el fuente, las columnas cuadran también en pantalla.
+                let end = trim_nl(text, range.end);
+                out.push(style(range.start, end, "table"));
+                for (ls, le) in line_ranges(text, range.start, end) {
+                    let line = text[ls..le].trim();
+                    let is_delimiter = !line.is_empty()
+                        && line.bytes().all(|b| matches!(b, b'|' | b'-' | b':' | b' '))
+                        && line.contains('-');
+                    if is_delimiter {
+                        out.push(style(ls, le, "tabledelim"));
+                        break;
+                    }
+                }
+            }
+
+            Event::Html(_) | Event::InlineHtml(_) => {
+                out.push(style(range.start, trim_nl(text, range.end), "html"))
+            }
+            Event::FootnoteReference(_) => out.push(style(range.start, range.end, "footnote")),
+            Event::HardBreak => out.push(syn(range.start, trim_nl(text, range.end))),
 
             Event::Rule => out.push(style(range.start, trim_nl(text, range.end), "rule")),
             Event::TaskListMarker(_) => out.push(style(range.start, range.end, "task")),
@@ -344,6 +392,25 @@ mod tests {
             assert!(text.is_char_boundary(s.start), "{s:?}");
             assert!(text.is_char_boundary(s.end), "{s:?}");
         }
+    }
+
+    #[test]
+    fn cabecera_setext_oculta_el_subrayado() {
+        let s = spans("Título\n======\n");
+        assert_eq!(find(&s, "h1").len(), 1);
+        assert_eq!(hidden("Título\n======\n"), "Título\n");
+    }
+
+    #[test]
+    fn enlace_automatico_oculta_los_angulos() {
+        assert_eq!(hidden("ver <https://ej.com> ya"), "ver https://ej.com ya");
+    }
+
+    #[test]
+    fn tabla_va_en_monoespaciada() {
+        let s = spans("| a | b |\n|---|---|\n| 1 | 2 |\n");
+        assert_eq!(find(&s, "table").len(), 1);
+        assert_eq!(find(&s, "tabledelim").len(), 1);
     }
 
     #[test]
