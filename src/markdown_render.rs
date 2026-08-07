@@ -1,11 +1,20 @@
-//! Cálculo de los tramos que hay que decorar sobre el buffer del editor.
+//! Analiza Markdown y decide cómo debe *verse* mientras se edita.
 //!
-//! No toca GTK: recibe el texto Markdown y devuelve rangos en bytes con el
-//! nombre del `GtkTextTag` que les corresponde. Así se puede probar sin display.
+//! Devuelve dos cosas y ninguna toca GTK, así que todo esto se prueba sin
+//! display y se puede reutilizar fuera de Scribe:
 //!
-//! Los tramos marcados como `syntax` son las marcas del Markdown (`**`, `#`,
-//! backticks, la URL de un enlace…). El editor las oculta salvo cuando el cursor
-//! está en su línea, que es lo que hace que la edición se sienta WYSIWYG.
+//! - **Tramos** ([`Span`]): rangos en bytes con el nombre del `GtkTextTag` que
+//!   les corresponde. Los tramos de tipo [`SpanKind::Marker`] son las marcas del
+//!   Markdown (`**`, `#`, backticks, la URL de un enlace) y se ocultan según la
+//!   preferencia del usuario.
+//! - **Adornos** ([`Ornament`]): elementos que no se pueden expresar con un tag
+//!   porque hay que *dibujarlos* — viñetas, casillas, reglas, la barra de las
+//!   citas y la caja de los bloques de código. Van referidos a número de línea
+//!   para que el widget solo tenga que preguntar por su geometría.
+//!
+//! Las marcas que un adorno sustituye se marcan como [`SpanKind::Replaced`]:
+//! se ocultan siempre (salvo en modo «atenuar»), porque revelarlas movería el
+//! texto de sitio cada vez que el cursor cambia de línea.
 
 use pulldown_cmark::{CodeBlockKind, Event, HeadingLevel, LinkType, Options, Parser, Tag, TagEnd};
 
@@ -13,11 +22,51 @@ use pulldown_cmark::{CodeBlockKind, Event, HeadingLevel, LinkType, Options, Pars
 pub const MAX_LIVE_BYTES: usize = 400_000;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SpanKind {
+    /// Estilo permanente: negrita, cabecera, color…
+    Style,
+    /// Marca de Markdown. Su visibilidad la decide el usuario.
+    Marker,
+    /// Marca sustituida por un adorno dibujado. Se oculta salvo en modo «atenuar».
+    Replaced,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Span {
     pub start: usize,
     pub end: usize,
     pub tag: &'static str,
-    pub syntax: bool,
+    pub kind: SpanKind,
+}
+
+impl Span {
+    /// Parte de la superficie pública del módulo: la usa quien reutilice el
+    /// analizador sin replicar la distinción entre marca y sustitución.
+    #[allow(dead_code)]
+    pub fn is_syntax(&self) -> bool {
+        matches!(self.kind, SpanKind::Marker | SpanKind::Replaced)
+    }
+}
+
+/// Elemento que hay que pintar a mano. Las líneas son lógicas y empiezan en 0.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Ornament {
+    /// Viñeta de lista sin ordenar. `depth` empieza en 1.
+    Bullet { line: usize, depth: usize },
+    /// Casilla de tarea.
+    Checkbox { line: usize, checked: bool },
+    /// Regla horizontal (`---`), en una línea que queda vacía a propósito.
+    Rule { line: usize },
+    /// Barra vertical de cita, de `first` a `last` inclusive.
+    Quote { first: usize, last: usize },
+    /// Caja de fondo de un bloque de código, de `first` a `last` inclusive.
+    CodeBlock { first: usize, last: usize },
+}
+
+#[derive(Debug, Default)]
+pub struct Analysis {
+    pub spans: Vec<Span>,
+    pub ornaments: Vec<Ornament>,
 }
 
 fn style(start: usize, end: usize, tag: &'static str) -> Span {
@@ -25,16 +74,25 @@ fn style(start: usize, end: usize, tag: &'static str) -> Span {
         start,
         end,
         tag,
-        syntax: false,
+        kind: SpanKind::Style,
     }
 }
 
-fn syn(start: usize, end: usize) -> Span {
+fn marker(start: usize, end: usize) -> Span {
     Span {
         start,
         end,
         tag: "syntax",
-        syntax: true,
+        kind: SpanKind::Marker,
+    }
+}
+
+fn replaced(start: usize, end: usize) -> Span {
+    Span {
+        start,
+        end,
+        tag: "syntax",
+        kind: SpanKind::Replaced,
     }
 }
 
@@ -49,9 +107,40 @@ fn heading_tag(level: HeadingLevel) -> &'static str {
     }
 }
 
-/// Recorta el salto de línea final de un rango de bloque.
+fn list_tag(depth: usize) -> &'static str {
+    match depth {
+        0 | 1 => "li1",
+        2 => "li2",
+        _ => "li3",
+    }
+}
+
+/// Índice de comienzos de línea, para traducir desplazamientos a números de línea.
+struct LineIndex {
+    starts: Vec<usize>,
+}
+
+impl LineIndex {
+    fn new(text: &str) -> Self {
+        let mut starts = vec![0];
+        for (i, b) in text.bytes().enumerate() {
+            if b == b'\n' {
+                starts.push(i + 1);
+            }
+        }
+        Self { starts }
+    }
+
+    fn line_of(&self, offset: usize) -> usize {
+        match self.starts.binary_search(&offset) {
+            Ok(i) => i,
+            Err(i) => i.saturating_sub(1),
+        }
+    }
+}
+
 fn trim_nl(text: &str, mut end: usize) -> usize {
-    while end > 0 && (text.as_bytes()[end - 1] == b'\n' || text.as_bytes()[end - 1] == b'\r') {
+    while end > 0 && matches!(text.as_bytes()[end - 1], b'\n' | b'\r') {
         end -= 1;
     }
     end
@@ -62,16 +151,15 @@ fn mark_delims(out: &mut Vec<Span>, start: usize, end: usize, len: usize) {
     if len == 0 || end < start + len * 2 {
         return;
     }
-    out.push(syn(start, start + len));
-    out.push(syn(end - len, end));
+    out.push(marker(start, start + len));
+    out.push(marker(end - len, end));
 }
 
 fn line_ranges(text: &str, start: usize, end: usize) -> Vec<(usize, usize)> {
     let mut out = Vec::new();
     let mut cursor = start;
     while cursor < end {
-        let rel = text[cursor..end].find('\n');
-        let stop = match rel {
+        let stop = match text[cursor..end].find('\n') {
             Some(i) => cursor + i,
             None => end,
         };
@@ -81,11 +169,11 @@ fn line_ranges(text: &str, start: usize, end: usize) -> Vec<(usize, usize)> {
     out
 }
 
-/// Longitud de la marca `>` (con sus espacios) al principio de una línea de cita.
+/// Longitud de la marca `>` (con su espacio) al principio de una línea de cita.
 fn quote_marker_len(line: &str) -> usize {
     let bytes = line.as_bytes();
     let mut i = 0;
-    while i < bytes.len() && bytes[i] == b' ' && i < 3 {
+    while i < bytes.len() && i < 3 && bytes[i] == b' ' {
         i += 1;
     }
     if i >= bytes.len() || bytes[i] != b'>' {
@@ -98,37 +186,38 @@ fn quote_marker_len(line: &str) -> usize {
     i
 }
 
-/// Longitud del marcador de un elemento de lista (`- `, `* `, `1. `…).
-fn item_marker_len(rest: &str) -> usize {
+/// Marcador de un elemento de lista: longitud y si la lista es sin ordenar.
+fn item_marker(rest: &str) -> Option<(usize, bool)> {
     let bytes = rest.as_bytes();
-    if bytes.is_empty() {
-        return 0;
-    }
-    let mut i = 0;
-    if bytes[0] == b'-' || bytes[0] == b'*' || bytes[0] == b'+' {
+    let first = *bytes.first()?;
+    let mut i;
+    let unordered = matches!(first, b'-' | b'*' | b'+');
+    if unordered {
         i = 1;
     } else {
-        while i < bytes.len() && bytes[i].is_ascii_digit() {
-            i += 1;
-        }
-        if i == 0 || i >= bytes.len() || (bytes[i] != b'.' && bytes[i] != b')') {
-            return 0;
+        i = bytes.iter().take_while(|b| b.is_ascii_digit()).count();
+        if i == 0 || i >= bytes.len() || !matches!(bytes[i], b'.' | b')') {
+            return None;
         }
         i += 1;
     }
-    while i < bytes.len() && bytes[i] == b' ' {
-        i += 1;
+    let spaces = bytes[i..].iter().take_while(|b| **b == b' ').count();
+    if spaces == 0 {
+        return None;
     }
-    i
+    Some((i + spaces, unordered))
 }
 
-pub fn spans(text: &str) -> Vec<Span> {
+pub fn analyze(text: &str) -> Analysis {
     let mut opts = Options::empty();
     opts.insert(Options::ENABLE_STRIKETHROUGH);
     opts.insert(Options::ENABLE_TABLES);
     opts.insert(Options::ENABLE_TASKLISTS);
+    opts.insert(Options::ENABLE_FOOTNOTES);
 
-    let mut out: Vec<Span> = Vec::new();
+    let lines = LineIndex::new(text);
+    let mut spans: Vec<Span> = Vec::new();
+    let mut ornaments: Vec<Ornament> = Vec::new();
     let mut list_depth = 0usize;
 
     for (event, range) in Parser::new_ext(text, opts).into_offset_iter() {
@@ -138,124 +227,178 @@ pub fn spans(text: &str) -> Vec<Span> {
                 if end <= range.start {
                     continue;
                 }
-                out.push(style(range.start, end, heading_tag(level)));
+                spans.push(style(range.start, end, heading_tag(level)));
                 let src = &text[range.start..end];
                 let hashes = src.bytes().take_while(|b| *b == b'#').count();
                 if hashes > 0 {
-                    let spaces = src[hashes..].bytes().take_while(|b| *b == b' ').count();
-                    out.push(syn(range.start, range.start + hashes + spaces));
+                    let gap = src[hashes..].bytes().take_while(|b| *b == b' ').count();
+                    spans.push(marker(range.start, range.start + hashes + gap));
                 } else {
-                    // Cabecera setext: se oculta el subrayado `===` / `---`
-                    // junto con el salto de línea que lo separa del título,
-                    // para que no quede un renglón en blanco.
-                    let lines = line_ranges(text, range.start, end);
-                    if let Some(&(ls, le)) = lines.last() {
+                    // Cabecera setext: se oculta el subrayado `===` / `---` con
+                    // su salto de línea, para no dejar un renglón en blanco.
+                    if let Some(&(ls, le)) = line_ranges(text, range.start, end).last() {
                         let underline = text[ls..le].trim();
                         let is_rule = !underline.is_empty()
                             && (underline.bytes().all(|b| b == b'=')
                                 || underline.bytes().all(|b| b == b'-'));
                         if is_rule && ls > range.start {
-                            out.push(syn(ls - 1, le));
+                            spans.push(replaced(ls - 1, le));
                         }
                     }
                 }
             }
 
             Event::Start(Tag::Strong) => {
-                out.push(style(range.start, range.end, "bold"));
-                mark_delims(&mut out, range.start, range.end, 2);
+                spans.push(style(range.start, range.end, "bold"));
+                mark_delims(&mut spans, range.start, range.end, 2);
             }
             Event::Start(Tag::Emphasis) => {
-                out.push(style(range.start, range.end, "italic"));
-                mark_delims(&mut out, range.start, range.end, 1);
+                spans.push(style(range.start, range.end, "italic"));
+                mark_delims(&mut spans, range.start, range.end, 1);
             }
             Event::Start(Tag::Strikethrough) => {
-                out.push(style(range.start, range.end, "strike"));
-                mark_delims(&mut out, range.start, range.end, 2);
+                spans.push(style(range.start, range.end, "strike"));
+                mark_delims(&mut spans, range.start, range.end, 2);
             }
 
             Event::Code(_) => {
-                out.push(style(range.start, range.end, "code"));
+                spans.push(style(range.start, range.end, "code"));
                 let ticks = text[range.start..range.end]
                     .bytes()
                     .take_while(|b| *b == b'`')
                     .count();
-                mark_delims(&mut out, range.start, range.end, ticks);
+                mark_delims(&mut spans, range.start, range.end, ticks);
             }
 
             Event::Start(Tag::Link { link_type, .. }) => {
-                out.push(style(range.start, range.end, "link"));
+                spans.push(style(range.start, range.end, "link"));
                 let src = &text[range.start..range.end];
                 match link_type {
-                    // `<https://…>` y `<a@b.com>`: solo sobran los ángulos.
                     LinkType::Autolink | LinkType::Email => {
                         if src.starts_with('<') && src.ends_with('>') && src.len() > 2 {
-                            out.push(syn(range.start, range.start + 1));
-                            out.push(syn(range.end - 1, range.end));
+                            spans.push(marker(range.start, range.start + 1));
+                            spans.push(marker(range.end - 1, range.end));
                         }
                     }
                     _ => {
                         if src.starts_with('[') {
                             if let Some(idx) = src.rfind("](") {
-                                out.push(syn(range.start, range.start + 1));
-                                out.push(syn(range.start + idx, range.end));
+                                spans.push(marker(range.start, range.start + 1));
+                                spans.push(marker(range.start + idx, range.end));
                             }
                         }
                     }
                 }
             }
             Event::Start(Tag::Image { .. }) => {
-                out.push(style(range.start, range.end, "link"));
+                spans.push(style(range.start, range.end, "link"));
                 let src = &text[range.start..range.end];
                 if src.starts_with("![") {
                     if let Some(idx) = src.rfind("](") {
-                        out.push(syn(range.start, range.start + 2));
-                        out.push(syn(range.start + idx, range.end));
+                        spans.push(marker(range.start, range.start + 2));
+                        spans.push(marker(range.start + idx, range.end));
                     }
                 }
             }
 
             Event::Start(Tag::BlockQuote(_)) => {
                 let end = trim_nl(text, range.end);
-                out.push(style(range.start, end, "quote"));
+                spans.push(style(range.start, end, "quote"));
+                // Los `>` se ocultan siempre: la cita se marca con una barra
+                // dibujada, y revelarlos desplazaría el texto al pasar el cursor.
                 for (ls, le) in line_ranges(text, range.start, end) {
                     let n = quote_marker_len(&text[ls..le]);
                     if n > 0 {
-                        out.push(syn(ls, ls + n));
+                        spans.push(replaced(ls, ls + n));
                     }
                 }
+                ornaments.push(Ornament::Quote {
+                    first: lines.line_of(range.start),
+                    last: lines.line_of(end.saturating_sub(1).max(range.start)),
+                });
             }
 
             Event::Start(Tag::List(_)) => list_depth += 1,
             Event::End(TagEnd::List(_)) => list_depth = list_depth.saturating_sub(1),
             Event::Start(Tag::Item) => {
-                let tag = match list_depth {
-                    0 | 1 => "li1",
-                    2 => "li2",
-                    _ => "li3",
-                };
-                out.push(style(range.start, trim_nl(text, range.end), tag));
+                // En las listas anidadas pulldown empieza el rango en el
+                // marcador, no en la línea. Si el tag no cubre el principio del
+                // párrafo, GTK aplica el margen del nivel de arriba y la viñeta
+                // se queda alineada con la lista padre.
+                let line_start = text[..range.start].rfind('\n').map(|i| i + 1).unwrap_or(0);
+                spans.push(style(
+                    line_start,
+                    trim_nl(text, range.end),
+                    list_tag(list_depth),
+                ));
                 let src = &text[range.start..range.end];
                 let lead = src.len() - src.trim_start_matches([' ', '\t']).len();
-                let mlen = item_marker_len(&src[lead..]);
-                if mlen > 0 {
-                    out.push(style(
-                        range.start + lead,
-                        range.start + lead + mlen,
-                        "listmarker",
-                    ));
+                if let Some((mlen, unordered)) = item_marker(&src[lead..]) {
+                    let marker_start = range.start + lead;
+                    let marker_end = marker_start + mlen;
+                    if unordered {
+                        // La viñeta se dibuja, así que sobran el guion y toda la
+                        // sangría literal: el desplazamiento lo da el margen del
+                        // tag y dejarla la sumaría dos veces.
+                        spans.push(replaced(line_start, marker_end));
+                        ornaments.push(Ornament::Bullet {
+                            line: lines.line_of(marker_start),
+                            depth: list_depth.max(1),
+                        });
+                    } else {
+                        // En las ordenadas el número lleva información: se deja.
+                        if line_start < marker_start {
+                            spans.push(replaced(line_start, marker_start));
+                        }
+                        spans.push(style(marker_start, marker_end, "listmarker"));
+                    }
                 }
+            }
+
+            Event::TaskListMarker(checked) => {
+                // El rango de pulldown cubre `[x]` pero no el espacio que sigue;
+                // sin él quedaría una sangría suelta delante del texto.
+                let mut end = range.end;
+                while text.as_bytes().get(end) == Some(&b' ') {
+                    end += 1;
+                }
+                spans.push(replaced(range.start, end));
+                ornaments.push(Ornament::Checkbox {
+                    line: lines.line_of(range.start),
+                    checked,
+                });
             }
 
             Event::Start(Tag::CodeBlock(kind)) => {
                 let end = trim_nl(text, range.end);
-                out.push(style(range.start, end, "codeblock"));
+                spans.push(style(range.start, end, "codeblock"));
+                let first = lines.line_of(range.start);
+                let last = lines.line_of(end.saturating_sub(1).max(range.start));
+                ornaments.push(Ornament::CodeBlock { first, last });
+
                 if matches!(kind, CodeBlockKind::Fenced(_)) {
-                    let lines = line_ranges(text, range.start, end);
-                    for (ls, le) in [lines.first(), lines.last()].into_iter().flatten() {
-                        let l = text[*ls..*le].trim_start();
-                        if l.starts_with("```") || l.starts_with("~~~") {
-                            out.push(style(*ls, *le, "fence"));
+                    let block_lines = line_ranges(text, range.start, end);
+                    // Valla de apertura: se ocultan las comillas y se deja el
+                    // nombre del lenguaje como etiqueta pequeña.
+                    if let Some(&(ls, le)) = block_lines.first() {
+                        let line = &text[ls..le];
+                        let fence = line
+                            .bytes()
+                            .take_while(|b| matches!(b, b'`' | b'~'))
+                            .count();
+                        if fence >= 3 {
+                            spans.push(replaced(ls, ls + fence));
+                            spans.push(style(ls + fence, le, "fence"));
+                        }
+                    }
+                    // Valla de cierre: la línea entera se oculta y el hueco que
+                    // deja sirve de margen inferior dentro de la caja.
+                    if block_lines.len() > 1 {
+                        if let Some(&(ls, le)) = block_lines.last() {
+                            let line = text[ls..le].trim_start();
+                            if line.starts_with("```") || line.starts_with("~~~") {
+                                spans.push(replaced(ls, le));
+                            }
                         }
                     }
                 }
@@ -263,49 +406,83 @@ pub fn spans(text: &str) -> Vec<Span> {
 
             Event::Start(Tag::Table(_)) => {
                 // Monoespaciada en todo el bloque: si el usuario alinea los
-                // pipes en el fuente, las columnas cuadran también en pantalla.
+                // pipes en el fuente, las columnas cuadran en pantalla.
                 let end = trim_nl(text, range.end);
-                out.push(style(range.start, end, "table"));
+                spans.push(style(range.start, end, "table"));
                 for (ls, le) in line_ranges(text, range.start, end) {
                     let line = text[ls..le].trim();
                     let is_delimiter = !line.is_empty()
                         && line.bytes().all(|b| matches!(b, b'|' | b'-' | b':' | b' '))
                         && line.contains('-');
                     if is_delimiter {
-                        out.push(style(ls, le, "tabledelim"));
+                        spans.push(style(ls, le, "tabledelim"));
                         break;
                     }
                 }
             }
 
             Event::Html(_) | Event::InlineHtml(_) => {
-                out.push(style(range.start, trim_nl(text, range.end), "html"))
+                spans.push(style(range.start, trim_nl(text, range.end), "html"))
             }
-            Event::FootnoteReference(_) => out.push(style(range.start, range.end, "footnote")),
-            Event::HardBreak => out.push(syn(range.start, trim_nl(text, range.end))),
+            Event::FootnoteReference(_) => {
+                // Queda solo el número, en volado: `[^` y `]` sobran.
+                spans.push(style(range.start, range.end, "footnote"));
+                let src = &text[range.start..range.end];
+                if src.starts_with("[^") && src.ends_with(']') && src.len() > 3 {
+                    spans.push(marker(range.start, range.start + 2));
+                    spans.push(marker(range.end - 1, range.end));
+                }
+            }
+            Event::Start(Tag::FootnoteDefinition(_)) => {
+                spans.push(style(range.start, trim_nl(text, range.end), "footnotedef"))
+            }
+            Event::HardBreak => spans.push(marker(range.start, trim_nl(text, range.end))),
 
-            Event::Rule => out.push(style(range.start, trim_nl(text, range.end), "rule")),
-            Event::TaskListMarker(_) => out.push(style(range.start, range.end, "task")),
+            Event::Rule => {
+                // La línea queda vacía y la regla se pinta encima del hueco.
+                let end = trim_nl(text, range.end);
+                spans.push(replaced(range.start, end));
+                ornaments.push(Ornament::Rule {
+                    line: lines.line_of(range.start),
+                });
+            }
 
             _ => {}
         }
     }
 
-    out
+    // Un elemento de tarea genera viñeta y casilla; la casilla manda.
+    let checkbox_lines: Vec<usize> = ornaments
+        .iter()
+        .filter_map(|o| match o {
+            Ornament::Checkbox { line, .. } => Some(*line),
+            _ => None,
+        })
+        .collect();
+    ornaments.retain(|o| match o {
+        Ornament::Bullet { line, .. } => !checkbox_lines.contains(line),
+        _ => true,
+    });
+
+    Analysis { spans, ornaments }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
+    fn spans(text: &str) -> Vec<Span> {
+        analyze(text).spans
+    }
+
     fn find<'a>(spans: &'a [Span], tag: &str) -> Vec<&'a Span> {
         spans.iter().filter(|s| s.tag == tag).collect()
     }
 
+    /// Reconstruye lo que se vería con todas las marcas ocultas.
     fn hidden(text: &str) -> String {
-        // Reconstruye lo que se vería con todas las marcas ocultas.
         let mut keep = vec![true; text.len()];
-        for s in spans(text).iter().filter(|s| s.syntax) {
+        for s in spans(text).iter().filter(|s| s.is_syntax()) {
             for k in keep.iter_mut().take(s.end).skip(s.start) {
                 *k = false;
             }
@@ -318,16 +495,20 @@ mod tests {
 
     #[test]
     fn cabecera_oculta_las_almohadillas() {
-        let s = spans("## Título\n");
-        assert_eq!(find(&s, "h2").len(), 1);
+        assert_eq!(find(&spans("## Título\n"), "h2").len(), 1);
         assert_eq!(hidden("## Título\n"), "Título\n");
+    }
+
+    #[test]
+    fn cabecera_setext_oculta_el_subrayado() {
+        assert_eq!(find(&spans("Título\n======\n"), "h1").len(), 1);
+        assert_eq!(hidden("Título\n======\n"), "Título\n");
     }
 
     #[test]
     fn negrita_y_cursiva() {
         assert_eq!(hidden("un **texto** y *otro*\n"), "un texto y otro\n");
-        let s = spans("un **texto**\n");
-        assert_eq!(find(&s, "bold").len(), 1);
+        assert_eq!(find(&spans("un **texto**\n"), "bold").len(), 1);
     }
 
     #[test]
@@ -341,53 +522,127 @@ mod tests {
     }
 
     #[test]
+    fn enlace_automatico_oculta_los_angulos() {
+        assert_eq!(hidden("ver <https://ej.com> ya"), "ver https://ej.com ya");
+    }
+
+    #[test]
     fn imagen_oculta_marcas() {
         assert_eq!(hidden("![gato](/tmp/g.png)"), "gato");
     }
 
     #[test]
-    fn cita_oculta_el_mayor_que() {
+    fn cita_oculta_el_mayor_que_y_pide_barra() {
         assert_eq!(hidden("> una cita\n> y otra\n"), "una cita\ny otra\n");
-        assert_eq!(find(&spans("> una cita\n"), "quote").len(), 1);
+        let a = analyze("> una cita\n> y otra\n");
+        assert_eq!(a.ornaments, vec![Ornament::Quote { first: 0, last: 1 }]);
     }
 
     #[test]
-    fn lista_conserva_el_marcador_pero_lo_estiliza() {
-        let s = spans("- uno\n- dos\n");
-        assert_eq!(find(&s, "listmarker").len(), 2);
-        assert_eq!(find(&s, "li1").len(), 2);
-        // El marcador se ve: no es un tramo de sintaxis.
-        assert_eq!(hidden("- uno\n"), "- uno\n");
+    fn lista_sin_ordenar_cambia_el_guion_por_una_vineta() {
+        let a = analyze("- uno\n- dos\n");
+        assert_eq!(hidden("- uno\n- dos\n"), "uno\ndos\n");
+        assert_eq!(
+            a.ornaments,
+            vec![
+                Ornament::Bullet { line: 0, depth: 1 },
+                Ornament::Bullet { line: 1, depth: 1 },
+            ]
+        );
     }
 
     #[test]
-    fn lista_anidada_usa_mas_sangria() {
-        let s = spans("- uno\n    - dos\n");
-        assert_eq!(find(&s, "li2").len(), 1);
+    fn la_sangria_literal_de_una_lista_anidada_se_oculta() {
+        // La sangría la pone el margen del tag; el texto no debe llevarla dos veces.
+        assert_eq!(hidden("- uno\n    - dos\n"), "uno\ndos\n");
     }
 
     #[test]
-    fn bloque_de_codigo_marca_las_vallas() {
-        let s = spans("```rust\nfn main() {}\n```\n");
-        assert_eq!(find(&s, "codeblock").len(), 1);
-        assert_eq!(find(&s, "fence").len(), 2);
+    fn lista_ordenada_conserva_el_numero() {
+        let a = analyze("1. uno\n2. dos\n");
+        assert_eq!(hidden("1. uno\n2. dos\n"), "1. uno\n2. dos\n");
+        assert_eq!(find(&a.spans, "listmarker").len(), 2);
+        assert!(a.ornaments.is_empty());
+    }
+
+    #[test]
+    fn lista_anidada_usa_mas_sangria_y_otra_vineta() {
+        let a = analyze("- uno\n    - dos\n");
+        assert_eq!(find(&a.spans, "li2").len(), 1);
+        assert!(a
+            .ornaments
+            .contains(&Ornament::Bullet { line: 1, depth: 2 }));
+    }
+
+    #[test]
+    fn tareas_producen_casillas() {
+        let a = analyze("- [x] hecho\n- [ ] pendiente\n");
+        assert_eq!(
+            hidden("- [x] hecho\n- [ ] pendiente\n"),
+            "hecho\npendiente\n"
+        );
+        assert!(a.ornaments.contains(&Ornament::Checkbox {
+            line: 0,
+            checked: true
+        }));
+        assert!(a.ornaments.contains(&Ornament::Checkbox {
+            line: 1,
+            checked: false
+        }));
+    }
+
+    #[test]
+    fn una_tarea_no_lleva_ademas_vineta() {
+        let a = analyze("- [x] hecho\n");
+        assert!(!a
+            .ornaments
+            .iter()
+            .any(|o| matches!(o, Ornament::Bullet { .. })));
+    }
+
+    #[test]
+    fn bloque_de_codigo_pide_caja_y_oculta_las_vallas() {
+        let a = analyze("```rust\nfn main() {}\n```\n");
+        assert_eq!(find(&a.spans, "codeblock").len(), 1);
+        assert!(a
+            .ornaments
+            .contains(&Ornament::CodeBlock { first: 0, last: 2 }));
+        // Queda el nombre del lenguaje y el hueco de la valla de cierre.
+        assert_eq!(
+            hidden("```rust\nfn main() {}\n```\n"),
+            "rust\nfn main() {}\n\n"
+        );
     }
 
     #[test]
     fn el_markdown_dentro_de_codigo_no_se_decora() {
-        let s = spans("```\nesto **no** es negrita\n```\n");
-        assert!(find(&s, "bold").is_empty());
+        assert!(find(&spans("```\nesto **no** es negrita\n```\n"), "bold").is_empty());
     }
 
     #[test]
-    fn regla_y_tareas() {
-        assert_eq!(find(&spans("---\n"), "rule").len(), 1);
-        assert_eq!(find(&spans("- [x] hecho\n"), "task").len(), 1);
+    fn la_regla_deja_la_linea_vacia_para_dibujarla() {
+        let a = analyze("uno\n\n---\n\ndos\n");
+        assert!(a.ornaments.contains(&Ornament::Rule { line: 2 }));
+        assert_eq!(hidden("uno\n\n---\n\ndos\n"), "uno\n\n\n\ndos\n");
+    }
+
+    #[test]
+    fn las_notas_al_pie_dejan_solo_el_numero() {
+        let text = "Texto[^1].\n\n[^1]: La nota.\n";
+        assert_eq!(hidden(text), "Texto1.\n\n[^1]: La nota.\n");
+        assert_eq!(find(&spans(text), "footnotedef").len(), 1);
+    }
+
+    #[test]
+    fn tabla_va_en_monoespaciada() {
+        let a = analyze("| a | b |\n|---|---|\n| 1 | 2 |\n");
+        assert_eq!(find(&a.spans, "table").len(), 1);
+        assert_eq!(find(&a.spans, "tabledelim").len(), 1);
     }
 
     #[test]
     fn los_tramos_caen_en_fronteras_de_caracter() {
-        let text = "# Ñandú **café** y `añejo`\n";
+        let text = "# Ñandú **café** y `añejo`\n- ítem\n> cita\n";
         for s in spans(text) {
             assert!(text.is_char_boundary(s.start), "{s:?}");
             assert!(text.is_char_boundary(s.end), "{s:?}");
@@ -395,26 +650,23 @@ mod tests {
     }
 
     #[test]
-    fn cabecera_setext_oculta_el_subrayado() {
-        let s = spans("Título\n======\n");
-        assert_eq!(find(&s, "h1").len(), 1);
-        assert_eq!(hidden("Título\n======\n"), "Título\n");
-    }
-
-    #[test]
-    fn enlace_automatico_oculta_los_angulos() {
-        assert_eq!(hidden("ver <https://ej.com> ya"), "ver https://ej.com ya");
-    }
-
-    #[test]
-    fn tabla_va_en_monoespaciada() {
-        let s = spans("| a | b |\n|---|---|\n| 1 | 2 |\n");
-        assert_eq!(find(&s, "table").len(), 1);
-        assert_eq!(find(&s, "tabledelim").len(), 1);
+    fn los_adornos_apuntan_a_lineas_existentes() {
+        let text = "# T\n\n- uno\n- [x] dos\n\n> cita\n\n```\nx\n```\n\n---\n";
+        let total = text.lines().count();
+        for o in analyze(text).ornaments {
+            let max = match o {
+                Ornament::Bullet { line, .. }
+                | Ornament::Checkbox { line, .. }
+                | Ornament::Rule { line } => line,
+                Ornament::Quote { last, .. } | Ornament::CodeBlock { last, .. } => last,
+            };
+            assert!(max < total, "{o:?} fuera de rango ({total} líneas)");
+        }
     }
 
     #[test]
     fn texto_vacio_no_revienta() {
-        assert!(spans("").is_empty());
+        let a = analyze("");
+        assert!(a.spans.is_empty() && a.ornaments.is_empty());
     }
 }

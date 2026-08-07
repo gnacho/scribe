@@ -1,0 +1,340 @@
+//! `MarkdownView`: un `GtkSourceView` que además **dibuja** lo que un
+//! `GtkTextTag` no puede expresar.
+//!
+//! Un tag cambia cómo se ve un texto, pero no lo sustituye ni pinta encima. Por
+//! eso las viñetas, las casillas de tarea, las reglas horizontales, la barra de
+//! las citas y la caja de los bloques de código se ocultan en el buffer y se
+//! pintan aquí, sobre el hueco que dejan.
+//!
+//! El gancho es `GtkTextView::snapshot_layer`, un vfunc pensado exactamente
+//! para esto: se llama antes y después de que la vista pinte su propio texto, y
+//! trabaja en **coordenadas de buffer**, así que el desplazamiento lo resuelve
+//! GTK y aquí no hay que compensar nada.
+//!
+//! El widget no sabe nada de Scribe: recibe una lista de [`Ornament`] y una
+//! paleta, y dibuja. Junto con [`crate::markdown_render`] forma una pieza
+//! autocontenida, sin dependencias de la aplicación.
+
+use gtk4::prelude::*;
+use gtk4::subclass::prelude::*;
+use gtk4::{gdk, graphene, gsk};
+use gtksourceview5 as sourceview;
+
+use crate::markdown_render::Ornament;
+
+/// Colores de los adornos. Los fija la aplicación para que casen con su tema.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct OrnamentPalette {
+    /// Viñetas y casillas marcadas.
+    pub accent: gdk::RGBA,
+    /// Reglas horizontales y borde de las casillas sin marcar.
+    pub muted: gdk::RGBA,
+    /// Fondo de la caja de los bloques de código.
+    pub block: gdk::RGBA,
+    /// Barra vertical de las citas.
+    pub quote: gdk::RGBA,
+    /// Marca de verificación sobre una casilla marcada.
+    pub on_accent: gdk::RGBA,
+}
+
+impl Default for OrnamentPalette {
+    fn default() -> Self {
+        let grey = gdk::RGBA::new(0.55, 0.55, 0.55, 1.0);
+        Self {
+            accent: grey,
+            muted: grey,
+            block: gdk::RGBA::new(0.5, 0.5, 0.5, 0.10),
+            quote: grey,
+            on_accent: gdk::RGBA::WHITE,
+        }
+    }
+}
+
+// --- Medidas de los adornos, en píxeles lógicos -----------------------------
+
+/// Distancia del centro de la viñeta al borde izquierdo del texto.
+const BULLET_OFFSET: f32 = 15.0;
+const BULLET_RADIUS: f32 = 3.0;
+/// Lado de la casilla de tarea.
+const CHECKBOX_SIZE: f32 = 14.0;
+/// Distancia del borde izquierdo de la casilla al borde del texto.
+const CHECKBOX_OFFSET: f32 = 22.0;
+/// Sangrado de la caja de código respecto al margen de la columna.
+const BLOCK_PADDING: f32 = 8.0;
+const BLOCK_RADIUS: f32 = 8.0;
+const QUOTE_BAR_WIDTH: f32 = 3.0;
+const QUOTE_BAR_OFFSET: f32 = 20.0;
+const RULE_THICKNESS: f32 = 1.0;
+
+mod imp {
+    use super::*;
+    use std::cell::{Cell, RefCell};
+
+    #[derive(Default)]
+    pub struct MarkdownView {
+        pub ornaments: RefCell<Vec<Ornament>>,
+        pub palette: Cell<OrnamentPalette>,
+    }
+
+    #[glib::object_subclass]
+    impl ObjectSubclass for MarkdownView {
+        const NAME: &'static str = "ScribeMarkdownView";
+        type Type = super::MarkdownView;
+        type ParentType = sourceview::View;
+    }
+
+    impl ObjectImpl for MarkdownView {}
+    impl WidgetImpl for MarkdownView {}
+    impl sourceview::subclass::view::ViewImpl for MarkdownView {}
+
+    impl TextViewImpl for MarkdownView {
+        fn snapshot_layer(&self, layer: gtk4::TextViewLayer, snapshot: gtk4::Snapshot) {
+            match layer {
+                // Las cajas y barras van debajo del texto; los glifos, encima,
+                // para que nunca queden tapados por un fondo de párrafo.
+                gtk4::TextViewLayer::BelowText => self.draw_blocks(&snapshot),
+                gtk4::TextViewLayer::AboveText => self.draw_glyphs(&snapshot),
+                _ => {}
+            }
+            self.parent_snapshot_layer(layer, snapshot);
+        }
+    }
+
+    impl MarkdownView {
+        /// Rango de líneas lógicas visibles, para no calcular geometría de
+        /// adornos que están fuera de la pantalla.
+        fn visible_lines(&self) -> (i32, i32) {
+            let view = self.obj();
+            let rect = view.visible_rect();
+            let (top, _) = view.line_at_y(rect.y());
+            let (bottom, _) = view.line_at_y(rect.y() + rect.height());
+            (top.line(), bottom.line())
+        }
+
+        /// `(y, alto)` de una línea lógica completa, incluidas sus continuaciones.
+        fn line_extent(&self, line: i32) -> Option<(f32, f32)> {
+            let view = self.obj();
+            let iter = view.buffer().iter_at_line(line)?;
+            let (y, height) = view.line_yrange(&iter);
+            Some((y as f32, height as f32))
+        }
+
+        /// `(x, y, alto)` de la primera línea de pantalla: `x` es el margen
+        /// izquierdo del párrafo, que depende del tag y no del widget.
+        fn line_origin(&self, line: i32) -> Option<(f32, f32, f32)> {
+            let view = self.obj();
+            let iter = view.buffer().iter_at_line(line)?;
+            let rect = view.iter_location(&iter);
+            Some((rect.x() as f32, rect.y() as f32, rect.height() as f32))
+        }
+
+        /// Extremos horizontales de la columna de texto.
+        fn column(&self) -> (f32, f32) {
+            let view = self.obj();
+            (
+                view.left_margin() as f32,
+                (view.width() - view.right_margin()) as f32,
+            )
+        }
+
+        fn draw_blocks(&self, snapshot: &gtk4::Snapshot) {
+            let ornaments = self.ornaments.borrow();
+            if ornaments.is_empty() {
+                return;
+            }
+            let palette = self.palette.get();
+            let (first_visible, last_visible) = self.visible_lines();
+            let (left, right) = self.column();
+
+            for ornament in ornaments.iter() {
+                let (first, last) = match ornament {
+                    Ornament::CodeBlock { first, last } | Ornament::Quote { first, last } => {
+                        (*first as i32, *last as i32)
+                    }
+                    _ => continue,
+                };
+                if last < first_visible || first > last_visible {
+                    continue;
+                }
+                let Some((top, _)) = self.line_extent(first) else {
+                    continue;
+                };
+                let Some((bottom_y, bottom_h)) = self.line_extent(last) else {
+                    continue;
+                };
+                let bottom = bottom_y + bottom_h;
+
+                match ornament {
+                    Ornament::CodeBlock { .. } => {
+                        let rect = graphene::Rect::new(
+                            left + BLOCK_PADDING,
+                            top,
+                            (right - left - BLOCK_PADDING * 2.0).max(0.0),
+                            (bottom - top).max(0.0),
+                        );
+                        let rounded = gsk::RoundedRect::from_rect(rect, BLOCK_RADIUS);
+                        snapshot.push_rounded_clip(&rounded);
+                        snapshot.append_color(&palette.block, &rect);
+                        snapshot.pop();
+                    }
+                    Ornament::Quote { .. } => {
+                        // La barra se ancla al margen del párrafo citado, no al
+                        // de la ventana, para que respete la sangría del tag.
+                        let x = self
+                            .line_origin(first)
+                            .map(|(x, _, _)| x - QUOTE_BAR_OFFSET)
+                            .unwrap_or(left + BLOCK_PADDING);
+                        let rect =
+                            graphene::Rect::new(x, top, QUOTE_BAR_WIDTH, (bottom - top).max(0.0));
+                        let rounded = gsk::RoundedRect::from_rect(rect, QUOTE_BAR_WIDTH / 2.0);
+                        snapshot.push_rounded_clip(&rounded);
+                        snapshot.append_color(&palette.quote, &rect);
+                        snapshot.pop();
+                    }
+                    _ => {}
+                }
+            }
+        }
+
+        fn draw_glyphs(&self, snapshot: &gtk4::Snapshot) {
+            let ornaments = self.ornaments.borrow();
+            if ornaments.is_empty() {
+                return;
+            }
+            let palette = self.palette.get();
+            let (first_visible, last_visible) = self.visible_lines();
+            let (left, right) = self.column();
+
+            for ornament in ornaments.iter() {
+                let line = match ornament {
+                    Ornament::Bullet { line, .. }
+                    | Ornament::Checkbox { line, .. }
+                    | Ornament::Rule { line } => *line as i32,
+                    _ => continue,
+                };
+                if line < first_visible || line > last_visible {
+                    continue;
+                }
+                let Some((x, y, height)) = self.line_origin(line) else {
+                    continue;
+                };
+                let middle = y + height / 2.0;
+
+                match ornament {
+                    Ornament::Bullet { depth, .. } => {
+                        draw_bullet(snapshot, x - BULLET_OFFSET, middle, *depth, &palette)
+                    }
+                    Ornament::Checkbox { checked, .. } => draw_checkbox(
+                        snapshot,
+                        x - CHECKBOX_OFFSET,
+                        middle - CHECKBOX_SIZE / 2.0,
+                        *checked,
+                        &palette,
+                    ),
+                    Ornament::Rule { .. } => {
+                        let rect = graphene::Rect::new(
+                            left,
+                            (middle - RULE_THICKNESS / 2.0).round(),
+                            (right - left).max(0.0),
+                            RULE_THICKNESS,
+                        );
+                        snapshot.append_color(&palette.muted, &rect);
+                    }
+                    _ => {}
+                }
+            }
+        }
+    }
+
+    /// Nivel 1 disco, nivel 2 anillo, nivel 3 en adelante cuadrado: la misma
+    /// progresión que usan los navegadores para las listas anidadas.
+    fn draw_bullet(
+        snapshot: &gtk4::Snapshot,
+        cx: f32,
+        cy: f32,
+        depth: usize,
+        palette: &OrnamentPalette,
+    ) {
+        let builder = gsk::PathBuilder::new();
+        match depth {
+            1 => {
+                builder.add_circle(&graphene::Point::new(cx, cy), BULLET_RADIUS);
+                snapshot.append_fill(&builder.to_path(), gsk::FillRule::Winding, &palette.accent);
+            }
+            2 => {
+                builder.add_circle(&graphene::Point::new(cx, cy), BULLET_RADIUS - 0.6);
+                let stroke = gsk::Stroke::new(1.4);
+                snapshot.append_stroke(&builder.to_path(), &stroke, &palette.accent);
+            }
+            _ => {
+                let side = BULLET_RADIUS * 1.7;
+                let rect = graphene::Rect::new(cx - side / 2.0, cy - side / 2.0, side, side);
+                let rounded = gsk::RoundedRect::from_rect(rect, 1.0);
+                snapshot.push_rounded_clip(&rounded);
+                snapshot.append_color(&palette.accent, &rect);
+                snapshot.pop();
+            }
+        }
+    }
+
+    fn draw_checkbox(
+        snapshot: &gtk4::Snapshot,
+        x: f32,
+        y: f32,
+        checked: bool,
+        palette: &OrnamentPalette,
+    ) {
+        let rect = graphene::Rect::new(x, y, CHECKBOX_SIZE, CHECKBOX_SIZE);
+        let rounded = gsk::RoundedRect::from_rect(rect, 4.0);
+
+        if checked {
+            snapshot.push_rounded_clip(&rounded);
+            snapshot.append_color(&palette.accent, &rect);
+            snapshot.pop();
+
+            // La marca se traza a mano: tres puntos y un trazo redondeado.
+            let builder = gsk::PathBuilder::new();
+            builder.move_to(x + CHECKBOX_SIZE * 0.26, y + CHECKBOX_SIZE * 0.52);
+            builder.line_to(x + CHECKBOX_SIZE * 0.44, y + CHECKBOX_SIZE * 0.70);
+            builder.line_to(x + CHECKBOX_SIZE * 0.76, y + CHECKBOX_SIZE * 0.32);
+            let stroke = gsk::Stroke::new(1.8);
+            stroke.set_line_cap(gsk::LineCap::Round);
+            stroke.set_line_join(gsk::LineJoin::Round);
+            snapshot.append_stroke(&builder.to_path(), &stroke, &palette.on_accent);
+        } else {
+            snapshot.append_border(&rounded, &[1.5, 1.5, 1.5, 1.5], &[palette.muted; 4]);
+        }
+    }
+}
+
+glib::wrapper! {
+    pub struct MarkdownView(ObjectSubclass<imp::MarkdownView>)
+        @extends sourceview::View, gtk4::TextView, gtk4::Widget,
+        @implements gtk4::Accessible, gtk4::Buildable, gtk4::ConstraintTarget, gtk4::Scrollable;
+}
+
+impl MarkdownView {
+    pub fn with_buffer(buffer: &impl IsA<gtk4::TextBuffer>) -> Self {
+        glib::Object::builder().property("buffer", buffer).build()
+    }
+
+    /// Sustituye la lista de adornos y repinta. Barata: no calcula geometría,
+    /// eso ocurre al dibujar y solo para lo que se ve.
+    pub fn set_ornaments(&self, ornaments: Vec<Ornament>) {
+        self.imp().ornaments.replace(ornaments);
+        self.queue_draw();
+    }
+
+    pub fn set_palette(&self, palette: OrnamentPalette) {
+        if self.imp().palette.get() != palette {
+            self.imp().palette.set(palette);
+            self.queue_draw();
+        }
+    }
+}
+
+impl Default for MarkdownView {
+    fn default() -> Self {
+        glib::Object::new()
+    }
+}

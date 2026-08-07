@@ -6,21 +6,24 @@ use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 use std::time::Duration;
 
-use crate::markdown_render::{spans, MAX_LIVE_BYTES};
+use crate::markdown_render::{analyze, SpanKind, MAX_LIVE_BYTES};
+use crate::markdown_view::{MarkdownView, OrnamentPalette};
 use crate::settings::{FontFamily, MarkupVisibility};
 
 type ChangedCallback = Rc<RefCell<Option<Box<dyn Fn(&str)>>>>;
 
 const MIN_MARGIN: i32 = 24;
 
-/// Sangría extra (px) de cada tag de bloque respecto al margen de la columna.
-const BLOCK_INDENTS: [(&str, i32); 6] = [
-    ("quote", 26),
-    ("codeblock", 22),
-    ("table", 22),
-    ("li1", 26),
-    ("li2", 52),
-    ("li3", 78),
+/// Márgenes extra (izquierdo, derecho) de cada tag de bloque respecto al margen
+/// de la columna. El derecho importa en los bloques con caja dibujada: deja el
+/// texto por dentro del recuadro en vez de pegado al borde.
+const BLOCK_INDENTS: [(&str, i32, i32); 6] = [
+    ("quote", 26, 0),
+    ("codeblock", 24, 24),
+    ("table", 24, 24),
+    ("li1", 26, 0),
+    ("li2", 52, 0),
+    ("li3", 78, 0),
 ];
 
 #[derive(Clone, Copy)]
@@ -40,7 +43,7 @@ impl Default for Decoration {
 
 pub struct Editor {
     pub widget: gtk4::ScrolledWindow,
-    pub view: gtksourceview5::View,
+    pub view: MarkdownView,
     buffer: gtksourceview5::Buffer,
     tags: gtk4::TextTagTable,
     on_changed: ChangedCallback,
@@ -60,14 +63,16 @@ fn build_tags() -> gtk4::TextTagTable {
     };
 
     // El orden fija la prioridad: lo añadido después gana.
-    // Bloques → cabeceras → en línea → marcas de sintaxis → atenuado de foco.
+    // Bloques → cabeceras → en línea → marcas → atenuado de foco.
 
-    for (name, indent) in BLOCK_INDENTS {
+    for (name, _, _) in BLOCK_INDENTS {
         let builder = gtk4::TextTag::builder().name(name);
         let tag = match name {
             "quote" => builder.style(pango::Style::Italic).build(),
             "codeblock" | "table" => builder.family("monospace").scale(0.9).build(),
-            _ => builder.indent(-indent).build(),
+            // Sin sangría francesa: la viñeta se dibuja en el canalón, así que
+            // todas las líneas del elemento arrancan en el mismo sitio.
+            _ => builder.build(),
         };
         add(tag);
     }
@@ -80,14 +85,7 @@ fn build_tags() -> gtk4::TextTagTable {
     add(gtk4::TextTag::builder()
         .name("fence")
         .family("monospace")
-        .scale(0.7)
-        .build());
-    add(gtk4::TextTag::builder()
-        .name("rule")
-        .scale(0.7)
-        .justification(gtk4::Justification::Center)
-        .pixels_above_lines(14)
-        .pixels_below_lines(14)
+        .scale(0.72)
         .build());
     add(gtk4::TextTag::builder()
         .name("html")
@@ -138,12 +136,11 @@ fn build_tags() -> gtk4::TextTagTable {
         .rise(4000)
         .build());
     add(gtk4::TextTag::builder()
-        .name("listmarker")
-        .weight(700)
+        .name("footnotedef")
+        .scale(0.88)
         .build());
     add(gtk4::TextTag::builder()
-        .name("task")
-        .family("monospace")
+        .name("listmarker")
         .weight(700)
         .build());
 
@@ -153,8 +150,8 @@ fn build_tags() -> gtk4::TextTagTable {
         .build());
     add(gtk4::TextTag::builder().name("syn_shown").build());
 
-    // El modo foco atenúa todo lo que no sea el párrafo actual, así que va
-    // el último para pisar el color de cualquier otro tag.
+    // El modo foco atenúa todo salvo el párrafo actual: va el último para pisar
+    // el color de cualquier otro tag.
     add(gtk4::TextTag::builder().name("unfocused").build());
 
     table
@@ -176,7 +173,16 @@ fn apply_scheme(buffer: &gtksourceview5::Buffer, dark: bool) {
     }
 }
 
-fn apply_theme(tags: &gtk4::TextTagTable, dark: bool) {
+fn rgba(hex: u32, alpha: f32) -> gtk4::gdk::RGBA {
+    gtk4::gdk::RGBA::new(
+        ((hex >> 16) & 0xff) as f32 / 255.0,
+        ((hex >> 8) & 0xff) as f32 / 255.0,
+        (hex & 0xff) as f32 / 255.0,
+        alpha,
+    )
+}
+
+fn apply_theme(tags: &gtk4::TextTagTable, view: &MarkdownView, dark: bool) {
     let set = |name: &str, fg: Option<&str>, para_bg: Option<&str>| {
         if let Some(tag) = tags.lookup(name) {
             tag.set_foreground(fg);
@@ -184,55 +190,69 @@ fn apply_theme(tags: &gtk4::TextTagTable, dark: bool) {
         }
     };
 
+    // Las citas y los bloques de código ya no llevan fondo de párrafo: su caja
+    // y su barra se dibujan, que permite esquinas redondeadas y márgenes.
     if dark {
         set("code", Some("#f0a868"), None);
-        set("codeblock", Some("#e0e0e0"), Some("#343434"));
+        set("codeblock", Some("#e4e4e4"), None);
         set("table", Some("#e0e0e0"), Some("#2c2c2c"));
         set("tabledelim", Some("#7c7c7c"), Some("#2c2c2c"));
-        set("fence", Some("#7c7c7c"), Some("#343434"));
-        set("quote", Some("#c2c2c2"), Some("#2e2e2e"));
+        set("fence", Some("#8a8a8a"), None);
+        set("quote", Some("#c2c2c2"), None);
         set("link", Some("#82b8f0"), None);
         set("footnote", Some("#82b8f0"), None);
         set("listmarker", Some("#82b8f0"), None);
-        set("task", Some("#82b8f0"), None);
-        set("rule", Some("#6f6f6f"), None);
         set("html", Some("#8f8f8f"), None);
+        set("footnotedef", Some("#a0a0a0"), None);
         set("syn_shown", Some("#787878"), None);
         set("unfocused", Some("#5c5c5c"), None);
+        view.set_palette(OrnamentPalette {
+            accent: rgba(0x82b8f0, 1.0),
+            muted: rgba(0x6f6f6f, 1.0),
+            block: rgba(0xffffff, 0.07),
+            quote: rgba(0x6f6f6f, 1.0),
+            on_accent: rgba(0x1b1b1b, 1.0),
+        });
     } else {
         set("code", Some("#a34a00"), None);
-        set("codeblock", Some("#1f1f1f"), Some("#f4f3f2"));
+        set("codeblock", Some("#1f1f1f"), None);
         set("table", Some("#1f1f1f"), Some("#f7f6f5"));
         set("tabledelim", Some("#a9a8a5"), Some("#f7f6f5"));
-        set("fence", Some("#9a9996"), Some("#f4f3f2"));
-        set("quote", Some("#54535a"), Some("#f6f5f4"));
+        set("fence", Some("#8b8a88"), None);
+        set("quote", Some("#54535a"), None);
         set("link", Some("#1a6ed8"), None);
         set("footnote", Some("#1a6ed8"), None);
         set("listmarker", Some("#1a6ed8"), None);
-        set("task", Some("#1a6ed8"), None);
-        set("rule", Some("#9a9996"), None);
         set("html", Some("#8b8a88"), None);
+        set("footnotedef", Some("#77767b"), None);
         set("syn_shown", Some("#b5b4b1"), None);
         set("unfocused", Some("#bdbcba"), None);
+        view.set_palette(OrnamentPalette {
+            accent: rgba(0x1a6ed8, 1.0),
+            muted: rgba(0xc0bfbc, 1.0),
+            block: rgba(0x000000, 0.05),
+            quote: rgba(0xc0bfbc, 1.0),
+            on_accent: rgba(0xffffff, 1.0),
+        });
     }
 }
 
 fn set_column_margins(tags: &gtk4::TextTagTable, base: i32) {
-    for (name, extra) in BLOCK_INDENTS {
+    for (name, left, right) in BLOCK_INDENTS {
         if let Some(tag) = tags.lookup(name) {
-            tag.set_left_margin(base + extra);
-            tag.set_right_margin(base);
+            tag.set_left_margin(base + left);
+            tag.set_right_margin(base + right);
         }
     }
-    for name in ["fence", "rule", "tabledelim"] {
+    for name in ["fence", "tabledelim"] {
         if let Some(tag) = tags.lookup(name) {
-            tag.set_left_margin(base + 22);
-            tag.set_right_margin(base);
+            tag.set_left_margin(base + 24);
+            tag.set_right_margin(base + 24);
         }
     }
 }
 
-/// Límites del párrafo (bloque separado por líneas en blanco) que contiene `line`.
+/// Límites del párrafo (bloque entre líneas en blanco) que contiene `line`.
 fn paragraph_bounds(buffer: &gtksourceview5::Buffer, line: i32) -> (i32, i32) {
     let is_blank = |n: i32| -> bool {
         match buffer.iter_at_line(n) {
@@ -258,13 +278,14 @@ fn paragraph_bounds(buffer: &gtksourceview5::Buffer, line: i32) -> (i32, i32) {
     (first, last)
 }
 
-fn decorate(buffer: &gtksourceview5::Buffer, config: Decoration) {
+fn decorate(view: &MarkdownView, buffer: &gtksourceview5::Buffer, config: Decoration) {
     let start = buffer.start_iter();
     let end = buffer.end_iter();
     buffer.remove_all_tags(&start, &end);
 
     let text = buffer.text(&start, &end, true).to_string();
     if text.is_empty() || text.len() > MAX_LIVE_BYTES {
+        view.set_ornaments(Vec::new());
         return;
     }
 
@@ -281,17 +302,29 @@ fn decorate(buffer: &gtksourceview5::Buffer, config: Decoration) {
     }
     byte_to_char[text.len()] = char_index;
 
+    let analysis = analyze(&text);
     let cursor_line = buffer.iter_at_offset(buffer.cursor_position()).line();
+    let dim = config.markup == MarkupVisibility::Dim;
 
-    for span in spans(&text) {
+    for span in &analysis.spans {
         let (from, to) = (byte_to_char[span.start], byte_to_char[span.end]);
         if from >= to {
             continue;
         }
         let start_iter = buffer.iter_at_offset(from);
         let end_iter = buffer.iter_at_offset(to);
-        let name = if span.syntax {
-            match config.markup {
+        let name = match span.kind {
+            SpanKind::Style => span.tag,
+            // Las marcas sustituidas por un adorno no se revelan al pasar el
+            // cursor: hacerlo movería el texto de sitio en cada línea.
+            SpanKind::Replaced => {
+                if dim {
+                    "syn_shown"
+                } else {
+                    "syn_hidden"
+                }
+            }
+            SpanKind::Marker => match config.markup {
                 MarkupVisibility::Hidden => "syn_hidden",
                 MarkupVisibility::Dim => "syn_shown",
                 MarkupVisibility::Focus => {
@@ -301,12 +334,14 @@ fn decorate(buffer: &gtksourceview5::Buffer, config: Decoration) {
                         "syn_hidden"
                     }
                 }
-            }
-        } else {
-            span.tag
+            },
         };
         buffer.apply_tag_by_name(name, &start_iter, &end_iter);
     }
+
+    // En modo «atenuar» las marcas están a la vista, así que dibujar encima
+    // duplicaría la información.
+    view.set_ornaments(if dim { Vec::new() } else { analysis.ornaments });
 
     if config.focus_mode {
         let (first, last) = paragraph_bounds(buffer, cursor_line);
@@ -328,8 +363,7 @@ fn list_continuation(line: &str) -> Option<(String, bool)> {
         .take_while(|c| *c == ' ' || *c == '\t')
         .collect();
     let rest = &line[indent.len()..];
-    let mut chars = rest.chars();
-    let first = chars.next()?;
+    let first = rest.chars().next()?;
 
     let (marker, body) = if matches!(first, '-' | '*' | '+') {
         let after = &rest[1..];
@@ -377,21 +411,19 @@ impl Editor {
         buffer.set_highlight_syntax(false);
         buffer.set_highlight_matching_brackets(false);
 
-        let view = gtksourceview5::View::builder()
-            .buffer(&buffer)
-            .wrap_mode(gtk4::WrapMode::Word)
-            .show_line_numbers(false)
-            .show_right_margin(false)
-            .highlight_current_line(false)
-            .indent_width(4)
-            .tab_width(4)
-            .insert_spaces_instead_of_tabs(true)
-            .smart_backspace(true)
-            .top_margin(52)
-            .bottom_margin(280)
-            .left_margin(MIN_MARGIN)
-            .right_margin(MIN_MARGIN)
-            .build();
+        let view = MarkdownView::with_buffer(&buffer);
+        view.set_wrap_mode(gtk4::WrapMode::Word);
+        view.set_show_line_numbers(false);
+        view.set_show_right_margin(false);
+        view.set_highlight_current_line(false);
+        view.set_indent_width(4);
+        view.set_tab_width(4);
+        view.set_insert_spaces_instead_of_tabs(true);
+        view.set_smart_backspace(true);
+        view.set_top_margin(52);
+        view.set_bottom_margin(280);
+        view.set_left_margin(MIN_MARGIN);
+        view.set_right_margin(MIN_MARGIN);
         view.add_css_class("scribe-editor");
 
         let widget = gtk4::ScrolledWindow::builder()
@@ -412,7 +444,7 @@ impl Editor {
 
         let dark = adw::StyleManager::default().is_dark();
         apply_scheme(&buffer, dark);
-        apply_theme(&tags, dark);
+        apply_theme(&tags, &view, dark);
         set_column_margins(&tags, MIN_MARGIN);
 
         let editor = Self {
@@ -454,17 +486,19 @@ impl Editor {
 
         let tags = self.tags.clone();
         let buffer = self.buffer.clone();
+        let view = self.view.clone();
         let decoration = self.decoration.clone();
         adw::StyleManager::default().connect_dark_notify(move |sm| {
             apply_scheme(&buffer, sm.is_dark());
-            apply_theme(&tags, sm.is_dark());
-            decorate(&buffer, decoration.get());
+            apply_theme(&tags, &view, sm.is_dark());
+            decorate(&view, &buffer, decoration.get());
         });
 
         let on_changed = self.on_changed.clone();
         let generation = self.generation.clone();
         let last_line = self.last_line.clone();
         let decoration = self.decoration.clone();
+        let view = self.view.clone();
         self.buffer.connect_changed(move |buf| {
             let text = buf.text(&buf.start_iter(), &buf.end_iter(), true);
             if let Some(cb) = on_changed.borrow().as_ref() {
@@ -476,13 +510,14 @@ impl Editor {
             let generation = generation.clone();
             let last_line = last_line.clone();
             let decoration = decoration.clone();
+            let view = view.clone();
             let buf = buf.clone();
             glib::timeout_add_local_once(Duration::from_millis(45), move || {
                 if generation.get() != current {
                     return;
                 }
                 last_line.set(buf.iter_at_offset(buf.cursor_position()).line());
-                decorate(&buf, decoration.get());
+                decorate(&view, &buf, decoration.get());
             });
         });
 
@@ -503,11 +538,11 @@ impl Editor {
                 return;
             }
             last_line.set(line);
-            // En modo "siempre ocultas" o "siempre atenuadas" el marcado no
-            // depende del cursor; solo hay que repintar si algo lo sigue.
             let config = decoration.get();
+            // En «ocultar» y «atenuar» el marcado no depende del cursor; solo
+            // hay que repintar si algo lo sigue.
             if config.markup == MarkupVisibility::Focus || config.focus_mode {
-                decorate(buf, config);
+                decorate(&view, buf, config);
             }
         });
 
@@ -544,7 +579,6 @@ impl Editor {
 
             buffer.begin_user_action();
             if empty {
-                // Elemento vacío: se cierra la lista en vez de seguirla.
                 let mut from = line_start;
                 let mut to = cursor;
                 buffer.delete(&mut from, &mut to);
@@ -576,7 +610,7 @@ impl Editor {
     }
 
     pub fn refresh(&self) {
-        decorate(&self.buffer, self.decoration.get());
+        decorate(&self.view, &self.buffer, self.decoration.get());
     }
 
     pub fn connect_changed<F: Fn(&str) + 'static>(&self, callback: F) {

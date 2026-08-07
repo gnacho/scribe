@@ -53,12 +53,13 @@ something I actually use to draft notes and docs.
 ## Features
 
 - **Live WYSIWYG rendering** on the editing buffer: headings at real scale,
-  bold/italic/strikethrough, inline and fenced code, quotes, nested lists
-  with hanging indent, task lists, links, images, footnotes, rules, tables in
-  monospace, and dimmed HTML blocks
+  bold/italic/strikethrough, inline and fenced code, quotes, links, images,
+  footnotes and HTML blocks via `GtkTextTag`. **Drawn ornaments** via
+  `snapshot_layer`: bullet markers for each nesting level, checkable task
+  boxes, horizontal rules, vertical quote bars, and rounded code-block boxes
 - **Configurable markup visibility**: hide syntax markers like `**`, `#` and
-  backticks entirely, reveal them on the cursor line, or keep them dimmed
-  everywhere
+  backticks entirely, reveal them on the cursor line, or show them dimmed
+  everywhere (which disables drawn ornaments to avoid duplicating information)
 - **Focus mode** (Ctrl+Shift+F) dims everything except the current paragraph
 - **Typewriter mode** (Ctrl+Shift+T) keeps the cursor vertically centered
 - **Templates**: Markdown files in `~/.local/share/scribe/templates` with
@@ -82,21 +83,33 @@ something I actually use to draft notes and docs.
 - **Light and dark theme** follows the GtkSourceView style scheme
 - **Integration**: `scribe file.md` and "Open with" from the file manager
 
-## Known limits of live rendering
+## How it works
 
-`GtkTextTag` changes how text looks but cannot replace or overlay it, so
-some things are rendered as styled text rather than true widgets:
+Two modules, neither depends on the application types:
 
-- Bullet markers stay as `-` or `*`, colored and with hanging indent, rather
-  than `&bull;`
-- Task lists show styled `[x]` and `[ ]` instead of checkboxes
-- Rules (`---`) are dimmed and centered, not a drawn line
-- Tables are rendered in monospace so columns align when pipes are lined up
-  in the source; they are not a grid widget
-- Images are not embedded
+- **`src/markdown_render.rs`** parses Markdown with pulldown-cmark and returns
+  two lists: *spans* (byte ranges with a `GtkTextTag` name) and *ornaments*
+  (elements keyed by line number to be painted). GTK-independent, testable
+  without a display: 22 unit tests.
+- **`src/markdown_view.rs`** is a `GtkSourceView` subclass that implements
+  `snapshot_layer`, the vfunc GTK exposes for drawing below or above text. It
+  works in buffer coordinates (GTK handles scrolling) and draws with
+  `gsk::PathBuilder`.
 
-Drawing with a custom `snapshot()` or embedding widgets with text anchors
-would alter the source buffer. That is out of scope for this phase.
+Markers replaced by an ornament (`- `, `[x] `, `---`, `>`, code-block fences)
+are hidden **always**, regardless of cursor line — revealing them would shift
+text around as the cursor moves.
+
+## Known limits
+
+- **Images are not embedded**: the alt text is shown. `snapshot_layer` can
+  paint but cannot reserve line height; real embedding needs
+  `insert_paintable`, which inserts a character into the buffer and dirties
+  the source.
+- **Tables align only when the source is lined up**: the block is monospaced
+  so pipes line up, but there is no auto-formatting.
+- In "show dimmed everywhere" mode, ornaments are deliberately disabled to
+  avoid duplicating information already visible through the markup characters.
 
 ## Screenshots
 

@@ -5,6 +5,7 @@ use std::rc::Rc;
 mod editor;
 mod file_manager;
 mod markdown_render;
+mod markdown_view;
 mod preferences;
 mod preview;
 mod settings;
