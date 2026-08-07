@@ -5,6 +5,35 @@ All notable changes to Scribe will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.1] - 2026-08-08
+
+### Fixed
+
+- **Crash al editar** (`gtk_text_iter_set_visible_line_index`, «byte index off
+  the end of the line»). Tres causas encadenadas, las tres arregladas:
+  - `decorate()` se llamaba de forma sincrona desde
+    `notify::cursor-position`, que es una senal del buffer. Aplicar tags de
+    invisibilidad mientras GTK esta procesando una edicion descuadra su
+    maquetacion. Ahora toda la decoracion pasa por `schedule_decoration()` y se
+    difiere al bucle principal; no se toca el buffer desde ninguna senal suya.
+  - Al dibujar, un bloque de codigo que abarcaba mucho mas que la pantalla hacia
+    que se pidiera geometria de lineas muy lejanas, obligando a GTK a validar
+    miles de lineas en mitad del `snapshot`. La geometria se limita ahora a la
+    franja visible y la caja se alarga fuera de pantalla, para que las esquinas
+    redondeadas no aparezcan cortadas a mitad del bloque.
+  - Los adornos van por numero de linea; si el buffer cambiaba entre el calculo
+    y el dibujado, apuntaban a sitios equivocados. `set_ornaments` guarda ahora
+    el numero de lineas para el que se calcularon y el dibujado se salta el
+    fotograma si ya no coincide.
+- **La version en `Cargo.toml` seguia en 1.0.0** desde la pre-alpha, asi que la
+  ventana «Acerca de» mentia. Ahora sale de `CARGO_PKG_VERSION` y coincide con
+  el CHANGELOG. De paso: licencia como `AGPL-3.0-or-later`, `rust-version`
+  declarada y fuera `serde`/`serde_json`, que no los usa nadie.
+- **Tags de bloque que se extendian de mas**: el mismo problema de decorar
+  dentro de una senal podia dejar el tag `codeblock` cubriendo texto posterior
+  al cierre de la valla, con lo que el documento entero pasaba a verse como
+  codigo despues de editar.
+
 ## [0.2.0] - 2026-08-07
 
 ### Added — adornos dibujados

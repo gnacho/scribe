@@ -278,14 +278,46 @@ fn paragraph_bounds(buffer: &gtksourceview5::Buffer, line: i32) -> (i32, i32) {
     (first, last)
 }
 
+/// Toda la decoracion pasa por aqui.
+///
+/// Nunca se aplican tags desde dentro de una senal del buffer: GTK no espera
+/// que la invisibilidad de su texto cambie mientras esta procesando una
+/// edicion, y hacerlo descuadra la maquetacion. El sintoma es un aborto en
+/// `gtk_text_iter_set_visible_line_index` («byte index off the end of the
+/// line») y, antes de llegar ahi, tags de bloque que se extienden mas alla de
+/// su rango. Se difiere siempre al bucle principal.
+fn schedule_decoration(
+    view: &MarkdownView,
+    buffer: &gtksourceview5::Buffer,
+    decoration: &Rc<Cell<Decoration>>,
+    generation: &Rc<Cell<u64>>,
+    delay: Duration,
+) {
+    let current = generation.get().wrapping_add(1);
+    generation.set(current);
+
+    let view = view.clone();
+    let buffer = buffer.clone();
+    let decoration = decoration.clone();
+    let generation = generation.clone();
+    glib::timeout_add_local_once(delay, move || {
+        // Si ha llegado otra peticion mientras esperabamos, esta sobra.
+        if generation.get() != current {
+            return;
+        }
+        decorate(&view, &buffer, decoration.get());
+    });
+}
+
 fn decorate(view: &MarkdownView, buffer: &gtksourceview5::Buffer, config: Decoration) {
     let start = buffer.start_iter();
     let end = buffer.end_iter();
     buffer.remove_all_tags(&start, &end);
 
+    let line_count = end.line() + 1;
     let text = buffer.text(&start, &end, true).to_string();
     if text.is_empty() || text.len() > MAX_LIVE_BYTES {
-        view.set_ornaments(Vec::new());
+        view.set_ornaments(Vec::new(), line_count);
         return;
     }
 
@@ -341,7 +373,10 @@ fn decorate(view: &MarkdownView, buffer: &gtksourceview5::Buffer, config: Decora
 
     // En modo «atenuar» las marcas están a la vista, así que dibujar encima
     // duplicaría la información.
-    view.set_ornaments(if dim { Vec::new() } else { analysis.ornaments });
+    view.set_ornaments(
+        if dim { Vec::new() } else { analysis.ornaments },
+        line_count,
+    );
 
     if config.focus_mode {
         let (first, last) = paragraph_bounds(buffer, cursor_line);
@@ -488,10 +523,11 @@ impl Editor {
         let buffer = self.buffer.clone();
         let view = self.view.clone();
         let decoration = self.decoration.clone();
+        let generation = self.generation.clone();
         adw::StyleManager::default().connect_dark_notify(move |sm| {
             apply_scheme(&buffer, sm.is_dark());
             apply_theme(&tags, &view, sm.is_dark());
-            decorate(&view, &buffer, decoration.get());
+            schedule_decoration(&view, &buffer, &decoration, &generation, Duration::ZERO);
         });
 
         let on_changed = self.on_changed.clone();
@@ -504,25 +540,19 @@ impl Editor {
             if let Some(cb) = on_changed.borrow().as_ref() {
                 cb(&text);
             }
-
-            let current = generation.get().wrapping_add(1);
-            generation.set(current);
-            let generation = generation.clone();
-            let last_line = last_line.clone();
-            let decoration = decoration.clone();
-            let view = view.clone();
-            let buf = buf.clone();
-            glib::timeout_add_local_once(Duration::from_millis(45), move || {
-                if generation.get() != current {
-                    return;
-                }
-                last_line.set(buf.iter_at_offset(buf.cursor_position()).line());
-                decorate(&view, &buf, decoration.get());
-            });
+            last_line.set(buf.iter_at_offset(buf.cursor_position()).line());
+            schedule_decoration(
+                &view,
+                buf,
+                &decoration,
+                &generation,
+                Duration::from_millis(45),
+            );
         });
 
         let last_line = self.last_line.clone();
         let decoration = self.decoration.clone();
+        let generation = self.generation.clone();
         let typewriter = self.typewriter.clone();
         let view = self.view.clone();
         self.buffer.connect_cursor_position_notify(move |buf| {
@@ -542,7 +572,7 @@ impl Editor {
             // En «ocultar» y «atenuar» el marcado no depende del cursor; solo
             // hay que repintar si algo lo sigue.
             if config.markup == MarkupVisibility::Focus || config.focus_mode {
-                decorate(&view, buf, config);
+                schedule_decoration(&view, buf, &decoration, &generation, Duration::ZERO);
             }
         });
 
@@ -610,7 +640,13 @@ impl Editor {
     }
 
     pub fn refresh(&self) {
-        decorate(&self.view, &self.buffer, self.decoration.get());
+        schedule_decoration(
+            &self.view,
+            &self.buffer,
+            &self.decoration,
+            &self.generation,
+            Duration::ZERO,
+        );
     }
 
     pub fn connect_changed<F: Fn(&str) + 'static>(&self, callback: F) {

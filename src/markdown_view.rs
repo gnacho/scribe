@@ -65,6 +65,10 @@ const BLOCK_RADIUS: f32 = 8.0;
 const QUOTE_BAR_WIDTH: f32 = 3.0;
 const QUOTE_BAR_OFFSET: f32 = 20.0;
 const RULE_THICKNESS: f32 = 1.0;
+/// Cuanto se alarga fuera de la pantalla la caja de un bloque que empieza o
+/// acaba mas alla de lo visible, para que sus esquinas redondeadas no aparezcan
+/// cortadas a mitad del bloque.
+const BLOCK_OVERSHOOT: f32 = 4000.0;
 
 mod imp {
     use super::*;
@@ -74,6 +78,10 @@ mod imp {
     pub struct MarkdownView {
         pub ornaments: RefCell<Vec<Ornament>>,
         pub palette: Cell<OrnamentPalette>,
+        /// Numero de lineas del buffer cuando se calcularon los adornos. Si el
+        /// buffer ya no coincide, los adornos apuntan a lineas que se han
+        /// movido y no se dibuja nada hasta que llegue la siguiente pasada.
+        pub line_count: Cell<i32>,
     }
 
     #[glib::object_subclass]
@@ -137,9 +145,16 @@ mod imp {
             )
         }
 
+        /// Los adornos van por numero de linea. Si el buffer ha cambiado desde
+        /// que se calcularon, dibujarlos pondria cajas y vinetas en sitios
+        /// equivocados; se salta el fotograma y ya llegara la decoracion nueva.
+        fn stale(&self) -> bool {
+            self.line_count.get() != self.obj().buffer().end_iter().line() + 1
+        }
+
         fn draw_blocks(&self, snapshot: &gtk4::Snapshot) {
             let ornaments = self.ornaments.borrow();
-            if ornaments.is_empty() {
+            if ornaments.is_empty() || self.stale() {
                 return;
             }
             let palette = self.palette.get();
@@ -156,13 +171,28 @@ mod imp {
                 if last < first_visible || first > last_visible {
                     continue;
                 }
-                let Some((top, _)) = self.line_extent(first) else {
+
+                // Solo se pide geometria de lineas cercanas a lo visible. Un
+                // bloque que abarca medio documento obligaria a GTK a validar
+                // la maquetacion de miles de lineas en mitad del dibujado, y
+                // eso deja la vista en un estado incoherente: gtksourceview
+                // aborta despues con «byte index off the end of the line».
+                let anchor_top = first.max(first_visible - 1);
+                let anchor_bottom = last.min(last_visible + 1);
+                let Some((anchor_y, _)) = self.line_extent(anchor_top) else {
                     continue;
                 };
-                let Some((bottom_y, bottom_h)) = self.line_extent(last) else {
+                let Some((bottom_y, bottom_h)) = self.line_extent(anchor_bottom) else {
                     continue;
                 };
-                let bottom = bottom_y + bottom_h;
+                let mut top = anchor_y;
+                let mut bottom = bottom_y + bottom_h;
+                if first < anchor_top {
+                    top -= BLOCK_OVERSHOOT;
+                }
+                if last > anchor_bottom {
+                    bottom += BLOCK_OVERSHOOT;
+                }
 
                 match ornament {
                     Ornament::CodeBlock { .. } => {
@@ -181,7 +211,7 @@ mod imp {
                         // La barra se ancla al margen del párrafo citado, no al
                         // de la ventana, para que respete la sangría del tag.
                         let x = self
-                            .line_origin(first)
+                            .line_origin(anchor_top)
                             .map(|(x, _, _)| x - QUOTE_BAR_OFFSET)
                             .unwrap_or(left + BLOCK_PADDING);
                         let rect =
@@ -198,7 +228,7 @@ mod imp {
 
         fn draw_glyphs(&self, snapshot: &gtk4::Snapshot) {
             let ornaments = self.ornaments.borrow();
-            if ornaments.is_empty() {
+            if ornaments.is_empty() || self.stale() {
                 return;
             }
             let palette = self.palette.get();
@@ -320,8 +350,12 @@ impl MarkdownView {
 
     /// Sustituye la lista de adornos y repinta. Barata: no calcula geometría,
     /// eso ocurre al dibujar y solo para lo que se ve.
-    pub fn set_ornaments(&self, ornaments: Vec<Ornament>) {
+    ///
+    /// `line_count` es el numero de lineas del buffer para el que se
+    /// calcularon: sirve para descartar adornos que ya no cuadran.
+    pub fn set_ornaments(&self, ornaments: Vec<Ornament>, line_count: i32) {
         self.imp().ornaments.replace(ornaments);
+        self.imp().line_count.set(line_count);
         self.queue_draw();
     }
 
