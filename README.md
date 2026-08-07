@@ -1,129 +1,219 @@
 # Scribe
 
-Editor Markdown nativo para GNOME, escrito en Rust con GTK4, libadwaita y GtkSourceView 5.
+<p align="center">
+  <a href="README.md">English</a> |
+  <a href="README.es.md">Español</a>
+</p>
 
-**Estado: pre-alpha.** Edicion Markdown con render en vivo sobre el propio texto:
-las cabeceras se ven con su tamano, la negrita en negrita y los `**`, `#`, backticks
-y URLs se ocultan, reapareciendo solo en la linea donde esta el cursor. Sin WebKit
-ni segundo documento que sincronizar.
+<p align="center">
+  <a href="https://github.com/gnacho/scribe/releases"><img alt="Release" src="https://img.shields.io/github/v/release/gnacho/scribe"></a>
+  <a href="LICENSE"><img alt="License" src="https://img.shields.io/github/license/gnacho/scribe"></a>
+</p>
 
-Este repositorio continua la exploracion de diseno de las maquetas de Gnome-MD
-(ahora en [docs/mockups](docs/mockups)): un editor Markdown sin distracciones que
-sigue las GNOME Human Interface Guidelines.
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/hero-es-dark.png">
+    <source media="(prefers-color-scheme: light)" srcset="assets/hero-es-light.png">
+    <img alt="Scribe editor window showing Markdown text with live WYSIWYG rendering" src="assets/hero-es-light.png" width="800">
+  </picture>
+</p>
 
-## Que hace ahora mismo
+Scribe is a native GNOME Markdown editor built with Rust, GTK4 and
+libadwaita. It renders Markdown live on the editing buffer so headings look
+like headings and bold text looks bold, without switching to a separate
+preview or browser engine.
 
-- **Render en vivo (WYSIWYG en linea)**. El buffer del editor se decora con
-  `GtkTextTag` y lo que un tag no puede expresar se **dibuja**: vinetas segun el
-  nivel de anidamiento, casillas de tarea marcables, reglas horizontales, la
-  barra vertical de las citas y la caja redondeada de los bloques de codigo.
-- **Visibilidad del marcado configurable**: ocultar siempre, revelar solo en la
-  linea del cursor, o atenuar siempre (que ensena el fuente tal cual y desactiva
-  los adornos, para cuando quieres ver lo que hay de verdad).
-- **Cobertura**: cabeceras ATX y setext, negrita, cursiva, tachado, codigo en
-  linea y en bloque, citas, listas ordenadas y sin ordenar con anidamiento,
-  tareas, enlaces, autoenlaces, imagenes, notas al pie, tablas, HTML y reglas.
-- **Tipografia**: columna centrada de ancho configurable, familia sans/serif/mono
-  a elegir y monoespaciada reservada para codigo y tablas. Tema claro y oscuro
-  con el style scheme de GtkSourceView.
-- **Modo foco y maquina de escribir**: atenuar todo salvo el parrafo actual y
-  mantener la linea del cursor centrada verticalmente.
-- **Plantillas**: ficheros `.md` en `~/.local/share/scribe/templates`, con
-  marcadores `{{title}}`, `{{date}}`, `{{time}}`, `{{datetime}}` y `{{year}}`.
-- **Interfaz segun las HIG**, con el mismo reparto que GNOME Text Editor: boton
-  «Abrir» con desplegable de recientes y boton de documento nuevo a la izquierda,
-  titulo al centro, menu principal con fila de zoom a la derecha, y barra de
-  estado inferior con posicion del cursor e «Ir a la linea».
-- **Preferencias** en tres paginas: apariencia, editor y plantillas.
-- **Ficheros**: abrir, guardar y guardar como con `GtkFileDialog`, escritura
-  atomica, aviso de cambios sin guardar y autoguardado con intervalo ajustable.
-- **Integracion**: `scribe fichero.md` y «Abrir con» del gestor de archivos.
-- **Barra lateral** (F9) con recientes filtrables e indice del documento navegable.
+## Why does this exist?
 
-## Como funciona el render
+I wanted a Markdown editor that felt like part of GNOME, not a port of a web
+app. The ones I tried either wrapped a browser engine (ProseMirror, Milkdown
+inside WebKit) and consumed hundreds of megabytes, or they showed a plain
+source buffer next to a rendered preview. I kept both panes open, going back
+and forth between them instead of just writing.
 
-Dos modulos, ninguno con tipos de la aplicacion dentro:
+The idea is an editor where the source text IS the preview: the buffer stays
+plain Markdown, but the rendering happens on top with `GtkTextTag`. That way
+there is nothing to sync, no HTML under the hood, no browser engine to
+bundle. It started as mockups for a GTK4 design exploration and evolved into
+something I actually use to draft notes and docs.
 
-- **`src/markdown_render.rs`** analiza el Markdown con pulldown-cmark y devuelve
-  dos listas: *tramos* (rangos en bytes con el nombre del `GtkTextTag`) y
-  *adornos* (elementos referidos a numero de linea que hay que pintar). No
-  depende de GTK, asi que se prueba sin display: 22 tests unitarios.
-- **`src/markdown_view.rs`** es un `GtkSourceView` subclaseado que implementa
-  `snapshot_layer`, el vfunc que GTK expone precisamente para pintar debajo o
-  encima del texto. Trabaja en coordenadas de buffer, asi que el desplazamiento
-  lo resuelve GTK y aqui no hay que compensar nada. Recibe la lista de adornos y
-  una paleta de colores, y dibuja con `gsk::PathBuilder`.
+## Why this stack?
 
-Las marcas que un adorno sustituye (`- `, `[x] `, `---`, `>`, las vallas de los
-bloques) se ocultan **siempre**, no solo fuera de la linea del cursor: revelarlas
-moveria el texto de sitio cada vez que el cursor cambia de linea.
+- **Rust + GTK4 + libadwaita** &mdash; native toolkit, no Electron. The binary
+  is around 8 MB and idles at a few dozen megabytes of RAM. A WebKit-based
+  editor would be ten times that before opening a file.
+- **GtkSourceView 5** for the text buffer and **pulldown-cmark** for Markdown
+  parsing, then custom `GtkTextTag` spans for rendering. No HTML or CSS
+  involved in the preview. The editor is a single `GtkTextView` with
+  decorations applied to the buffer.
+- **No database, no server, no JavaScript.** It is a desktop application that
+  opens, edits and saves files. Preferences go through GSettings, not a
+  config file or a web UI.
 
-## Reutilizar el render en otro proyecto
+## Features
 
-Los dos modulos de arriba forman una pieza autocontenida y estan escritos para
-poder extraerse tal cual a un crate. Todavia no se publican: la API de
-`Ornament` y `OrnamentPalette` seguira moviendose mientras se anadan elementos, y
-versionar en crates.io algo que va a cambiar cada semana es una carga sin
-beneficio hasta que aparezca un segundo consumidor. Si quieres usarlo, copia los
-dos ficheros; si acabas manteniendolo, hablamos de sacarlo a un crate del
-workspace.
+- **Live WYSIWYG rendering** on the editing buffer: headings at real scale,
+  bold/italic/strikethrough, inline and fenced code, quotes, links, images,
+  footnotes and HTML blocks via `GtkTextTag`. **Drawn ornaments** via
+  `snapshot_layer`: bullet markers for each nesting level, checkable task
+  boxes, horizontal rules, vertical quote bars, and rounded code-block boxes
+- **Configurable markup visibility**: hide syntax markers like `**`, `#` and
+  backticks entirely, reveal them on the cursor line, or show them dimmed
+  everywhere (which disables drawn ornaments to avoid duplicating information)
+- **Focus mode** (Ctrl+Shift+F) dims everything except the current paragraph
+- **Typewriter mode** (Ctrl+Shift+T) keeps the cursor vertically centered
+- **Templates**: Markdown files in `~/.local/share/scribe/templates` with
+  `{{title}}`, `{{date}}`, `{{time}}`, `{{datetime}}` and `{{year}}` markers.
+  Four examples are seeded on first launch
+- **Split preview** (Ctrl+Shift+P) renders the full document in a side panel
+  using the same `GtkTextTag` engine. Useful for tables and images
+- **Ctrl+B/I/K** wraps the selection in `**`, `*` or backticks
+- **List continuation**: pressing Enter starts the next item and re-numbers
+  ordered lists. Leaving an item empty closes the list
+- **Zoom** (Ctrl +/&minus;/0) with controls in the main menu
+- **Go to line** from the status bar
+- **Header bar** follows GNOME Text Editor: open button with recent files
+  dropdown, new document button, centered title, main menu with zoom row on
+  the right
+- **Preferences** window with three pages: Appearance, Editor and Templates
+- **Files**: open, save and save-as with `GtkFileDialog`, atomic writes
+  (temp + rename), unsaved-changes warning, configurable autosave
+- **Sidebar** (F9) with filterable recent files and a navigable document
+  outline
+- **Light and dark theme** follows the GtkSourceView style scheme
+- **Integration**: `scribe file.md` and "Open with" from the file manager
 
-## Limites conocidos
+## How it works
 
-- **Las imagenes no se incrustan**: se ve el texto alternativo. `snapshot_layer`
-  puede pintar, pero no reservar altura de linea. Incrustarlas de verdad exige
-  `insert_paintable`, que mete un caracter en el buffer y ensucia el fuente.
-- **Las tablas cuadran solo si el fuente esta alineado**: el bloque va en
-  monoespaciada, que hace que los pipes coincidan, pero no se reformatean solas.
-- En modo «atenuar siempre» los adornos se desactivan a proposito, para no
-  duplicar la informacion con las marcas ya visibles.
+Two modules, neither depends on the application types:
 
+- **`src/markdown_render.rs`** parses Markdown with pulldown-cmark and returns
+  two lists: *spans* (byte ranges with a `GtkTextTag` name) and *ornaments*
+  (elements keyed by line number to be painted). GTK-independent, testable
+  without a display: 22 unit tests.
+- **`src/markdown_view.rs`** is a `GtkSourceView` subclass that implements
+  `snapshot_layer`, the vfunc GTK exposes for drawing below or above text. It
+  works in buffer coordinates (GTK handles scrolling) and draws with
+  `gsk::PathBuilder`.
 
-## Que falta
+Markers replaced by an ornament (`- `, `[x] `, `---`, `>`, code-block fences)
+are hidden **always**, regardless of cursor line — revealing them would shift
+text around as the cursor moves.
 
-- Pestanas / varios documentos por ventana (`AdwTabView`).
-- Buscar y reemplazar.
-- Alineado automatico de tablas.
-- Exportar a HTML o PDF.
+## Known limits
 
+- **Images are not embedded**: the alt text is shown. `snapshot_layer` can
+  paint but cannot reserve line height; real embedding needs
+  `insert_paintable`, which inserts a character into the buffer and dirties
+  the source.
+- **Tables align only when the source is lined up**: the block is monospaced
+  so pipes line up, but there is no auto-formatting.
+- In "show dimmed everywhere" mode, ornaments are deliberately disabled to
+  avoid duplicating information already visible through the markup characters.
 
-## Requisitos de compilacion
+## Screenshots
 
-- Rust 1.78+
-- GTK4, libadwaita, GtkSourceView 5 y GLib development files
+The interface is in Spanish. English localization is not done yet.
 
-Arch/CachyOS:
+**Main window with live Markdown rendering**
 
-```bash
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/hero-es-dark.png">
+  <source media="(prefers-color-scheme: light)" srcset="assets/hero-es-light.png">
+  <img alt="Main editor window with headings, bold, italic, code and a quote block" src="assets/hero-es-light.png" width="800">
+</picture>
+
+**Main menu with zoom controls**
+
+<p align="center">
+  <img alt="Menu showing open, save, zoom and view options" src="assets/screenshot-menu-es-light.png" width="800">
+</p>
+
+**Preferences window**
+
+<p align="center">
+  <img alt="Preferences window with Appearance, Editor and Templates pages" src="assets/screenshot-preferences-es-light.png" width="800">
+</p>
+
+**Focus mode (everything dimmed except the current paragraph)**
+
+<p align="center">
+  <img alt="Focus mode in the editor showing a dimmed document with the current paragraph highlighted" src="assets/screenshot-focus-es-light.png" width="800">
+</p>
+
+## What's missing
+
+- Tabs / multiple documents (`AdwTabView`)
+- Find and replace
+- Export to HTML or PDF
+- Spell checking
+- English and other UI translations
+
+## Build requirements
+
+- Rust 1.80 or later
+- GTK4 (&ge; 4.14), libadwaita (&ge; 1.5), GtkSourceView 5 and GLib
+  development files
+
+Arch / CachyOS:
+
+```sh
 sudo pacman -S rust gtk4 libadwaita gtksourceview5 glib2
 ```
 
-Debian/Ubuntu:
+Debian / Ubuntu:
 
-```bash
+```sh
 sudo apt install libgtk-4-dev libadwaita-1-dev libgtksourceview-5-dev libglib2.0-dev
 ```
 
 Fedora:
 
-```bash
+```sh
 sudo dnf install gtk4-devel libadwaita-devel gtksourceview5-devel glib2-devel
 ```
 
 ## Build and run
 
-```bash
+```sh
 cargo build --release
 cargo run
 ```
 
+GSettings schema needs to be installed for preferences to work. During
+development:
+
+```sh
+glib-compile-schemas data/
+GSETTINGS_SCHEMA_DIR=$PWD/data cargo run
+```
+
+The application starts with defaults if the schema is not found, logging a
+warning to stderr.
+
 ## Flatpak
 
-A Flatpak manifest is available at [build-aux/flatpak](build-aux/flatpak/) (work in progress):
+A Flatpak manifest is at [build-aux/flatpak](build-aux/flatpak). Work in
+progress. The module builds with `cargo --offline`, so generate
+`cargo-sources.json` first with
+[flatpak-cargo-generator](https://github.com/flatpak/flatpak-builder-tools/tree/master/cargo)
+and keep `Cargo.lock` in the repository:
 
-```bash
+```sh
+cargo generate-lockfile
+python3 flatpak-cargo-generator.py Cargo.lock -o build-aux/flatpak/cargo-sources.json
 cd build-aux/flatpak
 flatpak-builder --user --install build-dir app.scribe.Scribe.json --force-clean
+```
+
+## Development
+
+```sh
+git clone https://github.com/gnacho/scribe.git
+cd scribe
+cargo build
+cargo test
+cargo run
 ```
 
 ## License
