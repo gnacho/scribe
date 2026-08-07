@@ -10,7 +10,7 @@
       <summary>Window height</summary>
     </key>
     <key name="show-sidebar" type="b">
-      <default>true</default>
+      <default>false</default>
       <summary>Show sidebar</summary>
     </key>
     <key name="show-preview" type="b">
@@ -22,7 +22,7 @@
       <summary>Color theme</summary>
     </key>
     <key name="font-size" type="i">
-      <default>15</default>
+      <default>16</default>
       <summary>Editor font size</summary>
     </key>
     <key name="line-spacing" type="d">

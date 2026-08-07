@@ -1,6 +1,18 @@
 use gtk4::prelude::*;
 use std::path::PathBuf;
 
+pub enum Outcome {
+    Ok(PathBuf),
+    Cancelled,
+    Error(String),
+}
+
+pub enum OpenOutcome {
+    Ok((PathBuf, String)),
+    Cancelled,
+    Error(String),
+}
+
 pub struct FileManager;
 
 impl FileManager {
@@ -8,7 +20,7 @@ impl FileManager {
         Self
     }
 
-    pub fn open<F: Fn(Option<(PathBuf, String)>) + 'static>(
+    pub fn open<F: Fn(OpenOutcome) + 'static>(
         &self,
         parent: &impl IsA<gtk4::Window>,
         callback: F,
@@ -31,15 +43,22 @@ impl FileManager {
             Some(parent),
             gio::Cancellable::NONE,
             move |result| {
-                let content = result.ok()
-                    .and_then(|file| file.path())
-                    .and_then(|path| std::fs::read_to_string(&path).ok().map(|c| (path, c)));
-                callback(content);
+                let outcome = match result {
+                    Ok(file) => match file.path() {
+                        Some(path) => match std::fs::read_to_string(&path) {
+                            Ok(content) => OpenOutcome::Ok((path, content)),
+                            Err(e) => OpenOutcome::Error(e.to_string()),
+                        },
+                        None => OpenOutcome::Cancelled,
+                    },
+                    Err(e) => OpenOutcome::Error(e.to_string()),
+                };
+                callback(outcome);
             },
         );
     }
 
-    pub fn save<F: Fn(Option<PathBuf>) + 'static>(
+    pub fn save<F: Fn(Outcome) + 'static>(
         &self,
         parent: &impl IsA<gtk4::Window>,
         current: Option<&PathBuf>,
@@ -47,8 +66,10 @@ impl FileManager {
         callback: F,
     ) {
         if let Some(path) = current {
-            let _ = std::fs::write(path, content);
-            callback(Some(path.clone()));
+            match std::fs::write(path, content) {
+                Ok(()) => callback(Outcome::Ok(path.clone())),
+                Err(e) => callback(Outcome::Error(e.to_string())),
+            }
             return;
         }
 
@@ -75,11 +96,17 @@ impl FileManager {
             Some(parent),
             gio::Cancellable::NONE,
             move |result| {
-                let path = result.ok().and_then(|file| file.path());
-                if let Some(ref p) = path {
-                    let _ = std::fs::write(p, &content);
-                }
-                callback(path);
+                let outcome = match result {
+                    Ok(file) => match file.path() {
+                        Some(path) => match std::fs::write(&path, &content) {
+                            Ok(()) => Outcome::Ok(path),
+                            Err(e) => Outcome::Error(e.to_string()),
+                        },
+                        None => Outcome::Cancelled,
+                    },
+                    Err(e) => Outcome::Error(e.to_string()),
+                };
+                callback(outcome);
             },
         );
     }

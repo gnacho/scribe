@@ -1,87 +1,246 @@
 use gtk4::prelude::*;
-use libadwaita::prelude::*;
 use libadwaita as adw;
+use libadwaita::prelude::*;
+use std::cell::{Cell, RefCell};
+use std::path::{Path, PathBuf};
 use std::rc::Rc;
-use std::cell::RefCell;
-use std::path::PathBuf;
+use std::time::Duration;
 
 use crate::editor::Editor;
+use crate::file_manager::{FileManager, OpenOutcome, Outcome};
 use crate::preview::PreviewPanel;
 use crate::settings::AppSettings;
-use crate::file_manager::FileManager;
+
+const SHORTCUTS_UI: &str = r#"<?xml version="1.0" encoding="UTF-8"?>
+<interface>
+  <object class="GtkShortcutsWindow" id="help_overlay">
+    <property name="modal">1</property>
+    <child>
+      <object class="GtkShortcutsSection">
+        <property name="section-name">shortcuts</property>
+        <property name="max-height">12</property>
+        <child>
+          <object class="GtkShortcutsGroup">
+            <property name="title">Archivo</property>
+            <child>
+              <object class="GtkShortcutsShortcut">
+                <property name="title">Abrir</property>
+                <property name="accelerator">&lt;Control&gt;o</property>
+              </object>
+            </child>
+            <child>
+              <object class="GtkShortcutsShortcut">
+                <property name="title">Guardar</property>
+                <property name="accelerator">&lt;Control&gt;s</property>
+              </object>
+            </child>
+            <child>
+              <object class="GtkShortcutsShortcut">
+                <property name="title">Guardar como</property>
+                <property name="accelerator">&lt;Control&gt;&lt;Shift&gt;s</property>
+              </object>
+            </child>
+            <child>
+              <object class="GtkShortcutsShortcut">
+                <property name="title">Nueva ventana</property>
+                <property name="accelerator">&lt;Control&gt;n</property>
+              </object>
+            </child>
+            <child>
+              <object class="GtkShortcutsShortcut">
+                <property name="title">Salir</property>
+                <property name="accelerator">&lt;Control&gt;q</property>
+              </object>
+            </child>
+          </object>
+        </child>
+        <child>
+          <object class="GtkShortcutsGroup">
+            <property name="title">Formato</property>
+            <child>
+              <object class="GtkShortcutsShortcut">
+                <property name="title">Negrita</property>
+                <property name="accelerator">&lt;Control&gt;b</property>
+              </object>
+            </child>
+            <child>
+              <object class="GtkShortcutsShortcut">
+                <property name="title">Cursiva</property>
+                <property name="accelerator">&lt;Control&gt;i</property>
+              </object>
+            </child>
+            <child>
+              <object class="GtkShortcutsShortcut">
+                <property name="title">Código</property>
+                <property name="accelerator">&lt;Control&gt;k</property>
+              </object>
+            </child>
+          </object>
+        </child>
+        <child>
+          <object class="GtkShortcutsGroup">
+            <property name="title">Vista</property>
+            <child>
+              <object class="GtkShortcutsShortcut">
+                <property name="title">Barra lateral</property>
+                <property name="accelerator">F9</property>
+              </object>
+            </child>
+            <child>
+              <object class="GtkShortcutsShortcut">
+                <property name="title">Previsualización</property>
+                <property name="accelerator">&lt;Control&gt;&lt;Shift&gt;p</property>
+              </object>
+            </child>
+            <child>
+              <object class="GtkShortcutsShortcut">
+                <property name="title">Preferencias</property>
+                <property name="accelerator">&lt;Control&gt;comma</property>
+              </object>
+            </child>
+          </object>
+        </child>
+      </object>
+    </child>
+  </object>
+</interface>"#;
 
 pub struct ScribeWindow {
     pub window: adw::ApplicationWindow,
+    load_file: Rc<dyn Fn(&Path)>,
+}
+
+/// Sustituye el home del usuario por `~` para que el subtítulo no ocupe media barra.
+fn shorten_home(path: &Path) -> String {
+    let s = path.to_string_lossy().to_string();
+    if let Some(home) = glib::home_dir().to_str() {
+        if let Some(rest) = s.strip_prefix(home) {
+            return format!("~{}", rest);
+        }
+    }
+    s
+}
+
+/// Reconstruye el índice, saltándose las cabeceras que estén dentro de un bloque de código.
+fn rebuild_toc(list: &gtk4::ListBox, lines_out: &Rc<RefCell<Vec<i32>>>, text: &str) {
+    while let Some(child) = list.first_child() {
+        list.remove(&child);
+    }
+    let mut lines = Vec::new();
+    let mut in_fence = false;
+
+    for (idx, line) in text.lines().enumerate() {
+        let trimmed = line.trim_start();
+        if trimmed.starts_with("```") || trimmed.starts_with("~~~") {
+            in_fence = !in_fence;
+            continue;
+        }
+        if in_fence {
+            continue;
+        }
+        let level = trimmed.chars().take_while(|c| *c == '#').count();
+        if level == 0 || level > 6 {
+            continue;
+        }
+        let rest = trimmed[level..].trim();
+        if rest.is_empty() || !trimmed[level..].starts_with(' ') {
+            continue;
+        }
+
+        let label = gtk4::Label::builder()
+            .label(rest)
+            .halign(gtk4::Align::Start)
+            .ellipsize(gtk4::pango::EllipsizeMode::End)
+            .margin_start(12 + (level as i32 - 1) * 12)
+            .margin_end(12)
+            .margin_top(3)
+            .margin_bottom(3)
+            .build();
+        if level == 1 {
+            label.add_css_class("heading");
+        } else if level >= 3 {
+            label.add_css_class("dim-label");
+        }
+
+        let row = gtk4::ListBoxRow::builder()
+            .child(&label)
+            .activatable(true)
+            .build();
+        list.append(&row);
+        lines.push(idx as i32);
+    }
+
+    *lines_out.borrow_mut() = lines;
 }
 
 impl ScribeWindow {
-    pub fn new(app: &adw::Application, settings: &AppSettings) -> Self {
-        let settings_rc = Rc::new(AppSettings::new());
+    pub fn new(app: &adw::Application, settings: &Rc<AppSettings>) -> Self {
+        let settings = settings.clone();
         let file_manager = Rc::new(FileManager::new());
-        let current_file = Rc::new(RefCell::new(None::<PathBuf>));
-        let is_modified = Rc::new(RefCell::new(false));
+        let current_file: Rc<RefCell<Option<PathBuf>>> = Rc::new(RefCell::new(None));
+        let is_modified = Rc::new(Cell::new(false));
+        let force_close = Rc::new(Cell::new(false));
+        let alive = Rc::new(Cell::new(true));
+        let recents: Rc<RefCell<Vec<PathBuf>>> = Rc::new(RefCell::new(Vec::new()));
+        let toc_lines: Rc<RefCell<Vec<i32>>> = Rc::new(RefCell::new(Vec::new()));
 
-        // === WINDOW ===
         let window = adw::ApplicationWindow::builder()
             .application(app)
-            .default_width(settings_rc.window_width())
-            .default_height(settings_rc.window_height())
+            .default_width(settings.window_width())
+            .default_height(settings.window_height())
             .build();
 
         // === EDITOR ===
         let editor = Rc::new(Editor::new());
         editor.widget.set_hexpand(true);
         editor.widget.set_vexpand(true);
+        editor.set_style(settings.font_size(), settings.line_spacing());
 
         // === PREVIEW ===
         let preview = Rc::new(PreviewPanel::new());
+        preview.set_font_size(settings.font_size());
+        let preview_visible = Rc::new(Cell::new(settings.show_preview()));
 
         // === SIDEBAR ===
-        let sidebar_box = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
-        sidebar_box.set_width_request(260);
-        sidebar_box.add_css_class("sidebar");
-
-        let sidebar_header = adw::HeaderBar::new();
-        sidebar_header.set_title_widget(Some(&adw::WindowTitle::new("Notas", "")));
-        sidebar_header.add_css_class("flat");
+        let sidebar_header = adw::HeaderBar::builder()
+            .title_widget(&adw::WindowTitle::new("Documentos", ""))
+            .show_end_title_buttons(false)
+            .css_classes(vec!["flat".to_string()])
+            .build();
 
         let search_entry = gtk4::SearchEntry::builder()
-            .placeholder_text("Buscar notas...")
+            .placeholder_text("Filtrar recientes…")
             .margin_top(12)
             .margin_bottom(6)
             .margin_start(12)
             .margin_end(12)
             .build();
 
-        let notes_label = gtk4::Label::new(Some("Notas recientes"));
-        notes_label.add_css_class("caption-heading");
-        notes_label.set_halign(gtk4::Align::Start);
-        notes_label.set_margin_start(12);
-        notes_label.set_margin_top(12);
+        let notes_label = gtk4::Label::builder()
+            .label("Recientes")
+            .halign(gtk4::Align::Start)
+            .css_classes(vec!["heading".to_string(), "dim-label".to_string()])
+            .margin_start(12)
+            .margin_top(12)
+            .build();
 
         let notes_list = gtk4::ListBox::builder()
-            .selection_mode(gtk4::SelectionMode::Single)
+            .selection_mode(gtk4::SelectionMode::None)
             .css_classes(vec!["navigation-sidebar".to_string()])
             .build();
 
-        let toc_label = gtk4::Label::new(Some("Contenido"));
-        toc_label.add_css_class("caption-heading");
-        toc_label.set_halign(gtk4::Align::Start);
-        toc_label.set_margin_start(12);
-        toc_label.set_margin_top(12);
+        let toc_label = gtk4::Label::builder()
+            .label("Contenido")
+            .halign(gtk4::Align::Start)
+            .css_classes(vec!["heading".to_string(), "dim-label".to_string()])
+            .margin_start(12)
+            .margin_top(12)
+            .build();
 
         let toc_list = gtk4::ListBox::builder()
             .selection_mode(gtk4::SelectionMode::None)
             .css_classes(vec!["navigation-sidebar".to_string()])
             .build();
-
-        for (title, subtitle) in [("Bienvenida.md", "~/Documentos"), ("Proyecto.md", "~/Documentos"), ("Ideas.md", "~/Notas")] {
-            let row = adw::ActionRow::builder()
-                .title(title)
-                .subtitle(subtitle)
-                .build();
-            notes_list.append(&row);
-        }
 
         let sidebar_content = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
         sidebar_content.append(&search_entry);
@@ -92,97 +251,267 @@ impl ScribeWindow {
 
         let sidebar_scrolled = gtk4::ScrolledWindow::builder()
             .hscrollbar_policy(gtk4::PolicyType::Never)
+            .vexpand(true)
             .child(&sidebar_content)
             .build();
 
+        let sidebar_box = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
+        sidebar_box.set_width_request(260);
+        sidebar_box.add_css_class("sidebar");
         sidebar_box.append(&sidebar_header);
         sidebar_box.append(&sidebar_scrolled);
 
-        // === CENTER PANED (Editor + Preview) ===
-        let paned = gtk4::Paned::new(gtk4::Orientation::Horizontal);
-        paned.set_start_child(Some(&editor.widget));
-        paned.set_end_child(Some(&preview.widget));
-        paned.set_wide_handle(true);
-        paned.set_position(600);
-        paned.set_hexpand(true);
-        paned.set_vexpand(true);
-
-        // Show/hide preview based on settings
-        if !settings_rc.show_preview() {
-            paned.set_end_child(None::<&gtk4::Widget>);
+        // === PANED ===
+        let paned = gtk4::Paned::builder()
+            .orientation(gtk4::Orientation::Horizontal)
+            .start_child(&editor.widget)
+            .wide_handle(true)
+            .position(600)
+            .hexpand(true)
+            .vexpand(true)
+            .shrink_start_child(false)
+            .shrink_end_child(false)
+            .build();
+        if preview_visible.get() {
+            paned.set_end_child(Some(&preview.widget));
         }
 
-        // === HEADERBAR (GNOME Text Editor style) ===
+        // === HEADERBAR ===
         let header = adw::HeaderBar::new();
 
-        // Left: New tab / Open
-        let new_tab_btn = gtk4::Button::from_icon_name("tab-new-symbolic");
-        new_tab_btn.set_tooltip_text(Some("Nueva pestaña (Ctrl+T)"));
-        header.pack_start(&new_tab_btn);
-
-        let open_btn = gtk4::Button::from_icon_name("document-open-symbolic");
-        open_btn.set_tooltip_text(Some("Abrir (Ctrl+O)"));
+        let open_btn = gtk4::Button::builder()
+            .icon_name("document-open-symbolic")
+            .tooltip_text("Abrir (Ctrl+O)")
+            .action_name("win.open")
+            .build();
         header.pack_start(&open_btn);
 
-        // Center: Title
-        let title_widget = adw::WindowTitle::new("Sin título", "Scribe");
-        header.set_title_widget(Some(&title_widget));
-
-        // Right: Preview toggle / Info / Menu
-        let preview_btn = gtk4::ToggleButton::builder()
-            .icon_name("document-preview-symbolic")
-            .tooltip_text("Mostrar previsualización (Ctrl+Shift+P)")
-            .active(settings_rc.show_preview())
+        let save_btn = gtk4::Button::builder()
+            .icon_name("document-save-symbolic")
+            .tooltip_text("Guardar (Ctrl+S)")
+            .action_name("win.save")
             .build();
-        header.pack_end(&preview_btn);
+        header.pack_start(&save_btn);
 
-        let info_btn = gtk4::Button::from_icon_name("info-symbolic");
-        info_btn.set_tooltip_text(Some("Estadísticas"));
-        header.pack_end(&info_btn);
+        let title_widget = adw::WindowTitle::new("Sin título", "");
+        header.set_title_widget(Some(&title_widget));
 
         let menu_btn = gtk4::MenuButton::builder()
             .icon_name("open-menu-symbolic")
             .primary(true)
+            .tooltip_text("Menú principal")
             .build();
         header.pack_end(&menu_btn);
 
+        let preview_btn = gtk4::ToggleButton::builder()
+            .icon_name("view-dual-symbolic")
+            .tooltip_text("Vista dividida (Ctrl+Shift+P)")
+            .active(preview_visible.get())
+            .build();
+        header.pack_end(&preview_btn);
+
+        // Estadísticas del documento, en un popover que se recalcula al abrirlo.
+        let stats_label = gtk4::Label::builder()
+            .halign(gtk4::Align::Start)
+            .margin_top(12)
+            .margin_bottom(12)
+            .margin_start(12)
+            .margin_end(12)
+            .build();
+        let stats_popover = gtk4::Popover::builder().child(&stats_label).build();
+        let stats_btn = gtk4::MenuButton::builder()
+            .icon_name("info-symbolic")
+            .tooltip_text("Estadísticas del documento")
+            .popover(&stats_popover)
+            .build();
+        header.pack_end(&stats_btn);
+
         // === MENU ===
         let menu = gio::Menu::new();
-        menu.append(Some("Nueva ventana"), Some("app.new-window"));
-        menu.append(Some("Abrir..."), Some("win.open"));
-        menu.append(Some("Guardar"), Some("win.save"));
-        menu.append(Some("Guardar como..."), Some("win.save-as"));
-        menu.append(None, None);
-        menu.append(Some("Mostrar barra lateral"), Some("win.toggle-sidebar"));
-        menu.append(Some("Mostrar previsualización"), Some("win.toggle-preview"));
-        menu.append(None, None);
-        menu.append(Some("Preferencias"), Some("win.preferences"));
-        menu.append(Some("Atajos de teclado"), Some("win.show-help-overlay"));
-        menu.append(Some("Acerca de Scribe"), Some("win.about"));
-        menu.append(None, None);
-        menu.append(Some("Salir"), Some("app.quit"));
+        let file_section = gio::Menu::new();
+        file_section.append(Some("Nueva ventana"), Some("app.new-window"));
+        file_section.append(Some("Abrir…"), Some("win.open"));
+        file_section.append(Some("Guardar"), Some("win.save"));
+        file_section.append(Some("Guardar como…"), Some("win.save-as"));
+        menu.append_section(None, &file_section);
+
+        let view_section = gio::Menu::new();
+        view_section.append(Some("Barra lateral"), Some("win.toggle-sidebar"));
+        view_section.append(Some("Vista dividida"), Some("win.toggle-preview"));
+        menu.append_section(None, &view_section);
+
+        let app_section = gio::Menu::new();
+        app_section.append(Some("Preferencias"), Some("win.preferences"));
+        app_section.append(Some("Atajos de teclado"), Some("win.show-help-overlay"));
+        app_section.append(Some("Acerca de Scribe"), Some("win.about"));
+        app_section.append(Some("Salir"), Some("app.quit"));
+        menu.append_section(None, &app_section);
         menu_btn.set_menu_model(Some(&menu));
 
         // === CONTENT ===
-        let content_box = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
-        content_box.append(&paned);
+        // Barra de estado inferior, al estilo de GNOME Text Editor.
+        let status_words = gtk4::Label::builder()
+            .css_classes(vec!["caption".to_string(), "dim-label".to_string()])
+            .build();
+        let status_pos = gtk4::Label::builder()
+            .css_classes(vec!["caption".to_string(), "dim-label".to_string()])
+            .build();
+        let status_bar = gtk4::CenterBox::builder()
+            .css_classes(vec!["toolbar".to_string()])
+            .margin_start(12)
+            .margin_end(12)
+            .build();
+        status_bar.set_start_widget(Some(&status_words));
+        status_bar.set_end_widget(Some(&status_pos));
 
         let toolbar_view = adw::ToolbarView::new();
         toolbar_view.add_top_bar(&header);
-        toolbar_view.set_content(Some(&content_box));
+        toolbar_view.add_bottom_bar(&status_bar);
+        toolbar_view.set_content(Some(&paned));
 
-        // === OVERLAY SPLIT (Sidebar + Content) ===
+        let toasts = adw::ToastOverlay::new();
+        toasts.set_child(Some(&toolbar_view));
+
         let overlay_split = adw::OverlaySplitView::builder()
             .sidebar(&sidebar_box)
-            .content(&toolbar_view)
-            .show_sidebar(settings_rc.show_sidebar())
-            .pin_sidebar(false)
+            .content(&toasts)
+            .show_sidebar(settings.show_sidebar())
             .enable_hide_gesture(true)
+            .enable_show_gesture(true)
             .build();
 
         window.set_content(Some(&overlay_split));
 
-        // === ACTIONS ===
+        // Ventana de atajos -> registra automáticamente win.show-help-overlay.
+        let builder = gtk4::Builder::from_string(SHORTCUTS_UI);
+        if let Some(help) = builder.object::<gtk4::ShortcutsWindow>("help_overlay") {
+            window.set_help_overlay(Some(&help));
+        }
+
+        // ---------------------------------------------------------------
+        // Helpers compartidos
+        // ---------------------------------------------------------------
+        let toast = {
+            let toasts = toasts.clone();
+            Rc::new(move |msg: &str| {
+                toasts.add_toast(adw::Toast::new(msg));
+            })
+        };
+
+        let update_title: Rc<dyn Fn()> = {
+            let current_file = current_file.clone();
+            let is_modified = is_modified.clone();
+            let title_widget = title_widget.clone();
+            let window = window.clone();
+            Rc::new(move || {
+                let file = current_file.borrow();
+                let (name, subtitle) = match file.as_ref() {
+                    Some(p) => (
+                        p.file_name()
+                            .and_then(|s| s.to_str())
+                            .unwrap_or("Sin título")
+                            .to_string(),
+                        p.parent().map(shorten_home).unwrap_or_default(),
+                    ),
+                    None => ("Sin título".to_string(), "No guardado".to_string()),
+                };
+                let dot = if is_modified.get() { "• " } else { "" };
+                title_widget.set_title(&format!("{dot}{name}"));
+                title_widget.set_subtitle(&subtitle);
+                window.set_title(Some(&format!("{dot}{name} — Scribe")));
+            })
+        };
+
+        let update_status: Rc<dyn Fn()> = {
+            let editor = editor.clone();
+            let status_words = status_words.clone();
+            let status_pos = status_pos.clone();
+            Rc::new(move || {
+                let text = editor.text();
+                let words = text.split_whitespace().count();
+                let chars = text.chars().count();
+                status_words.set_label(&format!("{words} palabras · {chars} caracteres"));
+                let (line, column) = editor.cursor_position();
+                status_pos.set_label(&format!("Ln {line}, Col {column}"));
+            })
+        };
+        {
+            let update_status = update_status.clone();
+            editor.connect_cursor_moved(move || update_status());
+        }
+
+        let refresh_recents: Rc<dyn Fn(&str)> = {
+            let settings = settings.clone();
+            let notes_list = notes_list.clone();
+            let recents = recents.clone();
+            Rc::new(move |filter: &str| {
+                while let Some(child) = notes_list.first_child() {
+                    notes_list.remove(&child);
+                }
+                let needle = filter.to_lowercase();
+                let mut paths = Vec::new();
+                for entry in settings.recent_files() {
+                    let path = PathBuf::from(&entry);
+                    let name = path
+                        .file_name()
+                        .and_then(|s| s.to_str())
+                        .unwrap_or("")
+                        .to_string();
+                    if !needle.is_empty() && !name.to_lowercase().contains(&needle) {
+                        continue;
+                    }
+                    let row = adw::ActionRow::builder()
+                        .title(&name)
+                        .subtitle(path.parent().map(shorten_home).unwrap_or_default())
+                        .activatable(true)
+                        .build();
+                    if !path.exists() {
+                        row.set_subtitle("No encontrado");
+                        row.set_sensitive(false);
+                    }
+                    notes_list.append(&row);
+                    paths.push(path);
+                }
+                if paths.is_empty() {
+                    let row = adw::ActionRow::builder()
+                        .title(if needle.is_empty() {
+                            "Sin documentos recientes"
+                        } else {
+                            "Ningún resultado"
+                        })
+                        .build();
+                    row.set_sensitive(false);
+                    notes_list.append(&row);
+                }
+                *recents.borrow_mut() = paths;
+            })
+        };
+        refresh_recents("");
+
+        let load_file: Rc<dyn Fn(&Path)> = {
+            let editor = editor.clone();
+            let current_file = current_file.clone();
+            let is_modified = is_modified.clone();
+            let settings = settings.clone();
+            let update_title = update_title.clone();
+            let refresh_recents = refresh_recents.clone();
+            let toast = toast.clone();
+            Rc::new(move |path: &Path| match std::fs::read_to_string(path) {
+                Ok(content) => {
+                    editor.set_text(&content);
+                    *current_file.borrow_mut() = Some(path.to_path_buf());
+                    is_modified.set(false);
+                    settings.push_recent_file(&path.to_string_lossy());
+                    refresh_recents("");
+                    update_title();
+                }
+                Err(e) => toast(&format!("No se pudo abrir: {e}")),
+            })
+        };
+
+        // ---------------------------------------------------------------
+        // Acciones
+        // ---------------------------------------------------------------
         let action_open = gio::SimpleAction::new("open", None);
         let action_save = gio::SimpleAction::new("save", None);
         let action_save_as = gio::SimpleAction::new("save-as", None);
@@ -190,258 +519,451 @@ impl ScribeWindow {
         let action_toggle_preview = gio::SimpleAction::new("toggle-preview", None);
         let action_preferences = gio::SimpleAction::new("preferences", None);
         let action_about = gio::SimpleAction::new("about", None);
+        let action_bold = gio::SimpleAction::new("bold", None);
+        let action_italic = gio::SimpleAction::new("italic", None);
+        let action_code = gio::SimpleAction::new("code", None);
 
-        window.add_action(&action_open);
-        window.add_action(&action_save);
-        window.add_action(&action_save_as);
-        window.add_action(&action_toggle_sidebar);
-        window.add_action(&action_toggle_preview);
-        window.add_action(&action_preferences);
-        window.add_action(&action_about);
+        for (action, marker) in [
+            (&action_bold, "**"),
+            (&action_italic, "*"),
+            (&action_code, "`"),
+        ] {
+            let editor = editor.clone();
+            action.connect_activate(move |_, _| editor.wrap_selection(marker));
+        }
 
-        // === CONNECT: Open ===
-        let window_clone = window.clone();
-        let file_manager_clone = file_manager.clone();
-        let current_file_clone = current_file.clone();
-        let editor_clone = editor.clone();
-        let title_widget_clone = title_widget.clone();
-        let is_modified_clone = is_modified.clone();
-        action_open.connect_activate(move |_, _| {
-            let editor_inner = editor_clone.clone();
-            let current_file_inner = current_file_clone.clone();
-            let title_widget_inner = title_widget_clone.clone();
-            let is_modified_inner = is_modified_clone.clone();
-            file_manager_clone.open(&window_clone, move |result| {
-                if let Some((path, content)) = result {
-                    *current_file_inner.borrow_mut() = Some(path.clone());
-                    editor_inner.set_text(&content);
-                    let title = path.file_stem()
-                        .and_then(|s| s.to_str())
-                        .unwrap_or("Sin título");
-                    title_widget_inner.set_title(title);
-                    *is_modified_inner.borrow_mut() = false;
-                }
-            });
-        });
+        for a in [
+            &action_open,
+            &action_save,
+            &action_save_as,
+            &action_toggle_sidebar,
+            &action_toggle_preview,
+            &action_preferences,
+            &action_about,
+            &action_bold,
+            &action_italic,
+            &action_code,
+        ] {
+            window.add_action(a);
+        }
 
-        open_btn.connect_clicked(glib::clone!(@weak action_open => move |_| {
-            action_open.activate(None);
-        }));
-
-        // === CONNECT: Save ===
-        let window_clone = window.clone();
-        let file_manager_clone = file_manager.clone();
-        let current_file_clone = current_file.clone();
-        let editor_clone = editor.clone();
-        let title_widget_clone = title_widget.clone();
-        let is_modified_clone = is_modified.clone();
-        action_save.connect_activate(move |_, _| {
-            let content = editor_clone.text();
-            let path = current_file_clone.borrow().clone();
-            let current_file_inner = current_file_clone.clone();
-            let title_widget_inner = title_widget_clone.clone();
-            let is_modified_inner = is_modified_clone.clone();
-            file_manager_clone.save(&window_clone, path.as_ref(), &content, move |saved_path| {
-                if let Some(p) = saved_path {
-                    *current_file_inner.borrow_mut() = Some(p.clone());
-                    let title = p.file_stem()
-                        .and_then(|s| s.to_str())
-                        .unwrap_or("Sin título");
-                    title_widget_inner.set_title(title);
-                    *is_modified_inner.borrow_mut() = false;
-                }
-            });
-        });
-
-        // === CONNECT: Save As ===
-        let window_clone = window.clone();
-        let file_manager_clone = file_manager.clone();
-        let current_file_clone = current_file.clone();
-        let editor_clone = editor.clone();
-        let title_widget_clone = title_widget.clone();
-        let is_modified_clone = is_modified.clone();
-        action_save_as.connect_activate(move |_, _| {
-            let content = editor_clone.text();
-            let current_file_inner = current_file_clone.clone();
-            let title_widget_inner = title_widget_clone.clone();
-            let is_modified_inner = is_modified_clone.clone();
-            file_manager_clone.save(&window_clone, None, &content, move |saved_path| {
-                if let Some(p) = saved_path {
-                    *current_file_inner.borrow_mut() = Some(p.clone());
-                    let title = p.file_stem()
-                        .and_then(|s| s.to_str())
-                        .unwrap_or("Sin título");
-                    title_widget_inner.set_title(title);
-                    *is_modified_inner.borrow_mut() = false;
-                }
-            });
-        });
-
-        // === CONNECT: Editor changed → update preview & stats ===
-        let preview_clone = preview.clone();
-        let toc_list_clone = toc_list.clone();
-        let title_widget_clone = title_widget.clone();
-        let is_modified_clone = is_modified.clone();
-        editor.connect_changed(move |text| {
-            preview_clone.update(text);
-            *is_modified_clone.borrow_mut() = true;
-
-            // Update title from first heading
-            let lines = text.lines();
-            let mut title = "Sin título";
-            for line in lines {
-                if let Some(t) = line.strip_prefix("# ") {
-                    title = t.trim();
-                    break;
-                }
-            }
-            title_widget_clone.set_title(title);
-
-            // Update TOC
-            while let Some(child) = toc_list_clone.first_child() {
-                toc_list_clone.remove(&child);
-            }
-            for line in text.lines() {
-                if let Some(rest) = line.strip_prefix("# ") {
-                    let label = gtk4::Label::new(Some(rest.trim()));
-                    label.set_halign(gtk4::Align::Start);
-                    label.set_margin_start(12);
-                    label.set_margin_top(2);
-                    label.set_margin_bottom(2);
-                    label.add_css_class("heading");
-                    toc_list_clone.append(&label);
-                } else if let Some(rest) = line.strip_prefix("## ") {
-                    let label = gtk4::Label::new(Some(rest.trim()));
-                    label.set_halign(gtk4::Align::Start);
-                    label.set_margin_start(24);
-                    label.set_margin_top(2);
-                    label.set_margin_bottom(2);
-                    toc_list_clone.append(&label);
-                } else if let Some(rest) = line.strip_prefix("### ") {
-                    let label = gtk4::Label::new(Some(rest.trim()));
-                    label.set_halign(gtk4::Align::Start);
-                    label.set_margin_start(36);
-                    label.set_margin_top(2);
-                    label.set_margin_bottom(2);
-                    toc_list_clone.append(&label);
-                }
-            }
-        });
-
-        // === CONNECT: Toggle sidebar ===
-        let overlay_split_clone = overlay_split.clone();
-        let settings_clone = settings_rc.clone();
-        action_toggle_sidebar.connect_activate(move |_, _| {
-            let current = overlay_split_clone.shows_sidebar();
-            overlay_split_clone.set_show_sidebar(!current);
-            let _ = settings_clone.set_show_sidebar(!current);
-        });
-
-        // === CONNECT: Toggle preview ===
-        let paned_clone = paned.clone();
-        let preview_clone = preview.clone();
-        let preview_btn_clone = preview_btn.clone();
-        let settings_clone = settings_rc.clone();
-        action_toggle_preview.connect_activate(move |_, _| {
-            let active = preview_btn_clone.is_active();
-            if active {
-                paned_clone.set_end_child(Some(&preview_clone.widget));
-            } else {
-                paned_clone.set_end_child(None::<&gtk4::Widget>);
-            }
-            let _ = settings_clone.set_show_preview(active);
-        });
-
-        preview_btn.connect_toggled(glib::clone!(@weak action_toggle_preview => move |btn| {
-            action_toggle_preview.activate(None);
-        }));
-
-        // === CONNECT: Preferences ===
-        let window_clone = window.clone();
-        let settings_clone = settings_rc.clone();
-        action_preferences.connect_activate(move |_, _| {
-            let prefs = adw::PreferencesWindow::builder()
-                .transient_for(&window_clone)
-                .modal(true)
-                .title("Preferencias")
-                .build();
-
-            let page = adw::PreferencesPage::builder()
-                .title("General")
-                .icon_name("preferences-system-symbolic")
-                .build();
-
-            let group = adw::PreferencesGroup::builder()
-                .title("Editor")
-                .build();
-
-            let font_row = adw::ActionRow::builder()
-                .title("Fuente del editor")
-                .subtitle("Monospace 15px")
-                .build();
-            group.add(&font_row);
-
-            let spacing_row = adw::SpinRow::builder()
-                .title("Espaciado entre líneas")
-                .adjustment(&gtk4::Adjustment::new(1.7, 1.0, 3.0, 0.1, 0.1, 0.0))
-                .digits(1)
-                .build();
-            group.add(&spacing_row);
-
-            let autosave_row = adw::SwitchRow::builder()
-                .title("Guardado automático")
-                .subtitle("Guardar cada 30 segundos")
-                .active(settings_clone.autosave())
-                .build();
-            group.add(&autosave_row);
-
-            page.add(&group);
-            prefs.add(&page);
-            prefs.present();
-        });
-
-        // === CONNECT: About ===
-        let window_clone = window.clone();
-        action_about.connect_activate(move |_, _| {
-            let about = adw::AboutWindow::builder()
-                .transient_for(&window_clone)
-                .application_name("Scribe")
-                .application_icon("app.scribe.Scribe")
-                .developer_name("Tu nombre")
-                .version("1.0.0")
-                .website("https://github.com/gnacho/scribe")
-                .issue_url("https://github.com/gnacho/scribe/issues")
-                .license_type(gtk4::License::Gpl30)
-                .build();
-            about.present();
-        });
-
-        // === Keyboard shortcuts ===
-        let controller = gtk4::EventControllerKey::new();
-        controller.connect_key_pressed(move |_ctrl, keyval, _keycode, state| {
-            if state.contains(gdk4::ModifierType::CONTROL_MASK) {
-                match keyval {
-                    gdk4::Key::t => {
-                        // New tab - placeholder
-                        return glib::Propagation::Stop;
+        // --- Abrir ---
+        {
+            let window = window.clone();
+            let file_manager = file_manager.clone();
+            let editor = editor.clone();
+            let current_file = current_file.clone();
+            let is_modified = is_modified.clone();
+            let settings = settings.clone();
+            let update_title = update_title.clone();
+            let refresh_recents = refresh_recents.clone();
+            let toast = toast.clone();
+            action_open.connect_activate(move |_, _| {
+                let editor = editor.clone();
+                let current_file = current_file.clone();
+                let is_modified = is_modified.clone();
+                let settings = settings.clone();
+                let update_title = update_title.clone();
+                let refresh_recents = refresh_recents.clone();
+                let toast = toast.clone();
+                file_manager.open(&window, move |outcome| match outcome {
+                    OpenOutcome::Ok((path, content)) => {
+                        editor.set_text(&content);
+                        *current_file.borrow_mut() = Some(path.clone());
+                        is_modified.set(false);
+                        settings.push_recent_file(&path.to_string_lossy());
+                        refresh_recents("");
+                        update_title();
                     }
-                    _ => {}
-                }
+                    OpenOutcome::Error(e) => toast(&e),
+                    OpenOutcome::Cancelled => {}
+                });
+            });
+        }
+
+        // --- Guardar / Guardar como ---
+        let make_save = |force_dialog: bool| {
+            let window = window.clone();
+            let file_manager = file_manager.clone();
+            let editor = editor.clone();
+            let current_file = current_file.clone();
+            let is_modified = is_modified.clone();
+            let settings = settings.clone();
+            let update_title = update_title.clone();
+            let refresh_recents = refresh_recents.clone();
+            let toast = toast.clone();
+            move |_: &gio::SimpleAction, _: Option<&glib::Variant>| {
+                let content = editor.text();
+                let path = if force_dialog {
+                    None
+                } else {
+                    current_file.borrow().clone()
+                };
+                let current_file = current_file.clone();
+                let is_modified = is_modified.clone();
+                let settings = settings.clone();
+                let update_title = update_title.clone();
+                let refresh_recents = refresh_recents.clone();
+                let toast = toast.clone();
+                file_manager.save(
+                    &window,
+                    path.as_ref(),
+                    &content,
+                    move |outcome| match outcome {
+                        Outcome::Ok(p) => {
+                            *current_file.borrow_mut() = Some(p.clone());
+                            is_modified.set(false);
+                            settings.push_recent_file(&p.to_string_lossy());
+                            refresh_recents("");
+                            update_title();
+                            toast("Guardado");
+                        }
+                        Outcome::Error(e) => toast(&e),
+                        Outcome::Cancelled => {}
+                    },
+                );
             }
-            glib::Propagation::Proceed
-        });
-        window.add_controller(controller);
+        };
+        action_save.connect_activate(make_save(false));
+        action_save_as.connect_activate(make_save(true));
 
-        // Window size persistence
-        let settings_clone = settings_rc.clone();
-        window.connect_close_request(move |win| {
-            let (width, height) = win.default_size();
-            settings_clone.set_window_width(width);
-            settings_clone.set_window_height(height);
-            glib::Propagation::Proceed
-        });
+        // --- Editor cambiado: preview + índice con debounce ---
+        {
+            let preview = preview.clone();
+            let preview_visible = preview_visible.clone();
+            let toc_list = toc_list.clone();
+            let toc_lines = toc_lines.clone();
+            let is_modified = is_modified.clone();
+            let update_title = update_title.clone();
+            let update_status = update_status.clone();
+            let generation = Rc::new(Cell::new(0u64));
+            editor.connect_changed(move |text| {
+                let was_modified = is_modified.replace(true);
+                if !was_modified {
+                    update_title();
+                }
+                update_status();
+                // Antes se re-renderizaba el preview entero en cada pulsación.
+                let gen = generation.get().wrapping_add(1);
+                generation.set(gen);
 
-        Self { window }
+                let text = text.to_string();
+                let generation = generation.clone();
+                let preview = preview.clone();
+                let preview_visible = preview_visible.clone();
+                let toc_list = toc_list.clone();
+                let toc_lines = toc_lines.clone();
+                glib::timeout_add_local_once(Duration::from_millis(120), move || {
+                    if generation.get() != gen {
+                        return;
+                    }
+                    if preview_visible.get() {
+                        preview.update(&text);
+                    }
+                    rebuild_toc(&toc_list, &toc_lines, &text);
+                });
+            });
+        }
+
+        // --- Barra lateral ---
+        {
+            let overlay_split = overlay_split.clone();
+            let settings = settings.clone();
+            action_toggle_sidebar.connect_activate(move |_, _| {
+                let next = !overlay_split.shows_sidebar();
+                overlay_split.set_show_sidebar(next);
+                settings.set_show_sidebar(next);
+            });
+        }
+
+        // --- Previsualización ---
+        // La acción sólo conmuta el botón; el botón es quien aplica el cambio.
+        // (Antes la acción leía el estado del botón, así que el atajo de teclado
+        //  no hacía nada: releía el mismo valor y lo volvía a aplicar.)
+        {
+            let preview_btn = preview_btn.clone();
+            action_toggle_preview.connect_activate(move |_, _| {
+                preview_btn.set_active(!preview_btn.is_active());
+            });
+        }
+        {
+            let paned = paned.clone();
+            let preview = preview.clone();
+            let preview_visible = preview_visible.clone();
+            let editor = editor.clone();
+            let settings = settings.clone();
+            preview_btn.connect_toggled(move |btn| {
+                let active = btn.is_active();
+                preview_visible.set(active);
+                if active {
+                    preview.update(&editor.text());
+                    paned.set_end_child(Some(&preview.widget));
+                } else {
+                    paned.set_end_child(None::<&gtk4::Widget>);
+                }
+                settings.set_show_preview(active);
+            });
+        }
+
+        // --- Recientes e índice clicables ---
+        {
+            let recents = recents.clone();
+            let load_file = load_file.clone();
+            notes_list.connect_row_activated(move |_, row| {
+                let idx = row.index() as usize;
+                let path = recents.borrow().get(idx).cloned();
+                if let Some(path) = path {
+                    load_file(&path);
+                }
+            });
+        }
+        {
+            let toc_lines = toc_lines.clone();
+            let editor = editor.clone();
+            toc_list.connect_row_activated(move |_, row| {
+                let idx = row.index() as usize;
+                let line = toc_lines.borrow().get(idx).copied();
+                if let Some(line) = line {
+                    editor.scroll_to_line(line);
+                }
+            });
+        }
+        {
+            let refresh_recents = refresh_recents.clone();
+            search_entry.connect_search_changed(move |entry| {
+                refresh_recents(entry.text().as_str());
+            });
+        }
+
+        // --- Estadísticas ---
+        {
+            let editor = editor.clone();
+            let stats_label = stats_label.clone();
+            stats_btn.connect_active_notify(move |btn| {
+                if !btn.is_active() {
+                    return;
+                }
+                let text = editor.text();
+                let words = text.split_whitespace().count();
+                let chars = text.chars().count();
+                let lines = text.lines().count();
+                // ~200 palabras por minuto de lectura.
+                let minutes = (words as f64 / 200.0).ceil().max(1.0) as usize;
+                stats_label.set_label(&format!(
+                    "Palabras: {words}\nCaracteres: {chars}\nLíneas: {lines}\nLectura: ~{minutes} min"
+                ));
+            });
+        }
+
+        // --- Preferencias (ahora sí escriben en GSettings) ---
+        {
+            let window = window.clone();
+            let settings = settings.clone();
+            let editor = editor.clone();
+            let preview = preview.clone();
+            action_preferences.connect_activate(move |_, _| {
+                let prefs = adw::PreferencesWindow::builder()
+                    .transient_for(&window)
+                    .modal(true)
+                    .title("Preferencias")
+                    .build();
+
+                let page = adw::PreferencesPage::builder()
+                    .title("General")
+                    .icon_name("preferences-system-symbolic")
+                    .build();
+                let group = adw::PreferencesGroup::builder().title("Editor").build();
+
+                let font_row = adw::SpinRow::builder()
+                    .title("Tamaño de fuente")
+                    .subtitle("Píxeles")
+                    .adjustment(&gtk4::Adjustment::new(
+                        settings.font_size() as f64,
+                        8.0,
+                        48.0,
+                        1.0,
+                        1.0,
+                        0.0,
+                    ))
+                    .build();
+                group.add(&font_row);
+
+                let spacing_row = adw::SpinRow::builder()
+                    .title("Interlineado")
+                    .adjustment(&gtk4::Adjustment::new(
+                        settings.line_spacing(),
+                        1.0,
+                        3.0,
+                        0.1,
+                        0.1,
+                        0.0,
+                    ))
+                    .digits(1)
+                    .build();
+                group.add(&spacing_row);
+
+                let autosave_row = adw::SwitchRow::builder()
+                    .title("Guardado automático")
+                    .subtitle("Cada 30 segundos, si el documento ya tiene ruta")
+                    .active(settings.autosave())
+                    .build();
+                group.add(&autosave_row);
+
+                let apply = {
+                    let settings = settings.clone();
+                    let editor = editor.clone();
+                    let preview = preview.clone();
+                    let font_row = font_row.clone();
+                    let spacing_row = spacing_row.clone();
+                    Rc::new(move || {
+                        let size = font_row.value() as i32;
+                        let spacing = spacing_row.value();
+                        settings.set_font_size(size);
+                        settings.set_line_spacing(spacing);
+                        editor.set_style(size, spacing);
+                        preview.set_font_size(size);
+                    })
+                };
+                {
+                    let apply = apply.clone();
+                    font_row.connect_value_notify(move |_| apply());
+                }
+                {
+                    let apply = apply.clone();
+                    spacing_row.connect_value_notify(move |_| apply());
+                }
+                {
+                    let settings = settings.clone();
+                    autosave_row.connect_active_notify(move |row| {
+                        settings.set_autosave(row.is_active());
+                    });
+                }
+
+                page.add(&group);
+                prefs.add(&page);
+                prefs.present();
+            });
+        }
+
+        // --- Acerca de ---
+        {
+            let window = window.clone();
+            action_about.connect_activate(move |_, _| {
+                let about = adw::AboutWindow::builder()
+                    .transient_for(&window)
+                    .modal(true)
+                    .application_name("Scribe")
+                    .application_icon("app.scribe.Scribe")
+                    .developer_name("gnacho")
+                    .version(env!("CARGO_PKG_VERSION"))
+                    .website("https://github.com/gnacho/scribe")
+                    .issue_url("https://github.com/gnacho/scribe/issues")
+                    // El proyecto es AGPL-3.0 (LICENSE y Cargo.toml); antes aquí
+                    // ponía GPL-3.0 y no coincidía.
+                    .license_type(gtk4::License::Agpl30)
+                    .build();
+                about.present();
+            });
+        }
+
+        // --- Autoguardado ---
+        {
+            let settings = settings.clone();
+            let editor = editor.clone();
+            let current_file = current_file.clone();
+            let is_modified = is_modified.clone();
+            let update_title = update_title.clone();
+            let alive = alive.clone();
+            glib::timeout_add_seconds_local(30, move || {
+                if !alive.get() {
+                    return glib::ControlFlow::Break;
+                }
+                if settings.autosave() && is_modified.get() {
+                    let path = current_file.borrow().clone();
+                    if let Some(path) = path {
+                        if std::fs::write(&path, editor.text()).is_ok() {
+                            is_modified.set(false);
+                            update_title();
+                        }
+                    }
+                }
+                glib::ControlFlow::Continue
+            });
+        }
+
+        // --- Cierre: guardar tamaño y avisar de cambios sin guardar ---
+        {
+            let settings = settings.clone();
+            let is_modified = is_modified.clone();
+            let force_close = force_close.clone();
+            let alive = alive.clone();
+            let current_file = current_file.clone();
+            let editor = editor.clone();
+            let action_save_as = action_save_as.clone();
+            window.connect_close_request(move |win| {
+                let (w, h) = win.default_size();
+                settings.set_window_width(w);
+                settings.set_window_height(h);
+
+                if force_close.get() || !is_modified.get() {
+                    alive.set(false);
+                    return glib::Propagation::Proceed;
+                }
+
+                let dialog = adw::MessageDialog::new(
+                    Some(win),
+                    Some("¿Guardar los cambios?"),
+                    Some("Si cierras sin guardar, perderás lo que hayas escrito."),
+                );
+                dialog.add_response("cancel", "Cancelar");
+                dialog.add_response("discard", "Descartar");
+                dialog.add_response("save", "Guardar");
+                dialog.set_response_appearance("discard", adw::ResponseAppearance::Destructive);
+                dialog.set_response_appearance("save", adw::ResponseAppearance::Suggested);
+                dialog.set_default_response(Some("save"));
+                dialog.set_close_response("cancel");
+
+                let win = win.clone();
+                let force_close = force_close.clone();
+                let current_file = current_file.clone();
+                let editor = editor.clone();
+                let action_save_as = action_save_as.clone();
+                dialog.choose(gio::Cancellable::NONE, move |response| {
+                    match response.as_str() {
+                        "discard" => {
+                            force_close.set(true);
+                            win.close();
+                        }
+                        "save" => {
+                            let path = current_file.borrow().clone();
+                            match path {
+                                Some(p) => {
+                                    if std::fs::write(&p, editor.text()).is_ok() {
+                                        force_close.set(true);
+                                        win.close();
+                                    }
+                                }
+                                // Sin ruta hace falta el diálogo de guardar,
+                                // que es asíncrono: se deja la ventana abierta.
+                                None => action_save_as.activate(None),
+                            }
+                        }
+                        _ => {}
+                    }
+                });
+
+                glib::Propagation::Stop
+            });
+        }
+
+        update_title();
+        update_status();
+
+        Self { window, load_file }
+    }
+
+    pub fn open_path(&self, path: &Path) {
+        (self.load_file)(path);
     }
 
     pub fn present(&self) {
