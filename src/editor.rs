@@ -366,17 +366,11 @@ fn decorate(view: &MarkdownView, buffer: &gtksourceview5::Buffer, config: Decora
                     "syn_hidden"
                 }
             }
-            SpanKind::Marker => match config.markup {
-                MarkupVisibility::Hidden => "syn_hidden",
-                MarkupVisibility::Dim => "syn_shown",
-                MarkupVisibility::Focus => {
-                    if start_iter.line() <= cursor_line && end_iter.line() >= cursor_line {
-                        "syn_shown"
-                    } else {
-                        "syn_hidden"
-                    }
-                }
-            },
+            SpanKind::Marker => {
+                // invisible descuadra la maquetación de GTK combinado con
+                // bloques de código y adornos. Se atenúa sin ocultar.
+                "syn_shown"
+            }
         };
         buffer.apply_tag_by_name(name, &start_iter, &end_iter);
     }
