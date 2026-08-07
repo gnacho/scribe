@@ -7,7 +7,51 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Added
+### Added — interfaz HIG, plantillas y preferencias
+
+- **Preferencias completas** (`src/preferences.rs`) con `AdwPreferencesWindow` y
+  tres paginas: Apariencia (esquema de color, familia tipografica, tamano,
+  interlineado, ancho de columna), Editor (visibilidad del marcado, continuar
+  listas, modo foco, maquina de escribir, tabulacion, autoguardado e intervalo)
+  y Plantillas.
+- **Plantillas** (`src/templates.rs`): ficheros `.md` en
+  `$XDG_DATA_HOME/scribe/templates`, sembrados con cuatro ejemplos la primera
+  vez. Admiten `{{title}}`, `{{date}}`, `{{time}}`, `{{datetime}}` y `{{year}}`.
+- **Visibilidad del marcado configurable**: ocultar siempre, revelar en la linea
+  del cursor o atenuar siempre.
+- **Modo foco** (Ctrl+Shift+F) y **maquina de escribir** (Ctrl+Shift+T).
+- **Continuacion de listas** al pulsar Intro, con renumeracion de las ordenadas
+  y cierre automatico al dejar un elemento vacio.
+- **Zoom** (Ctrl +/-/0) con fila de control en el menu principal.
+- **Ir a la linea** desde la barra de estado.
+- **Marcado ampliado**: cabeceras setext, autoenlaces `<url>`, notas al pie,
+  bloques HTML atenuados y tablas en monoespaciada para que las columnas cuadren.
+  Tests: 13 -> 16.
+- **Ventana de atajos** externalizada a `src/shortcuts.ui`.
+
+### Changed
+
+- **Cabecera reorganizada** igual que GNOME Text Editor: `AdwSplitButton`
+  «Abrir» con desplegable de recientes y boton de documento nuevo a la
+  izquierda, titulo al centro, menu principal a la derecha. La barra de estado
+  lleva el contador de palabras a la izquierda y los botones de posicion y
+  propiedades a la derecha.
+- **Alternancias con estado** (`SimpleAction::new_stateful`) para barra lateral,
+  vista dividida, modo foco y maquina de escribir: el menu muestra la marca.
+- **Esquema GSettings** reescrito con enumeraciones y rangos.
+- **`settings.rs`** reescrito con tipos propios (`MarkupVisibility`,
+  `FontFamily`) en lugar de cadenas sueltas.
+
+### Fixed
+
+- Restauradas `app.quit` y `app.new-window`, que se habian perdido al rehacer
+  `main.rs`: Ctrl+Q no hacia nada y dos entradas del menu salian grises.
+- Restaurado `ApplicationFlags::HANDLES_OPEN`, sin el cual `scribe fichero.md` y
+  «Abrir con» del gestor de archivos se ignoraban.
+- `GtkTextTag:letter-spacing` no admite valores negativos: usarlos abortaba la
+  aplicacion al construir los tags de cabecera.
+
+### Added — render WYSIWYG en linea
 
 - **Inline WYSIWYG rendering**: the editor buffer is now decorated with `GtkTextTag`
   spans computed from the Markdown source. Headings render at their actual scale,

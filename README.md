@@ -13,23 +13,30 @@ sigue las GNOME Human Interface Guidelines.
 
 ## Que hace ahora mismo
 
-- **Render en vivo (WYSIWYG en linea)**: se decora el buffer del editor con
-  `GtkTextTag`. Las marcas de Markdown llevan la propiedad `invisible` y se revelan
-  atenuadas en la linea del cursor. Cubre cabeceras, negrita, cursiva, tachado,
-  codigo en linea y en bloque, citas, listas con sangria colgante, listas anidadas,
-  tareas, enlaces y reglas.
-- **Tipografia**: columna centrada de 720 px, cuerpo en Cantarell, monoespaciada solo
-  para codigo. Tema claro y oscuro con el *style scheme* de GtkSourceView.
-- **Previsualizacion dividida** (opcional, Ctrl+Shift+P): render completo en un panel
-  aparte, util para tablas. Desactivada por defecto.
-- **Ficheros**: abrir, guardar y guardar como con `GtkFileDialog`. Escritura atomica
-  (temporal + rename). Aviso al cerrar si hay cambios sin guardar.
-- **Integracion**: `scribe fichero.md` y "Abrir con" del gestor de archivos funcionan.
-- **Barra lateral**: recientes reales (persistidos en GSettings) con filtro, e indice
-  del documento navegable.
-- **Preferencias**: tamano de fuente, interlineado y autoguardado, persistidos en GSettings.
-- **Formato**: Ctrl+B, Ctrl+I y Ctrl+K envuelven la seleccion.
-- **Barra de estado** al estilo de GNOME Text Editor: palabras, caracteres y Ln/Col.
+- **Render en vivo (WYSIWYG en linea)**: el buffer del editor se decora con
+  `GtkTextTag`. Las marcas de Markdown llevan la propiedad `invisible` y su
+  visibilidad es configurable: ocultas siempre, reveladas en la linea del cursor,
+  o atenuadas siempre. Cubre cabeceras ATX y setext, negrita, cursiva, tachado,
+  codigo en linea y en bloque, citas, listas con sangria colgante, listas
+  anidadas, tareas, enlaces, autoenlaces, notas al pie, tablas, HTML y reglas.
+- **Tipografia**: columna centrada de ancho configurable, familia sans/serif/mono
+  a elegir y monoespaciada reservada para codigo y tablas. Tema claro y oscuro
+  con el style scheme de GtkSourceView.
+- **Modo foco y maquina de escribir**: atenuar todo salvo el parrafo actual y
+  mantener la linea del cursor centrada verticalmente.
+- **Plantillas**: ficheros `.md` en `~/.local/share/scribe/templates`, con
+  marcadores `{{title}}`, `{{date}}`, `{{time}}`, `{{datetime}}` y `{{year}}`.
+  Se eligen desde el boton de documento nuevo o se fija una por defecto.
+- **Interfaz segun las HIG**, con el mismo reparto que GNOME Text Editor: boton
+  «Abrir» con desplegable de recientes y boton de documento nuevo a la izquierda,
+  titulo al centro, menu principal con fila de zoom a la derecha, y barra de
+  estado inferior con posicion del cursor e «Ir a la linea».
+- **Preferencias** en tres paginas: apariencia, editor y plantillas.
+- **Ficheros**: abrir, guardar y guardar como con `GtkFileDialog`, escritura
+  atomica, aviso de cambios sin guardar y autoguardado con intervalo ajustable.
+- **Integracion**: `scribe fichero.md` y «Abrir con» del gestor de archivos.
+- **Barra lateral** (F9) con recientes filtrables e indice del documento navegable.
+- **Previsualizacion dividida** (opcional, Ctrl+Shift+P) para tablas e imagenes.
 
 ## Limites conocidos del render en vivo
 
@@ -47,9 +54,10 @@ anclas en el buffer, que altera el texto fuente. Queda fuera de esta fase.
 
 ## Que falta
 
-- Modo foco y modo maquina de escribir.
+- Pestanas / varios documentos por ventana (`AdwTabView`).
+- Buscar y reemplazar.
 - Exportar a HTML o PDF.
-- Tabla de estilos configurable.
+- Correccion ortografica.
 
 ## Requisitos de compilacion
 

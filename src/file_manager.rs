@@ -20,14 +20,8 @@ impl FileManager {
         Self
     }
 
-    pub fn open<F: Fn(OpenOutcome) + 'static>(
-        &self,
-        parent: &impl IsA<gtk4::Window>,
-        callback: F,
-    ) {
-        let dialog = gtk4::FileDialog::builder()
-            .title("Abrir documento")
-            .build();
+    pub fn open<F: Fn(OpenOutcome) + 'static>(&self, parent: &impl IsA<gtk4::Window>, callback: F) {
+        let dialog = gtk4::FileDialog::builder().title("Abrir documento").build();
 
         let filter = gtk4::FileFilter::new();
         filter.add_suffix("md");
@@ -39,23 +33,19 @@ impl FileManager {
         filters.append(&filter);
         dialog.set_filters(Some(&filters));
 
-        dialog.open(
-            Some(parent),
-            gio::Cancellable::NONE,
-            move |result| {
-                let outcome = match result {
-                    Ok(file) => match file.path() {
-                        Some(path) => match std::fs::read_to_string(&path) {
-                            Ok(content) => OpenOutcome::Ok((path, content)),
-                            Err(e) => OpenOutcome::Error(e.to_string()),
-                        },
-                        None => OpenOutcome::Cancelled,
+        dialog.open(Some(parent), gio::Cancellable::NONE, move |result| {
+            let outcome = match result {
+                Ok(file) => match file.path() {
+                    Some(path) => match std::fs::read_to_string(&path) {
+                        Ok(content) => OpenOutcome::Ok((path, content)),
+                        Err(e) => OpenOutcome::Error(e.to_string()),
                     },
-                    Err(e) => OpenOutcome::Error(e.to_string()),
-                };
-                callback(outcome);
-            },
-        );
+                    None => OpenOutcome::Cancelled,
+                },
+                Err(e) => OpenOutcome::Error(e.to_string()),
+            };
+            callback(outcome);
+        });
     }
 
     pub fn save<F: Fn(Outcome) + 'static>(
@@ -92,22 +82,18 @@ impl FileManager {
         }
 
         let content = content.to_string();
-        dialog.save(
-            Some(parent),
-            gio::Cancellable::NONE,
-            move |result| {
-                let outcome = match result {
-                    Ok(file) => match file.path() {
-                        Some(path) => match std::fs::write(&path, &content) {
-                            Ok(()) => Outcome::Ok(path),
-                            Err(e) => Outcome::Error(e.to_string()),
-                        },
-                        None => Outcome::Cancelled,
+        dialog.save(Some(parent), gio::Cancellable::NONE, move |result| {
+            let outcome = match result {
+                Ok(file) => match file.path() {
+                    Some(path) => match std::fs::write(&path, &content) {
+                        Ok(()) => Outcome::Ok(path),
+                        Err(e) => Outcome::Error(e.to_string()),
                     },
-                    Err(e) => Outcome::Error(e.to_string()),
-                };
-                callback(outcome);
-            },
-        );
+                    None => Outcome::Cancelled,
+                },
+                Err(e) => Outcome::Error(e.to_string()),
+            };
+            callback(outcome);
+        });
     }
 }
