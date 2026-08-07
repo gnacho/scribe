@@ -5,7 +5,43 @@ All notable changes to Scribe will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.2.0] - 2026-08-07
+
+### Added — adornos dibujados
+
+- **`src/markdown_view.rs`**: `MarkdownView`, un `GtkSourceView` subclaseado que
+  implementa `snapshot_layer` para pintar lo que un `GtkTextTag` no puede
+  expresar. Dibuja vinetas (disco, anillo y cuadrado segun el nivel), casillas
+  de tarea con su marca de verificacion, reglas horizontales, la barra vertical
+  de las citas y la caja redondeada de los bloques de codigo. Trabaja en
+  coordenadas de buffer y solo calcula geometria de lo que esta en pantalla.
+- **`Ornament` y `Analysis`** en `markdown_render`: el analizador devuelve ahora
+  tramos *y* adornos referidos a numero de linea.
+- **`SpanKind`**: distingue estilo permanente, marca de Markdown y marca
+  sustituida por un adorno. Las sustituidas no se revelan al pasar el cursor,
+  porque hacerlo desplazaria el texto en cada cambio de linea.
+- **Notas al pie**: la referencia deja solo el numero en volado y la definicion
+  se atenua.
+- Tests: 16 -> 22.
+
+### Changed
+
+- Las citas y los bloques de codigo ya no usan `paragraph-background`: su caja y
+  su barra se dibujan, lo que permite esquinas redondeadas y margenes reales.
+- Las listas sin ordenar pierden la sangria francesa: la vineta va en el canalon
+  y todas las lineas del elemento arrancan alineadas.
+- En modo «atenuar siempre» los adornos se desactivan, para no duplicar
+  informacion con las marcas visibles.
+
+### Fixed
+
+- **Sangria de listas anidadas**: pulldown-cmark empieza el rango del elemento en
+  el marcador, no al principio de la linea. Como el tag no cubria el inicio del
+  parrafo, GTK aplicaba el margen del nivel de arriba y la vineta quedaba
+  alineada con la lista padre. Ahora el tramo llega hasta el inicio de linea y la
+  sangria literal se oculta, para que el desplazamiento lo de solo el margen.
+- **Espacio suelto tras las casillas**: el rango de `TaskListMarker` cubre `[x]`
+  pero no el espacio siguiente, que quedaba como sangria fantasma.
 
 ### Added — interfaz HIG, plantillas y preferencias
 

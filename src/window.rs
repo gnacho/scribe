@@ -1013,7 +1013,6 @@ impl ScribeWindow {
 
         update_title();
         update_status();
-
         Self { window, load_file }
     }
 

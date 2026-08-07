@@ -13,12 +13,16 @@ sigue las GNOME Human Interface Guidelines.
 
 ## Que hace ahora mismo
 
-- **Render en vivo (WYSIWYG en linea)**: el buffer del editor se decora con
-  `GtkTextTag`. Las marcas de Markdown llevan la propiedad `invisible` y su
-  visibilidad es configurable: ocultas siempre, reveladas en la linea del cursor,
-  o atenuadas siempre. Cubre cabeceras ATX y setext, negrita, cursiva, tachado,
-  codigo en linea y en bloque, citas, listas con sangria colgante, listas
-  anidadas, tareas, enlaces, autoenlaces, notas al pie, tablas, HTML y reglas.
+- **Render en vivo (WYSIWYG en linea)**. El buffer del editor se decora con
+  `GtkTextTag` y lo que un tag no puede expresar se **dibuja**: vinetas segun el
+  nivel de anidamiento, casillas de tarea marcables, reglas horizontales, la
+  barra vertical de las citas y la caja redondeada de los bloques de codigo.
+- **Visibilidad del marcado configurable**: ocultar siempre, revelar solo en la
+  linea del cursor, o atenuar siempre (que ensena el fuente tal cual y desactiva
+  los adornos, para cuando quieres ver lo que hay de verdad).
+- **Cobertura**: cabeceras ATX y setext, negrita, cursiva, tachado, codigo en
+  linea y en bloque, citas, listas ordenadas y sin ordenar con anidamiento,
+  tareas, enlaces, autoenlaces, imagenes, notas al pie, tablas, HTML y reglas.
 - **Tipografia**: columna centrada de ancho configurable, familia sans/serif/mono
   a elegir y monoespaciada reservada para codigo y tablas. Tema claro y oscuro
   con el style scheme de GtkSourceView.
@@ -26,7 +30,6 @@ sigue las GNOME Human Interface Guidelines.
   mantener la linea del cursor centrada verticalmente.
 - **Plantillas**: ficheros `.md` en `~/.local/share/scribe/templates`, con
   marcadores `{{title}}`, `{{date}}`, `{{time}}`, `{{datetime}}` y `{{year}}`.
-  Se eligen desde el boton de documento nuevo o se fija una por defecto.
 - **Interfaz segun las HIG**, con el mismo reparto que GNOME Text Editor: boton
   «Abrir» con desplegable de recientes y boton de documento nuevo a la izquierda,
   titulo al centro, menu principal con fila de zoom a la derecha, y barra de
@@ -36,28 +39,53 @@ sigue las GNOME Human Interface Guidelines.
   atomica, aviso de cambios sin guardar y autoguardado con intervalo ajustable.
 - **Integracion**: `scribe fichero.md` y «Abrir con» del gestor de archivos.
 - **Barra lateral** (F9) con recientes filtrables e indice del documento navegable.
-- **Previsualizacion dividida** (opcional, Ctrl+Shift+P) para tablas e imagenes.
 
-## Limites conocidos del render en vivo
+## Como funciona el render
 
-`GtkTextTag` puede cambiar como se ve un texto, pero no sustituirlo por otro ni
-dibujar encima. De ahi que:
+Dos modulos, ninguno con tipos de la aplicacion dentro:
 
-- Las vinetas siguen siendo `-` o `*`, coloreados y con sangria colgante, en vez de `-`.
-- Las casillas se ven como `[x]` y `[ ]` estilizados, no como checkboxes.
-- Las reglas `---` se atenuan y centran, pero no son una linea real.
-- Las tablas no se alinean en columnas; para eso esta la vista dividida.
-- Las imagenes no se incrustan.
+- **`src/markdown_render.rs`** analiza el Markdown con pulldown-cmark y devuelve
+  dos listas: *tramos* (rangos en bytes con el nombre del `GtkTextTag`) y
+  *adornos* (elementos referidos a numero de linea que hay que pintar). No
+  depende de GTK, asi que se prueba sin display: 22 tests unitarios.
+- **`src/markdown_view.rs`** es un `GtkSourceView` subclaseado que implementa
+  `snapshot_layer`, el vfunc que GTK expone precisamente para pintar debajo o
+  encima del texto. Trabaja en coordenadas de buffer, asi que el desplazamiento
+  lo resuelve GTK y aqui no hay que compensar nada. Recibe la lista de adornos y
+  una paleta de colores, y dibuja con `gsk::PathBuilder`.
 
-Todo eso necesitaria dibujar en un `snapshot()` propio o incrustar widgets con
-anclas en el buffer, que altera el texto fuente. Queda fuera de esta fase.
+Las marcas que un adorno sustituye (`- `, `[x] `, `---`, `>`, las vallas de los
+bloques) se ocultan **siempre**, no solo fuera de la linea del cursor: revelarlas
+moveria el texto de sitio cada vez que el cursor cambia de linea.
+
+## Reutilizar el render en otro proyecto
+
+Los dos modulos de arriba forman una pieza autocontenida y estan escritos para
+poder extraerse tal cual a un crate. Todavia no se publican: la API de
+`Ornament` y `OrnamentPalette` seguira moviendose mientras se anadan elementos, y
+versionar en crates.io algo que va a cambiar cada semana es una carga sin
+beneficio hasta que aparezca un segundo consumidor. Si quieres usarlo, copia los
+dos ficheros; si acabas manteniendolo, hablamos de sacarlo a un crate del
+workspace.
+
+## Limites conocidos
+
+- **Las imagenes no se incrustan**: se ve el texto alternativo. `snapshot_layer`
+  puede pintar, pero no reservar altura de linea. Incrustarlas de verdad exige
+  `insert_paintable`, que mete un caracter en el buffer y ensucia el fuente.
+- **Las tablas cuadran solo si el fuente esta alineado**: el bloque va en
+  monoespaciada, que hace que los pipes coincidan, pero no se reformatean solas.
+- En modo «atenuar siempre» los adornos se desactivan a proposito, para no
+  duplicar la informacion con las marcas ya visibles.
+
 
 ## Que falta
 
 - Pestanas / varios documentos por ventana (`AdwTabView`).
 - Buscar y reemplazar.
+- Alineado automatico de tablas.
 - Exportar a HTML o PDF.
-- Correccion ortografica.
+
 
 ## Requisitos de compilacion
 
