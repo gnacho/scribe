@@ -5,9 +5,156 @@ All notable changes to Scribe will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.3.1] - 2026-08-08
 
-### Added
+### Fixed
+
+- **Una valla de codigo seguida de un tabulador no cerraba el bloque**, con lo
+  que el resto del documento pasaba a verse como codigo. El spec de CommonMark
+  dice que la valla de cierre «puede ir seguida solo de espacios o tabuladores,
+  que se ignoran», pero pulldown-cmark no lo respeta: se reproduce con
+  `` ```\ncodigo\n```\t\n `` tanto en 0.12 como en 0.13, asi que no es cosa
+  nuestra ni esta arreglado aguas arriba. Como apano, `normalize_fences()`
+  sustituye por espacios los tabuladores que van detras de una valla antes de
+  parsear. Solo toca lineas de valla, y como espacio y tabulador ocupan un byte
+  cada uno, todos los desplazamientos siguen valiendo sobre el texto original:
+  los tabuladores de dentro del bloque no se tocan.
+- Tres tests nuevos, incluido el de que la normalizacion conserva las
+  posiciones (33 en total).
+
+## [0.3.0] - 2026-08-08
+
+### Added — tablas
+
+- **Las tablas se renderizan como tablas**: la fila de guiones del fuente se
+  oculta y en su hueco se dibuja la línea que separa la cabecera; el bloque
+  lleva su propia caja redondeada, distinta de la de los bloques de código; y
+  los pipes quedan atenuados, haciendo de separador de columna sin competir con
+  el contenido.
+- **Alinear tablas** (Ctrl+Alt+T, y en el menú principal): reformatea todas las
+  tablas del documento para que sus columnas cuadren en el fuente. Como el
+  bloque va en monoespaciada, alinear el fuente es lo que hace que la tabla se
+  vea alineada en pantalla. Respeta los `:` de alineación, los pipes escapados
+  (`\|`) y las tablas de ejemplo dentro de bloques de código, que no se tocan.
+  Es una sola acción de usuario: se deshace de golpe con Ctrl+Z.
+- Siete tests nuevos para el formateador y los adornos de tabla (29 en total).
+
+### Changed
+
+- El tag `tabledelim` desaparece: la fila de guiones ya no se atenúa, se oculta.
+
+## [0.2.1] - 2026-08-08
+
+### Fixed
+
+- **Crash al editar** (`gtk_text_iter_set_visible_line_index`, «byte index off
+  the end of the line»). Tres causas encadenadas, las tres arregladas:
+  - `decorate()` se llamaba de forma sincrona desde
+    `notify::cursor-position`, que es una senal del buffer. Aplicar tags de
+    invisibilidad mientras GTK esta procesando una edicion descuadra su
+    maquetacion. Ahora toda la decoracion pasa por `schedule_decoration()` y se
+    difiere al bucle principal; no se toca el buffer desde ninguna senal suya.
+  - Al dibujar, un bloque de codigo que abarcaba mucho mas que la pantalla hacia
+    que se pidiera geometria de lineas muy lejanas, obligando a GTK a validar
+    miles de lineas en mitad del `snapshot`. La geometria se limita ahora a la
+    franja visible y la caja se alarga fuera de pantalla, para que las esquinas
+    redondeadas no aparezcan cortadas a mitad del bloque.
+  - Los adornos van por numero de linea; si el buffer cambiaba entre el calculo
+    y el dibujado, apuntaban a sitios equivocados. `set_ornaments` guarda ahora
+    el numero de lineas para el que se calcularon y el dibujado se salta el
+    fotograma si ya no coincide.
+- **La version en `Cargo.toml` seguia en 1.0.0** desde la pre-alpha, asi que la
+  ventana «Acerca de» mentia. Ahora sale de `CARGO_PKG_VERSION` y coincide con
+  el CHANGELOG. De paso: licencia como `AGPL-3.0-or-later`, `rust-version`
+  declarada y fuera `serde`/`serde_json`, que no los usa nadie.
+- **Tags de bloque que se extendian de mas**: el mismo problema de decorar
+  dentro de una senal podia dejar el tag `codeblock` cubriendo texto posterior
+  al cierre de la valla, con lo que el documento entero pasaba a verse como
+  codigo despues de editar.
+
+## [0.2.0] - 2026-08-07
+
+### Added — adornos dibujados
+
+- **`src/markdown_view.rs`**: `MarkdownView`, un `GtkSourceView` subclaseado que
+  implementa `snapshot_layer` para pintar lo que un `GtkTextTag` no puede
+  expresar. Dibuja vinetas (disco, anillo y cuadrado segun el nivel), casillas
+  de tarea con su marca de verificacion, reglas horizontales, la barra vertical
+  de las citas y la caja redondeada de los bloques de codigo. Trabaja en
+  coordenadas de buffer y solo calcula geometria de lo que esta en pantalla.
+- **`Ornament` y `Analysis`** en `markdown_render`: el analizador devuelve ahora
+  tramos *y* adornos referidos a numero de linea.
+- **`SpanKind`**: distingue estilo permanente, marca de Markdown y marca
+  sustituida por un adorno. Las sustituidas no se revelan al pasar el cursor,
+  porque hacerlo desplazaria el texto en cada cambio de linea.
+- **Notas al pie**: la referencia deja solo el numero en volado y la definicion
+  se atenua.
+- Tests: 16 -> 22.
+
+### Changed
+
+- Las citas y los bloques de codigo ya no usan `paragraph-background`: su caja y
+  su barra se dibujan, lo que permite esquinas redondeadas y margenes reales.
+- Las listas sin ordenar pierden la sangria francesa: la vineta va en el canalon
+  y todas las lineas del elemento arrancan alineadas.
+- En modo «atenuar siempre» los adornos se desactivan, para no duplicar
+  informacion con las marcas visibles.
+
+### Fixed
+
+- **Sangria de listas anidadas**: pulldown-cmark empieza el rango del elemento en
+  el marcador, no al principio de la linea. Como el tag no cubria el inicio del
+  parrafo, GTK aplicaba el margen del nivel de arriba y la vineta quedaba
+  alineada con la lista padre. Ahora el tramo llega hasta el inicio de linea y la
+  sangria literal se oculta, para que el desplazamiento lo de solo el margen.
+- **Espacio suelto tras las casillas**: el rango de `TaskListMarker` cubre `[x]`
+  pero no el espacio siguiente, que quedaba como sangria fantasma.
+
+### Added — interfaz HIG, plantillas y preferencias
+
+- **Preferencias completas** (`src/preferences.rs`) con `AdwPreferencesWindow` y
+  tres paginas: Apariencia (esquema de color, familia tipografica, tamano,
+  interlineado, ancho de columna), Editor (visibilidad del marcado, continuar
+  listas, modo foco, maquina de escribir, tabulacion, autoguardado e intervalo)
+  y Plantillas.
+- **Plantillas** (`src/templates.rs`): ficheros `.md` en
+  `$XDG_DATA_HOME/scribe/templates`, sembrados con cuatro ejemplos la primera
+  vez. Admiten `{{title}}`, `{{date}}`, `{{time}}`, `{{datetime}}` y `{{year}}`.
+- **Visibilidad del marcado configurable**: ocultar siempre, revelar en la linea
+  del cursor o atenuar siempre.
+- **Modo foco** (Ctrl+Shift+F) y **maquina de escribir** (Ctrl+Shift+T).
+- **Continuacion de listas** al pulsar Intro, con renumeracion de las ordenadas
+  y cierre automatico al dejar un elemento vacio.
+- **Zoom** (Ctrl +/-/0) con fila de control en el menu principal.
+- **Ir a la linea** desde la barra de estado.
+- **Marcado ampliado**: cabeceras setext, autoenlaces `<url>`, notas al pie,
+  bloques HTML atenuados y tablas en monoespaciada para que las columnas cuadren.
+  Tests: 13 -> 16.
+- **Ventana de atajos** externalizada a `src/shortcuts.ui`.
+
+### Changed
+
+- **Cabecera reorganizada** igual que GNOME Text Editor: `AdwSplitButton`
+  «Abrir» con desplegable de recientes y boton de documento nuevo a la
+  izquierda, titulo al centro, menu principal a la derecha. La barra de estado
+  lleva el contador de palabras a la izquierda y los botones de posicion y
+  propiedades a la derecha.
+- **Alternancias con estado** (`SimpleAction::new_stateful`) para barra lateral,
+  vista dividida, modo foco y maquina de escribir: el menu muestra la marca.
+- **Esquema GSettings** reescrito con enumeraciones y rangos.
+- **`settings.rs`** reescrito con tipos propios (`MarkupVisibility`,
+  `FontFamily`) en lugar de cadenas sueltas.
+
+### Fixed
+
+- Restauradas `app.quit` y `app.new-window`, que se habian perdido al rehacer
+  `main.rs`: Ctrl+Q no hacia nada y dos entradas del menu salian grises.
+- Restaurado `ApplicationFlags::HANDLES_OPEN`, sin el cual `scribe fichero.md` y
+  «Abrir con» del gestor de archivos se ignoraban.
+- `GtkTextTag:letter-spacing` no admite valores negativos: usarlos abortaba la
+  aplicacion al construir los tags de cabecera.
+
+### Added — render WYSIWYG en linea
 
 - **Inline WYSIWYG rendering**: the editor buffer is now decorated with `GtkTextTag`
   spans computed from the Markdown source. Headings render at their actual scale,

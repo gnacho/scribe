@@ -1,0 +1,123 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<interface>
+  <object class="GtkShortcutsWindow" id="help_overlay">
+    <property name="modal">1</property>
+    <child>
+      <object class="GtkShortcutsSection">
+        <property name="section-name">shortcuts</property>
+        <property name="max-height">12</property>
+        <child>
+          <object class="GtkShortcutsGroup">
+            <property name="title">Archivo</property>
+            <child>
+              <object class="GtkShortcutsShortcut">
+                <property name="title">Documento nuevo</property>
+                <property name="accelerator">&lt;Control&gt;n</property>
+              </object>
+            </child>
+            <child>
+              <object class="GtkShortcutsShortcut">
+                <property name="title">Abrir</property>
+                <property name="accelerator">&lt;Control&gt;o</property>
+              </object>
+            </child>
+            <child>
+              <object class="GtkShortcutsShortcut">
+                <property name="title">Guardar</property>
+                <property name="accelerator">&lt;Control&gt;s</property>
+              </object>
+            </child>
+            <child>
+              <object class="GtkShortcutsShortcut">
+                <property name="title">Guardar como</property>
+                <property name="accelerator">&lt;Control&gt;&lt;Shift&gt;s</property>
+              </object>
+            </child>
+            <child>
+              <object class="GtkShortcutsShortcut">
+                <property name="title">Nueva ventana</property>
+                <property name="accelerator">&lt;Control&gt;&lt;Shift&gt;n</property>
+              </object>
+            </child>
+            <child>
+              <object class="GtkShortcutsShortcut">
+                <property name="title">Salir</property>
+                <property name="accelerator">&lt;Control&gt;q</property>
+              </object>
+            </child>
+          </object>
+        </child>
+        <child>
+          <object class="GtkShortcutsGroup">
+            <property name="title">Formato</property>
+            <child>
+              <object class="GtkShortcutsShortcut">
+                <property name="title">Negrita</property>
+                <property name="accelerator">&lt;Control&gt;b</property>
+              </object>
+            </child>
+            <child>
+              <object class="GtkShortcutsShortcut">
+                <property name="title">Cursiva</property>
+                <property name="accelerator">&lt;Control&gt;i</property>
+              </object>
+            </child>
+            <child>
+              <object class="GtkShortcutsShortcut">
+                <property name="title">Código</property>
+                <property name="accelerator">&lt;Control&gt;k</property>
+              </object>
+            </child>
+            <child>
+              <object class="GtkShortcutsShortcut">
+                <property name="title">Alinear tablas</property>
+                <property name="accelerator">&lt;Control&gt;&lt;Alt&gt;t</property>
+              </object>
+            </child>
+          </object>
+        </child>
+        <child>
+          <object class="GtkShortcutsGroup">
+            <property name="title">Vista</property>
+            <child>
+              <object class="GtkShortcutsShortcut">
+                <property name="title">Barra lateral</property>
+                <property name="accelerator">F9</property>
+              </object>
+            </child>
+            <child>
+              <object class="GtkShortcutsShortcut">
+                <property name="title">Vista dividida</property>
+                <property name="accelerator">&lt;Control&gt;&lt;Shift&gt;p</property>
+              </object>
+            </child>
+            <child>
+              <object class="GtkShortcutsShortcut">
+                <property name="title">Modo foco</property>
+                <property name="accelerator">&lt;Control&gt;&lt;Shift&gt;f</property>
+              </object>
+            </child>
+            <child>
+              <object class="GtkShortcutsShortcut">
+                <property name="title">Máquina de escribir</property>
+                <property name="accelerator">&lt;Control&gt;&lt;Shift&gt;t</property>
+              </object>
+            </child>
+            <child>
+              <object class="GtkShortcutsShortcut">
+                <property name="title">Ampliar o reducir</property>
+                <property name="accelerator">&lt;Control&gt;plus &lt;Control&gt;minus &lt;Control&gt;0</property>
+              </object>
+            </child>
+            <child>
+              <object class="GtkShortcutsShortcut">
+                <property name="title">Preferencias</property>
+                <property name="accelerator">&lt;Control&gt;comma</property>
+              </object>
+            </child>
+          </object>
+        </child>
+      </object>
+    </child>
+  </object>
+</interface>

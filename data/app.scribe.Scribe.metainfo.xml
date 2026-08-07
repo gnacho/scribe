@@ -21,6 +21,33 @@
   <developer_name>Tu nombre</developer_name>
   <content_rating type="oars-1.1" />
   <releases>
+    <release version="0.3.1" type="development" date="2026-08-08">
+      <description>
+        <p>Corrige que una valla de codigo seguida de un tabulador no cerrara el
+        bloque, haciendo que el resto del documento se viera como codigo.</p>
+      </description>
+    </release>
+    <release version="0.3.0" type="development" date="2026-08-08">
+      <description>
+        <p>Las tablas se dibujan con su caja y su linea de cabecera en vez de
+        mostrar la fila de guiones, y hay una accion para alinear el fuente de
+        todas las tablas del documento.</p>
+      </description>
+    </release>
+    <release version="0.2.1" type="development" date="2026-08-08">
+      <description>
+        <p>Corrige un aborto al editar causado por aplicar la decoracion dentro
+        de las senales del buffer y por pedir geometria de lineas fuera de la
+        zona visible durante el dibujado.</p>
+      </description>
+    </release>
+    <release version="0.2.0" type="development" date="2026-08-07">
+      <description>
+        <p>Render en vivo con adornos dibujados: vinetas, casillas de tarea,
+        reglas, barra de citas y caja de bloques de codigo. Interfaz alineada con
+        las HIG de GNOME, plantillas y preferencias de editor Markdown.</p>
+      </description>
+    </release>
     <release version="1.0.0" date="2026-08-03">
       <description>
         <p>Versión 1.0 con editor nativo SourceView5, preview y sidebar.</p>
