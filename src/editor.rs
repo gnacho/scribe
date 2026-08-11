@@ -385,13 +385,16 @@ fn decorate(view: &MarkdownView, buffer: &gtksourceview5::Buffer, config: Decora
     // En modo «atenuar» las marcas están a la vista, así que dibujar encima
     // duplicaría la información.
     let mut ornaments = if dim { Vec::new() } else { analysis.ornaments };
-    // Los adornos van por número de línea salvo `Break`, que guarda el byte
-    // offset del `<br>`: el widget indexa por caracteres, así que convertimos.
+    // Los adornos van por número de línea salvo `Break` y `CellSeparator`, que
+    // guardan byte offsets: el widget indexa por caracteres, así que convertimos.
     for o in &mut ornaments {
-        if let Ornament::Break { offset } = o {
-            let cap = byte_to_char.len().saturating_sub(1);
-            let at = (*offset).min(cap);
-            *offset = byte_to_char[at] as usize;
+        let cap = byte_to_char.len().saturating_sub(1);
+        match o {
+            Ornament::Break { offset } | Ornament::CellSeparator { offset } => {
+                let at = (*offset).min(cap);
+                *offset = byte_to_char[at] as usize;
+            }
+            _ => {}
         }
     }
     view.set_ornaments(ornaments, line_count);

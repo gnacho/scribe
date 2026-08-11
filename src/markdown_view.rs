@@ -68,6 +68,8 @@ const BLOCK_RADIUS: f32 = 8.0;
 const QUOTE_BAR_WIDTH: f32 = 3.0;
 const QUOTE_BAR_OFFSET: f32 = 20.0;
 const RULE_THICKNESS: f32 = 1.0;
+/// Grosor de los separadores verticales de las tablas.
+const CELL_SEPARATOR_THICKNESS: f32 = 1.0;
 /// Cuanto se alarga fuera de la pantalla la caja de un bloque que empieza o
 /// acaba mas alla de lo visible, para que sus esquinas redondeadas no aparezcan
 /// cortadas a mitad del bloque.
@@ -231,6 +233,38 @@ mod imp {
                     }
                     _ => {}
                 }
+            }
+
+            // Bordes verticales de tabla: una línea fina en la X de cada `|` que
+            // recorre toda la altura de su fila lógica. Da estructura visual sin
+            // cambiar el modelo (sigue siendo texto del buffer con tags).
+            let view = self.obj();
+            let buffer = view.buffer();
+            for ornament in ornaments.iter() {
+                let offset = match ornament {
+                    Ornament::CellSeparator { offset } => *offset as i32,
+                    _ => continue,
+                };
+                let iter = buffer.iter_at_offset(offset);
+                let line = iter.line();
+                if line < first_visible - 1 || line > last_visible + 1 {
+                    continue;
+                }
+                let Some((y, h)) = self.line_extent(line) else {
+                    continue;
+                };
+                let rect = view.iter_location(&iter);
+                let x = rect.x() as f32;
+                if x < left || x > right {
+                    continue;
+                }
+                let bar = graphene::Rect::new(
+                    x - CELL_SEPARATOR_THICKNESS / 2.0,
+                    y,
+                    CELL_SEPARATOR_THICKNESS,
+                    h.max(0.0),
+                );
+                snapshot.append_color(&palette.muted, &bar);
             }
         }
 

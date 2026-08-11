@@ -72,6 +72,10 @@ pub enum Ornament {
     /// su sitio un glifo de retorno. Fuera de tablas no se genera: ahí el
     /// `<br>` se deja con su tag `html` como hasta ahora.
     Break { offset: usize },
+    /// Separador de columna de tabla (un `|` del fuente). El widget dibuja una
+    /// línea vertical en su posición, para dotar a la tabla de rejilla visual
+    /// sin necesidad de un widget compuesto.
+    CellSeparator { offset: usize },
 }
 
 #[derive(Debug, Default)]
@@ -510,12 +514,15 @@ pub fn analyze(text: &str) -> Analysis {
                         continue;
                     }
                     // Los pipes se quedan, pero atenuados: hacen de separador
-                    // de columna sin competir con el contenido.
+                    // de columna sin competir con el contenido. Además emitimos
+                    // un `CellSeparator` para que el widget dibuje una línea
+                    // vertical y la tabla gane estructura visual.
                     let row = &text[ls..le];
                     let bytes = row.as_bytes();
                     for (i, b) in bytes.iter().enumerate() {
                         if *b == b'|' && (i == 0 || bytes[i - 1] != b'\\') {
                             spans.push(style(ls + i, ls + i + 1, "tablepipe"));
+                            ornaments.push(Ornament::CellSeparator { offset: ls + i });
                         }
                     }
                 }
@@ -957,8 +964,9 @@ mod tests {
                 Ornament::Quote { last, .. }
                 | Ornament::CodeBlock { last, .. }
                 | Ornament::Table { last, .. } => last,
-                // Break va por offset, no por línea: se comprueba aparte.
-                Ornament::Break { .. } => continue,
+                // Break y CellSeparator van por offset, no por línea: se
+                // comprueban aparte en sus tests propios.
+                Ornament::Break { .. } | Ornament::CellSeparator { .. } => continue,
             };
             assert!(max < total, "{o:?} fuera de rango ({total} líneas)");
         }
@@ -1023,6 +1031,24 @@ mod tests {
         let a = analyze(text);
         assert!(find(&a.spans, "bold").len() >= 1, "bold dentro de celda");
         assert!(find(&a.spans, "code").len() >= 1, "code dentro de celda");
+    }
+
+    #[test]
+    fn cada_pipe_de_tabla_genera_un_separador() {
+        // Cada `|` del fuente (en cabecera y cuerpo; la fila de guiones va
+        // oculta y se salta) debe emitir un `CellSeparator` para que el widget
+        // dibuje las líneas verticales.
+        let text = "| a | b |\n|---|---|\n| 1 | 2 |\n";
+        let a = analyze(text);
+        let seps = a
+            .ornaments
+            .iter()
+            .filter(|o| matches!(o, Ornament::CellSeparator { .. }))
+            .count();
+        // 2 filas (cabecera + 1 body) × 3 pipes por fila = 6.
+        assert_eq!(seps, 6, "una tubería por pipe de cabecera/cuerpo");
+        // y debe coincidir con el número de spans `tablepipe`.
+        assert_eq!(seps, find(&a.spans, "tablepipe").len());
     }
 
     #[test]
