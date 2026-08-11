@@ -67,6 +67,11 @@ pub enum Ornament {
     /// Línea que separa la cabecera de una tabla del resto. Ocupa el hueco que
     /// deja la fila de guiones del fuente, que se oculta.
     TableRule { line: usize },
+    /// Salto de línea dentro de una celda de tabla, producido por `<br>`.
+    /// `offset` es el byte donde iba el `<br>` (ya oculto); el widget dibuja en
+    /// su sitio un glifo de retorno. Fuera de tablas no se genera: ahí el
+    /// `<br>` se deja con su tag `html` como hasta ahora.
+    Break { offset: usize },
 }
 
 #[derive(Debug, Default)]
@@ -294,6 +299,7 @@ pub fn analyze(text: &str) -> Analysis {
     let mut spans: Vec<Span> = Vec::new();
     let mut ornaments: Vec<Ornament> = Vec::new();
     let mut list_depth = 0usize;
+    let mut table_depth = 0usize;
 
     for (event, range) in Parser::new_ext(text, opts).into_offset_iter() {
         match event {
@@ -395,6 +401,7 @@ pub fn analyze(text: &str) -> Analysis {
 
             Event::Start(Tag::List(_)) => list_depth += 1,
             Event::End(TagEnd::List(_)) => list_depth = list_depth.saturating_sub(1),
+            Event::End(TagEnd::Table) => table_depth = table_depth.saturating_sub(1),
             Event::Start(Tag::Item) => {
                 // En las listas anidadas pulldown empieza el rango en el
                 // marcador, no en la línea. Si el tag no cubre el principio del
@@ -480,9 +487,11 @@ pub fn analyze(text: &str) -> Analysis {
             }
 
             Event::Start(Tag::Table(_)) => {
-                // Monoespaciada en todo el bloque: si el fuente está alineado
-                // las columnas cuadran también en pantalla. Para alinearlo está
-                // `format_tables`.
+                // La tabla ya no es monoespaciada (véase editor.rs): aquí solo
+                // marcamos el bloque para el indent y la caja de fondo, y los
+                // pipes se atenúan por separado. El inline (strong, em, code)
+                // fluye dentro de las celdas.
+                table_depth += 1;
                 let end = trim_nl(text, range.end);
                 spans.push(style(range.start, end, "table"));
                 let first = lines.line_of(range.start);
@@ -513,7 +522,18 @@ pub fn analyze(text: &str) -> Analysis {
             }
 
             Event::Html(_) | Event::InlineHtml(_) => {
-                spans.push(style(range.start, trim_nl(text, range.end), "html"))
+                // Dentro de una tabla, `<br>` (la única forma estándar de meter
+                // un salto en una celda) se oculta y se sustituye por un glifo
+                // de retorno pintado por `MarkdownView`. Fuera de tablas lo
+                // dejamos como cualquier otro HTML inline.
+                if table_depth > 0 && is_br(&text[range.start..range.end]) {
+                    spans.push(replaced(range.start, range.end));
+                    ornaments.push(Ornament::Break {
+                        offset: range.start,
+                    });
+                } else {
+                    spans.push(style(range.start, trim_nl(text, range.end), "html"))
+                }
             }
             Event::FootnoteReference(_) => {
                 // Queda solo el número, en volado: `[^` y `]` sobran.
@@ -561,6 +581,21 @@ pub fn analyze(text: &str) -> Analysis {
 // ---------------------------------------------------------------------------
 // Alineado de tablas
 // ---------------------------------------------------------------------------
+
+/// ¿Es este fragmento un `<br>` de HTML? Acepta `<br>`, `<br/>`, `<br />` y
+/// cualquier combinación de mayúsculas/minúsculas. No acepta atributos
+/// (`<br class="x">`) porque no aparecen en markdown a mano.
+fn is_br(content: &str) -> bool {
+    let lower = content.to_ascii_lowercase();
+    let Some(inner) = lower
+        .strip_prefix('<')
+        .and_then(|s| s.strip_suffix('>'))
+    else {
+        return false;
+    };
+    let inner = inner.trim_matches(|c: char| c == '/' || c.is_whitespace());
+    inner == "br"
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Align {
@@ -895,7 +930,7 @@ mod tests {
     }
 
     #[test]
-    fn tabla_va_en_monoespaciada() {
+    fn tabla_tiene_tramo_de_bloque() {
         let a = analyze("| a | b |\n|---|---|\n| 1 | 2 |\n");
         assert_eq!(find(&a.spans, "table").len(), 1);
     }
@@ -922,6 +957,8 @@ mod tests {
                 Ornament::Quote { last, .. }
                 | Ornament::CodeBlock { last, .. }
                 | Ornament::Table { last, .. } => last,
+                // Break va por offset, no por línea: se comprueba aparte.
+                Ornament::Break { .. } => continue,
             };
             assert!(max < total, "{o:?} fuera de rango ({total} líneas)");
         }
@@ -941,6 +978,51 @@ mod tests {
         let a = analyze("| a | b |\n|---|---|\n| 1 | 2 |\n");
         // Tres por fila de contenido, dos filas.
         assert_eq!(find(&a.spans, "tablepipe").len(), 6);
+    }
+
+    #[test]
+    fn is_br_reconoce_las_variantes_comunes() {
+        for ok in ["<br>", "<br/>", "<br />", "<BR>", "<Br/>", "<BR />"] {
+            assert!(is_br(ok), "{ok:?} debería contar como <br>");
+        }
+        for ko in ["<br class=\"x\">", "<b>", "<brown>", "br", ""] {
+            assert!(!is_br(ko), "{ko:?} NO debería contar como <br>");
+        }
+    }
+
+    #[test]
+    fn br_dentro_de_tabla_se_oculta_y_genera_adorno() {
+        let text = "| a | b |\n|---|---|\n| x<br>y | z |\n";
+        let a = analyze(text);
+        // El `<br>` debe quedar como marca reemplazada (oculta), no como html.
+        let brs = a
+            .spans
+            .iter()
+            .filter(|s| s.kind == SpanKind::Replaced && text[s.start..s.end].contains("br"))
+            .count();
+        assert_eq!(brs, 1, "debe haber exactamente un <br> oculto");
+        assert!(a.ornaments.iter().any(|o| matches!(o, Ornament::Break { .. })));
+        // Y nada con tag `html` dentro de la tabla.
+        assert_eq!(find(&a.spans, "html").len(), 0);
+    }
+
+    #[test]
+    fn br_fuera_de_tabla_queda_como_html() {
+        let text = "línea uno<br>línea dos\n";
+        let a = analyze(text);
+        assert_eq!(find(&a.spans, "html").len(), 1);
+        assert!(!a.ornaments.iter().any(|o| matches!(o, Ornament::Break { .. })));
+    }
+
+    #[test]
+    fn inline_dentro_de_celda_genera_tramos_propios() {
+        // El cambio clave de esta iteración: el interior de las celdas ya no
+        // va solo en el span `table`; el inline (strong, code) genera sus
+        // propios tramos, que el editor aplicará encima.
+        let text = "| a | b |\n|---|---|\n| **x** | `y` |\n";
+        let a = analyze(text);
+        assert!(find(&a.spans, "bold").len() >= 1, "bold dentro de celda");
+        assert!(find(&a.spans, "code").len() >= 1, "code dentro de celda");
     }
 
     #[test]

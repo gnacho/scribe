@@ -234,32 +234,32 @@ mod imp {
             }
         }
 
-        fn draw_glyphs(&self, snapshot: &gtk4::Snapshot) {
-            let ornaments = self.ornaments.borrow();
-            if ornaments.is_empty() || self.stale() {
-                return;
+    fn draw_glyphs(&self, snapshot: &gtk4::Snapshot) {
+        let ornaments = self.ornaments.borrow();
+        if ornaments.is_empty() || self.stale() {
+            return;
+        }
+        let palette = self.palette.get();
+        let (first_visible, last_visible) = self.visible_lines();
+        let (left, right) = self.column();
+
+        for ornament in ornaments.iter() {
+            let line = match ornament {
+                Ornament::Bullet { line, .. }
+                | Ornament::Checkbox { line, .. }
+                | Ornament::TableRule { line }
+                | Ornament::Rule { line } => *line as i32,
+                _ => continue,
+            };
+            if line < first_visible || line > last_visible {
+                continue;
             }
-            let palette = self.palette.get();
-            let (first_visible, last_visible) = self.visible_lines();
-            let (left, right) = self.column();
+            let Some((x, y, height)) = self.line_origin(line) else {
+                continue;
+            };
+            let middle = y + height / 2.0;
 
-            for ornament in ornaments.iter() {
-                let line = match ornament {
-                    Ornament::Bullet { line, .. }
-                    | Ornament::Checkbox { line, .. }
-                    | Ornament::TableRule { line }
-                    | Ornament::Rule { line } => *line as i32,
-                    _ => continue,
-                };
-                if line < first_visible || line > last_visible {
-                    continue;
-                }
-                let Some((x, y, height)) = self.line_origin(line) else {
-                    continue;
-                };
-                let middle = y + height / 2.0;
-
-                match ornament {
+            match ornament {
                     Ornament::Bullet { depth, .. } => {
                         draw_bullet(snapshot, x - BULLET_OFFSET, middle, *depth, &palette)
                     }
@@ -292,8 +292,32 @@ mod imp {
                     }
                     _ => {}
                 }
-            }
         }
+
+        // Glifos posicionados por offset de carácter (no por línea). Hoy solo
+        // `Break`, el sustituto del `<br>` dentro de una tabla.
+        let view = self.obj();
+        let buffer = view.buffer();
+        for ornament in ornaments.iter() {
+            let offset = match ornament {
+                Ornament::Break { offset } => *offset as i32,
+                _ => continue,
+            };
+            let iter = buffer.iter_at_offset(offset);
+            let line = iter.line();
+            if line < first_visible || line > last_visible {
+                continue;
+            }
+            let rect = view.iter_location(&iter);
+            draw_break(
+                snapshot,
+                rect.x() as f32,
+                rect.y() as f32,
+                rect.height() as f32,
+                &palette,
+            );
+        }
+    }
     }
 
     /// Nivel 1 disco, nivel 2 anillo, nivel 3 en adelante cuadrado: la misma
@@ -354,6 +378,35 @@ mod imp {
         } else {
             snapshot.append_border(&rounded, &[1.5, 1.5, 1.5, 1.5], &[palette.muted; 4]);
         }
+    }
+
+    /// Glifo que sustituye al `<br>` dentro de una celda de tabla: una esquina
+    /// en forma de «L» con una pequeña flecha hacia abajo, evocando el retorno
+    /// de carro. Va en el color apagado para no competir con el contenido.
+    fn draw_break(
+        snapshot: &gtk4::Snapshot,
+        x: f32,
+        y: f32,
+        height: f32,
+        palette: &OrnamentPalette,
+    ) {
+        let s = height * 0.32;
+        let top = y + height * 0.30;
+        let bottom = top + s;
+        let builder = gsk::PathBuilder::new();
+        // Vertical bajando y horizontal a la izquierda: esquina de retorno.
+        builder.move_to(x + s, top);
+        builder.line_to(x + s, bottom);
+        builder.line_to(x, bottom);
+        // Pequeña flecha arriba en el extremo derecho, indicando dirección.
+        builder.move_to(x + s, top);
+        builder.line_to(x + s + s * 0.35, top + s * 0.35);
+        builder.move_to(x + s, top);
+        builder.line_to(x + s - s * 0.35, top + s * 0.35);
+        let stroke = gsk::Stroke::new(1.1);
+        stroke.set_line_cap(gsk::LineCap::Round);
+        stroke.set_line_join(gsk::LineJoin::Round);
+        snapshot.append_stroke(&builder.to_path(), &stroke, &palette.muted);
     }
 }
 

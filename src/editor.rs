@@ -6,7 +6,7 @@ use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 use std::time::Duration;
 
-use crate::markdown_render::{analyze, SpanKind, MAX_LIVE_BYTES};
+use crate::markdown_render::{analyze, Ornament, SpanKind, MAX_LIVE_BYTES};
 use crate::markdown_view::{MarkdownView, OrnamentPalette};
 use crate::settings::{FontFamily, MarkupVisibility};
 
@@ -69,7 +69,12 @@ fn build_tags() -> gtk4::TextTagTable {
         let builder = gtk4::TextTag::builder().name(name);
         let tag = match name {
             "quote" => builder.style(pango::Style::Italic).build(),
-            "codeblock" | "table" => builder.family("monospace").scale(0.9).build(),
+            // `table` ya no es monoespaciada: deja que el inline (strong, em,
+            // code, links) que genera `analyze` se interprete dentro de las
+            // celdas. El padding del fuente (véase `format_tables`) queda como
+            // separación natural; los pipes se atenúan por separado con
+            // `tablepipe`.
+            "codeblock" => builder.family("monospace").scale(0.9).build(),
             // Sin sangría francesa: la viñeta se dibuja en el canalón, así que
             // todas las líneas del elemento arrancan en el mismo sitio.
             _ => builder.build(),
@@ -85,6 +90,8 @@ fn build_tags() -> gtk4::TextTagTable {
         .pixels_above_lines(0)
         .pixels_below_lines(0)
         .build());
+    // Los pipes siguen en monoespaciada para que cuadren con el padding del
+    // fuente aunque el contenido de la celda sea proporcional.
     add(gtk4::TextTag::builder()
         .name("tablepipe")
         .family("monospace")
@@ -377,10 +384,17 @@ fn decorate(view: &MarkdownView, buffer: &gtksourceview5::Buffer, config: Decora
 
     // En modo «atenuar» las marcas están a la vista, así que dibujar encima
     // duplicaría la información.
-    view.set_ornaments(
-        if dim { Vec::new() } else { analysis.ornaments },
-        line_count,
-    );
+    let mut ornaments = if dim { Vec::new() } else { analysis.ornaments };
+    // Los adornos van por número de línea salvo `Break`, que guarda el byte
+    // offset del `<br>`: el widget indexa por caracteres, así que convertimos.
+    for o in &mut ornaments {
+        if let Ornament::Break { offset } = o {
+            let cap = byte_to_char.len().saturating_sub(1);
+            let at = (*offset).min(cap);
+            *offset = byte_to_char[at] as usize;
+        }
+    }
+    view.set_ornaments(ornaments, line_count);
 
     if config.focus_mode {
         let (first, last) = paragraph_bounds(buffer, cursor_line);
