@@ -3,9 +3,12 @@ use gio::prelude::*;
 /// Cuándo se muestran las marcas de Markdown (`**`, `#`, backticks, URLs).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MarkupVisibility {
-    /// Siempre ocultas.
+    /// Siempre ocultas. Mientras la puerta [`gtk_hides_invisible_safely`] esté
+    /// cerrada, las marcas sustituidas se encogen (`syn_shrink`) en vez de
+    /// ocultarse, y las demás se atenúan.
     Hidden,
-    /// Ocultas salvo en la línea del cursor.
+    /// Ocultas salvo en la línea del cursor. Sin la puerta equivale a
+    /// [`Self::Hidden`]: ya no hay revelado por línea.
     Focus,
     /// Siempre visibles, pero atenuadas.
     Dim,
@@ -29,19 +32,6 @@ pub fn gtk_hides_invisible_safely() -> bool {
 }
 
 impl MarkupVisibility {
-    /// Lo que el editor aplica de verdad. Mientras GTK no pueda ocultar texto
-    /// sin abortar (véase [`gtk_hides_invisible_safely`]), «ocultar» y «al
-    /// enfocar» se comportan como «atenuar». El valor guardado en GSettings
-    /// no se toca: si el GTK del sistema se actualiza con el fix, la opción
-    /// elegida por el usuario vuelve a funcionar sola.
-    pub fn effective(self) -> Self {
-        if gtk_hides_invisible_safely() {
-            self
-        } else {
-            Self::Dim
-        }
-    }
-
     fn from_nick(nick: &str) -> Self {
         match nick {
             "hidden" => Self::Hidden,

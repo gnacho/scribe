@@ -15,14 +15,21 @@
 //!
 //! Las marcas que un adorno sustituye se marcan como [`SpanKind::Replaced`]:
 //! no deben revelarse nunca al pasar el cursor, porque hacerlo movería el
-//! texto de sitio en cada línea. (Con la mitigación de GNOME/gtk#8346 activa
-//! no se ocultan, sino que se atenúan como cualquier otra marca.)
+//! texto de sitio en cada línea. Con la mitigación de GNOME/gtk#8346 activa
+//! no se ocultan: en los modos WYSIWYG se encogen (tag `syn_shrink`) y en
+//! «Atenuar» se atenúan como cualquier otra marca.
 
+use crate::settings::MarkupVisibility;
 use pulldown_cmark::{CodeBlockKind, Event, HeadingLevel, LinkType, Options, Parser, Tag, TagEnd};
 use std::borrow::Cow;
 
 /// Por encima de este tamaño se deja de decorar en vivo, para no bloquear la UI.
 pub const MAX_LIVE_BYTES: usize = 400_000;
+
+/// Alto (px) del hueco que el tag `imagegap` reserva bajo la línea de una
+/// imagen en bloque; ahí el widget pinta la textura. Única fuente: lo usan el
+/// tag (editor.rs) y el pintado (markdown_view.rs).
+pub const IMAGE_GAP_HEIGHT: i32 = 150;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SpanKind {
@@ -32,7 +39,8 @@ pub enum SpanKind {
     /// la mitigación de GNOME/gtk#8346: véase `settings::gtk_hides_invisible_safely`).
     Marker,
     /// Marca sustituida por un adorno dibujado. No se revela con el cursor;
-    /// se oculta o se atenúa según `settings::gtk_hides_invisible_safely`.
+    /// se encoge, se oculta o se atenúa según la preferencia del usuario y
+    /// `settings::gtk_hides_invisible_safely` (véase `decorate` en editor.rs).
     Replaced,
 }
 
@@ -54,7 +62,9 @@ impl Span {
 }
 
 /// Elemento que hay que pintar a mano. Las líneas son lógicas y empiezan en 0.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+///
+/// No es `Copy`: algunos adornos llevan texto (la ruta de una imagen).
+#[derive(Debug, Clone, PartialEq)]
 pub enum Ornament {
     /// Viñeta de lista sin ordenar. `depth` empieza en 1.
     Bullet { line: usize, depth: usize },
@@ -68,24 +78,97 @@ pub enum Ornament {
     CodeBlock { first: usize, last: usize },
     /// Caja de fondo de una tabla, de `first` a `last` inclusive.
     Table { first: usize, last: usize },
-    /// Línea que separa la cabecera de una tabla del resto. Ocupa el hueco que
-    /// deja la fila de guiones del fuente, que se oculta.
+    /// Línea que separa la cabecera de una tabla del resto. Ocupa el hueco
+    /// que deja la fila de guiones del fuente, que se encoge.
     TableRule { line: usize },
     /// Salto de línea dentro de una celda de tabla, producido por `<br>`.
-    /// `offset` es el byte donde iba el `<br>` (ya oculto); el widget dibuja en
-    /// su sitio un glifo de retorno. Fuera de tablas no se genera: ahí el
+    /// `offset` es el byte donde iba el `<br>` (ya encogido); el widget dibuja
+    /// en su sitio un glifo de retorno. Fuera de tablas no se genera: ahí el
     /// `<br>` se deja con su tag `html` como hasta ahora.
     Break { offset: usize },
     /// Separador de columna de tabla (un `|` del fuente). El widget dibuja una
     /// línea vertical en su posición, para dotar a la tabla de rejilla visual
     /// sin necesidad de un widget compuesto.
     CellSeparator { offset: usize },
+    /// Filete fino bajo un título H1/H2, estilo GitHub. Aditivo: no sustituye
+    /// ninguna marca.
+    HeadingRule { line: usize },
+    /// Imagen local que es el único contenido de su línea: se pinta en el
+    /// hueco que reserva el span `imagegap` bajo esa línea. Aditiva: la marca
+    /// `![alt](src)` sigue visible y editable en todos los modos.
+    Image {
+        line: usize,
+        dest: String,
+        alt: String,
+    },
+}
+
+/// Familia de un adorno, según cómo convive con el texto del buffer.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum OrnamentFamily {
+    /// Se pinta siempre: convive con el texto sin taparlo (cajas, barras).
+    Ambient,
+    /// Sustituye a una marca del fuente (`- `, `[ ]`, `---`, pipes…). Solo se
+    /// pinta cuando la marca está oculta o encogida; si la marca se ve, el
+    /// adorno la duplicaría.
+    Substitute,
+    /// No sustituye nada (filete de título, imagen): se pinta en todos los
+    /// modos sin riesgo de duplicar.
+    Additive,
+}
+
+impl Ornament {
+    /// Familia a la que pertenece el adorno; decide en qué modos se pinta.
+    pub fn family(&self) -> OrnamentFamily {
+        match self {
+            Ornament::CodeBlock { .. } | Ornament::Table { .. } | Ornament::Quote { .. } => {
+                OrnamentFamily::Ambient
+            }
+            Ornament::Bullet { .. }
+            | Ornament::Checkbox { .. }
+            | Ornament::Rule { .. }
+            | Ornament::TableRule { .. }
+            | Ornament::Break { .. }
+            | Ornament::CellSeparator { .. } => OrnamentFamily::Substitute,
+            Ornament::HeadingRule { .. } | Ornament::Image { .. } => OrnamentFamily::Additive,
+        }
+    }
+}
+
+/// Devuelve los adornos a pintar según la visibilidad elegida por el usuario.
+/// `Dim` = vista cruda atenuada: solo ambientales y aditivos. `Hidden`/`Focus`
+/// = WYSIWYG (hoy con marcas encogidas, no ocultas, por GNOME/gtk#8346): todos.
+pub fn ornaments_for(ornaments: &[Ornament], vis: MarkupVisibility) -> Vec<Ornament> {
+    ornaments
+        .iter()
+        .filter(|o| match o.family() {
+            OrnamentFamily::Ambient | OrnamentFamily::Additive => true,
+            OrnamentFamily::Substitute => vis != MarkupVisibility::Dim,
+        })
+        .cloned()
+        .collect()
+}
+
+/// Imagen detectada en el fuente. Los offsets son en bytes; `line` es la
+/// línea lógica (empieza en 0) que la contiene.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ImageRef {
+    pub line: usize,
+    pub start: usize,
+    pub end: usize,
+    pub dest: String,
+    pub alt: String,
 }
 
 #[derive(Debug, Default)]
 pub struct Analysis {
     pub spans: Vec<Span>,
     pub ornaments: Vec<Ornament>,
+    /// Imágenes en bloque del documento. El pintado las recibe vía
+    /// `Ornament::Image`; este listado es superficie pública para consumidores
+    /// que quieran los metadatos sin reinterpretar ornamentos.
+    #[allow(dead_code)]
+    pub images: Vec<ImageRef>,
 }
 
 fn style(start: usize, end: usize, tag: &'static str) -> Span {
@@ -189,6 +272,32 @@ fn line_ranges(text: &str, start: usize, end: usize) -> Vec<(usize, usize)> {
         };
         out.push((cursor, stop));
         cursor = stop + 1;
+    }
+    out
+}
+
+/// Segmentos de texto (offsets relativos a la fila, ya sin espacios a los
+/// lados) de cada celda. Los pipes — incluidos los exteriores — quedan fuera;
+/// los escapados (`\|`) no cortan.
+fn cell_text_ranges(row: &str) -> Vec<(usize, usize)> {
+    let bytes = row.as_bytes();
+    let mut cuts: Vec<usize> = Vec::new();
+    for (i, b) in bytes.iter().enumerate() {
+        if *b == b'|' && (i == 0 || bytes[i - 1] != b'\\') {
+            cuts.push(i);
+        }
+    }
+    cuts.push(row.len());
+    let mut out = Vec::new();
+    let mut prev = 0;
+    for cut in cuts {
+        let seg = &row[prev..cut];
+        let trimmed = seg.trim();
+        if !trimmed.is_empty() {
+            let lead = seg.len() - seg.trim_start().len();
+            out.push((prev + lead, prev + lead + trimmed.len()));
+        }
+        prev = cut + 1;
     }
     out
 }
@@ -311,6 +420,7 @@ pub fn analyze(text: &str) -> Analysis {
     let lines = LineIndex::new(text);
     let mut spans: Vec<Span> = Vec::new();
     let mut ornaments: Vec<Ornament> = Vec::new();
+    let mut images: Vec<ImageRef> = Vec::new();
     let mut list_depth = 0usize;
     let mut table_depth = 0usize;
 
@@ -322,11 +432,20 @@ pub fn analyze(text: &str) -> Analysis {
                     continue;
                 }
                 spans.push(style(range.start, end, heading_tag(level)));
+                // Filete fino bajo los títulos H1/H2, estilo GitHub.
+                if matches!(level, HeadingLevel::H1 | HeadingLevel::H2) {
+                    ornaments.push(Ornament::HeadingRule {
+                        line: lines.line_of(range.start),
+                    });
+                }
                 let src = &text[range.start..end];
                 let hashes = src.bytes().take_while(|b| *b == b'#').count();
                 if hashes > 0 {
                     let gap = src[hashes..].bytes().take_while(|b| *b == b' ').count();
-                    spans.push(marker(range.start, range.start + hashes + gap));
+                    // Las almohadillas (y el espacio que las sigue) son marca
+                    // sustituida: en WYSIWYG se encogen y el título queda
+                    // limpio; en «Atenuar» siguen visibles, atenuadas.
+                    spans.push(replaced(range.start, range.start + hashes + gap));
                 } else {
                     // Cabecera setext: se oculta el subrayado `===` / `---` con
                     // su salto de línea, para no dejar un renglón en blanco.
@@ -384,13 +503,45 @@ pub fn analyze(text: &str) -> Analysis {
                     }
                 }
             }
-            Event::Start(Tag::Image { .. }) => {
+            Event::Start(Tag::Image { dest_url, .. }) => {
                 spans.push(style(range.start, range.end, "link"));
                 let src = &text[range.start..range.end];
                 if src.starts_with("![") {
                     if let Some(idx) = src.rfind("](") {
                         spans.push(marker(range.start, range.start + 2));
                         spans.push(marker(range.start + idx, range.end));
+                    }
+                    // v1: solo imágenes en bloque — las que son el único
+                    // contenido de su línea (salvo espacios). Con texto
+                    // alrededor no se genera nada nuevo. La marca `![alt](src)`
+                    // sigue visible y editable en todos los modos (la imagen
+                    // pintada es aditiva, no sustituye).
+                    let line_start = text[..range.start].rfind('\n').map(|i| i + 1).unwrap_or(0);
+                    let line_end = text[range.end..]
+                        .find('\n')
+                        .map(|i| range.end + i)
+                        .unwrap_or(text.len());
+                    let sola = text[line_start..range.start].trim().is_empty()
+                        && text[range.end..line_end].trim().is_empty();
+                    if sola {
+                        let alt = src
+                            .find(']')
+                            .map(|i| &src[2..i])
+                            .unwrap_or_default()
+                            .to_string();
+                        // pulldown-cmark ya ha resuelto las reference-style.
+                        let dest = dest_url.to_string();
+                        let line = lines.line_of(range.start);
+                        images.push(ImageRef {
+                            line,
+                            start: range.start,
+                            end: range.end,
+                            dest: dest.clone(),
+                            alt: alt.clone(),
+                        });
+                        ornaments.push(Ornament::Image { line, dest, alt });
+                        // Reserva bajo la línea el hueco donde se pinta.
+                        spans.push(style(line_start, line_end, "imagegap"));
                     }
                 }
             }
@@ -500,10 +651,10 @@ pub fn analyze(text: &str) -> Analysis {
             }
 
             Event::Start(Tag::Table(_)) => {
-                // La tabla ya no es monoespaciada (véase editor.rs): aquí solo
+                // La tabla no es monoespaciada (véase editor.rs): aquí solo
                 // marcamos el bloque para el indent y la caja de fondo, y los
-                // pipes se atenúan por separado. El inline (strong, em, code)
-                // fluye dentro de las celdas.
+                // pipes se sustituyen por separado. El inline (strong, em,
+                // code) fluye dentro de las celdas.
                 table_depth += 1;
                 let end = trim_nl(text, range.end);
                 spans.push(style(range.start, end, "table"));
@@ -511,10 +662,13 @@ pub fn analyze(text: &str) -> Analysis {
                 let last = lines.line_of(end.saturating_sub(1).max(range.start));
                 ornaments.push(Ornament::Table { first, last });
 
-                for (ls, le) in line_ranges(text, range.start, end) {
+                let rows = line_ranges(text, range.start, end);
+                // La primera línea del rango es la fila de cabecera.
+                let header_start = rows.first().map(|&(ls, _)| ls);
+                for (ls, le) in rows {
                     if is_delimiter_row(&text[ls..le]) {
-                        // La fila de guiones se oculta y en su hueco se pinta
-                        // la línea que separa la cabecera.
+                        // La fila de guiones se sustituye y en su hueco se
+                        // pinta la línea que separa la cabecera.
                         spans.push(replaced(ls, le));
                         spans.push(style(ls, le, "tablerule"));
                         ornaments.push(Ornament::TableRule {
@@ -522,16 +676,23 @@ pub fn analyze(text: &str) -> Analysis {
                         });
                         continue;
                     }
-                    // Los pipes se quedan, pero atenuados: hacen de separador
-                    // de columna sin competir con el contenido. Además emitimos
-                    // un `CellSeparator` para que el widget dibuje una línea
-                    // vertical y la tabla gane estructura visual.
+                    // Los pipes son marcas sustituidas: en WYSIWYG se encogen
+                    // y en su sitio el widget dibuja un separador vertical
+                    // (`CellSeparator`), para dotar a la tabla de rejilla
+                    // visual sin necesidad de un widget compuesto.
                     let row = &text[ls..le];
                     let bytes = row.as_bytes();
                     for (i, b) in bytes.iter().enumerate() {
                         if *b == b'|' && (i == 0 || bytes[i - 1] != b'\\') {
-                            spans.push(style(ls + i, ls + i + 1, "tablepipe"));
+                            spans.push(replaced(ls + i, ls + i + 1));
                             ornaments.push(Ornament::CellSeparator { offset: ls + i });
+                        }
+                    }
+                    // Cabecera: el texto de las celdas en negrita (span
+                    // `tablehead`); los pipes quedan fuera.
+                    if Some(ls) == header_start {
+                        for (s, e) in cell_text_ranges(row) {
+                            spans.push(style(ls + s, ls + e, "tablehead"));
                         }
                     }
                 }
@@ -591,7 +752,11 @@ pub fn analyze(text: &str) -> Analysis {
         _ => true,
     });
 
-    Analysis { spans, ornaments }
+    Analysis {
+        spans,
+        ornaments,
+        images,
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -849,7 +1014,28 @@ mod tests {
     fn cabecera_marca_las_almohadillas() {
         let text = "## Título\n";
         assert_eq!(find(&spans(text), "h2").len(), 1);
-        assert_eq!(syntax(text), vec![(0, 3, SpanKind::Marker)]);
+        // Las almohadillas (con el espacio) son marca sustituida: en WYSIWYG
+        // se encogen y el título queda limpio; en «Atenuar» se atenúan.
+        assert_eq!(syntax(text), vec![(0, 3, SpanKind::Replaced)]);
+    }
+
+    #[test]
+    fn h1_y_h2_piden_filete_bajo_el_titulo_y_h3_no() {
+        let a = analyze("# Uno\n\n## Dos\n\n### Tres\n");
+        let reglas: Vec<usize> = a
+            .ornaments
+            .iter()
+            .filter_map(|o| match o {
+                Ornament::HeadingRule { line } => Some(*line),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(reglas, vec![0, 2]);
+        // La cabecera setext (H1) también lo pide.
+        let setext = analyze("Título\n======\n");
+        assert!(setext
+            .ornaments
+            .contains(&Ornament::HeadingRule { line: 0 }));
     }
 
     #[test]
@@ -1057,7 +1243,9 @@ mod tests {
                 Ornament::Bullet { line, .. }
                 | Ornament::Checkbox { line, .. }
                 | Ornament::Rule { line }
-                | Ornament::TableRule { line } => line,
+                | Ornament::TableRule { line }
+                | Ornament::HeadingRule { line }
+                | Ornament::Image { line, .. } => line,
                 Ornament::Quote { last, .. }
                 | Ornament::CodeBlock { last, .. }
                 | Ornament::Table { last, .. } => last,
@@ -1075,14 +1263,44 @@ mod tests {
         let a = analyze(text);
         assert!(a.ornaments.contains(&Ornament::TableRule { line: 1 }));
         assert!(a.ornaments.contains(&Ornament::Table { first: 0, last: 2 }));
-        assert_eq!(syntax(text), vec![(10, 19, SpanKind::Replaced)]);
+        // Los pipes también son marcas sustituidas (se encogen en WYSIWYG).
+        assert_eq!(
+            syntax(text),
+            vec![
+                (0, 1, SpanKind::Replaced),
+                (4, 5, SpanKind::Replaced),
+                (8, 9, SpanKind::Replaced),
+                (10, 19, SpanKind::Replaced),
+                (20, 21, SpanKind::Replaced),
+                (24, 25, SpanKind::Replaced),
+                (28, 29, SpanKind::Replaced),
+            ]
+        );
     }
 
     #[test]
-    fn los_pipes_se_atenuan() {
+    fn los_pipes_de_tabla_son_marcas_sustituidas() {
+        // Tres por fila de contenido, dos filas: se encogen en WYSIWYG y el
+        // widget dibuja un separador vertical en su sitio.
         let a = analyze("| a | b |\n|---|---|\n| 1 | 2 |\n");
-        // Tres por fila de contenido, dos filas.
-        assert_eq!(find(&a.spans, "tablepipe").len(), 6);
+        let pipes = a
+            .spans
+            .iter()
+            .filter(|s| s.kind == SpanKind::Replaced && s.end == s.start + 1)
+            .count();
+        assert_eq!(pipes, 6);
+    }
+
+    #[test]
+    fn la_cabecera_de_tabla_lleva_tablehead_sobre_el_texto_de_las_celdas() {
+        let text = "| a | b |\n|---|---|\n| 1 | 2 |\n";
+        let a = analyze(text);
+        let heads = find(&a.spans, "tablehead");
+        assert_eq!(heads.len(), 2);
+        assert_eq!(&text[heads[0].start..heads[0].end], "a");
+        assert_eq!(&text[heads[1].start..heads[1].end], "b");
+        // Solo la cabecera: el cuerpo no lleva tablehead.
+        assert!(heads.iter().all(|s| s.end <= 9));
     }
 
     #[test]
@@ -1148,18 +1366,24 @@ mod tests {
             !a.spans.iter().any(|s| s.kind == SpanKind::Marker),
             "ninguna marca `Marker` debe quedar dentro de la tabla: {a:?}"
         );
-        // Los dos delimitadores de `**a**`, los dos de `` `b` ``, la fila de
-        // guiones y los dos de `*c*`, por orden de posición.
+        // Los pipes, los dos delimitadores de `**a**`, los dos de `` `b` ``,
+        // la fila de guiones y los dos de `*c*`, por orden de posición.
         assert_eq!(
             syntax(text),
             vec![
+                (0, 1, SpanKind::Replaced),
                 (2, 4, SpanKind::Replaced),
                 (5, 7, SpanKind::Replaced),
+                (8, 9, SpanKind::Replaced),
                 (10, 11, SpanKind::Replaced),
                 (12, 13, SpanKind::Replaced),
+                (14, 15, SpanKind::Replaced),
                 (16, 25, SpanKind::Replaced),
+                (26, 27, SpanKind::Replaced),
                 (28, 29, SpanKind::Replaced),
                 (30, 31, SpanKind::Replaced),
+                (32, 33, SpanKind::Replaced),
+                (36, 37, SpanKind::Replaced),
             ]
         );
     }
@@ -1178,8 +1402,14 @@ mod tests {
             .count();
         // 2 filas (cabecera + 1 body) × 3 pipes por fila = 6.
         assert_eq!(seps, 6, "una tubería por pipe de cabecera/cuerpo");
-        // y debe coincidir con el número de spans `tablepipe`.
-        assert_eq!(seps, find(&a.spans, "tablepipe").len());
+        // y debe coincidir con el número de pipes sustituidos (spans
+        // Replaced de un byte; la fila de guiones es uno solo y más largo).
+        let pipes = a
+            .spans
+            .iter()
+            .filter(|s| s.kind == SpanKind::Replaced && s.end == s.start + 1)
+            .count();
+        assert_eq!(seps, pipes);
     }
 
     #[test]
@@ -1300,5 +1530,165 @@ mod tests {
     fn texto_vacio_no_revienta() {
         let a = analyze("");
         assert!(a.spans.is_empty() && a.ornaments.is_empty());
+    }
+
+    #[test]
+    fn cada_adorno_tiene_su_familia() {
+        assert_eq!(
+            Ornament::CodeBlock { first: 0, last: 1 }.family(),
+            OrnamentFamily::Ambient
+        );
+        assert_eq!(
+            Ornament::Table { first: 0, last: 1 }.family(),
+            OrnamentFamily::Ambient
+        );
+        assert_eq!(
+            Ornament::Quote { first: 0, last: 1 }.family(),
+            OrnamentFamily::Ambient
+        );
+        assert_eq!(
+            Ornament::Bullet { line: 0, depth: 1 }.family(),
+            OrnamentFamily::Substitute
+        );
+        assert_eq!(
+            Ornament::Checkbox {
+                line: 0,
+                checked: false
+            }
+            .family(),
+            OrnamentFamily::Substitute
+        );
+        assert_eq!(
+            Ornament::Rule { line: 0 }.family(),
+            OrnamentFamily::Substitute
+        );
+        assert_eq!(
+            Ornament::TableRule { line: 0 }.family(),
+            OrnamentFamily::Substitute
+        );
+        assert_eq!(
+            Ornament::Break { offset: 0 }.family(),
+            OrnamentFamily::Substitute
+        );
+        assert_eq!(
+            Ornament::CellSeparator { offset: 0 }.family(),
+            OrnamentFamily::Substitute
+        );
+        assert_eq!(
+            Ornament::HeadingRule { line: 0 }.family(),
+            OrnamentFamily::Additive
+        );
+        assert_eq!(
+            Ornament::Image {
+                line: 0,
+                dest: String::new(),
+                alt: String::new()
+            }
+            .family(),
+            OrnamentFamily::Additive
+        );
+    }
+
+    #[test]
+    fn en_atenuar_solo_se_pintan_ambientales_y_aditivos() {
+        // Documento con un adorno de cada familia disponible hoy: cita y caja
+        // de código (ambientales), viñeta y regla (sustitutivos).
+        let a = analyze("> cita\n\n- uno\n\n---\n\n```\nx\n```\n");
+        let filtrados = ornaments_for(&a.ornaments, MarkupVisibility::Dim);
+        assert!(
+            filtrados
+                .iter()
+                .all(|o| o.family() != OrnamentFamily::Substitute),
+            "en «Atenuar» no debe pintarse ningún sustitutivo: {filtrados:?}"
+        );
+        assert!(filtrados
+            .iter()
+            .any(|o| matches!(o, Ornament::Quote { .. })));
+        assert!(filtrados
+            .iter()
+            .any(|o| matches!(o, Ornament::CodeBlock { .. })));
+    }
+
+    #[test]
+    fn imagen_sola_en_su_linea_genera_referencia_adorno_y_hueco() {
+        let text = "![gato](/tmp/g.png)\n";
+        let a = analyze(text);
+        assert_eq!(
+            a.images,
+            vec![ImageRef {
+                line: 0,
+                start: 0,
+                end: 19,
+                dest: "/tmp/g.png".to_string(),
+                alt: "gato".to_string(),
+            }]
+        );
+        assert!(a.ornaments.contains(&Ornament::Image {
+            line: 0,
+            dest: "/tmp/g.png".to_string(),
+            alt: "gato".to_string(),
+        }));
+        // El hueco lo reserva el span de estilo `imagegap`, sobre la línea.
+        assert_eq!(find(&a.spans, "imagegap").len(), 1);
+        // La marca sigue siendo eso, una marca: visible y editable.
+        assert_eq!(
+            syntax(text),
+            vec![(0, 2, SpanKind::Marker), (6, 19, SpanKind::Marker)]
+        );
+    }
+
+    #[test]
+    fn imagen_con_texto_alrededor_no_genera_nada_nuevo() {
+        let text = "ver ![gato](/tmp/g.png) ya\n";
+        let a = analyze(text);
+        assert!(a.images.is_empty());
+        assert!(!a
+            .ornaments
+            .iter()
+            .any(|o| matches!(o, Ornament::Image { .. })));
+        assert!(find(&a.spans, "imagegap").is_empty());
+        // Pero la imagen sigue decorada como hasta ahora.
+        assert_eq!(
+            syntax(text),
+            vec![(4, 6, SpanKind::Marker), (10, 23, SpanKind::Marker)]
+        );
+    }
+
+    #[test]
+    fn imagen_por_referencia_resuelve_el_destino() {
+        let text = "![gato][id]\n\n[id]: /tmp/g.png\n";
+        let a = analyze(text);
+        assert_eq!(a.images.len(), 1);
+        assert_eq!(a.images[0].dest, "/tmp/g.png");
+        assert_eq!(a.images[0].alt, "gato");
+        assert!(a
+            .ornaments
+            .iter()
+            .any(|o| matches!(o, Ornament::Image { dest, .. } if dest == "/tmp/g.png")));
+    }
+
+    #[test]
+    fn los_adornos_aditivos_se_pintan_tambien_en_atenuar() {
+        let a = analyze("# T\n\n![gato](/tmp/g.png)\n");
+        let filtrados = ornaments_for(&a.ornaments, MarkupVisibility::Dim);
+        assert!(filtrados
+            .iter()
+            .any(|o| matches!(o, Ornament::HeadingRule { .. })));
+        assert!(filtrados
+            .iter()
+            .any(|o| matches!(o, Ornament::Image { .. })));
+    }
+
+    #[test]
+    fn en_ocultar_y_al_enfocar_se_pintan_todos_los_adornos() {
+        let a = analyze("> cita\n\n- uno\n\n---\n");
+        assert_eq!(
+            ornaments_for(&a.ornaments, MarkupVisibility::Hidden),
+            a.ornaments
+        );
+        assert_eq!(
+            ornaments_for(&a.ornaments, MarkupVisibility::Focus),
+            a.ornaments
+        );
     }
 }
