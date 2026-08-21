@@ -17,10 +17,11 @@
 //!
 //! **Aviso (mitigación GNOME/gtk#8346):** mientras
 //! [`crate::settings::gtk_hides_invisible_safely`] devuelva `false`, el editor
-//! no oculta texto y pasa siempre una lista de adornos vacía, así que todo el
-//! dibujado de aquí abajo queda inactivo. Se conserva a propósito: los adornos
-//! vuelven cuando GTK publique el fix (MR !10228) o se adopte una alternativa
-//! de ocultado sin `invisible` (p. ej. escala ≈ 0).
+//! no oculta texto; las marcas sustituidas por un adorno se **encogen**
+//! (escala ≈ 0 y transparentes, tag `syn_shrink`) en vez de hacerse
+//! invisibles, de modo que siguen participando en la maquetación y el camino
+//! del aborto es inalcanzable. El hueco mínimo que dejan basta para pintar
+//! aquí el adorno sustituto.
 
 use gtk4::prelude::*;
 use gtk4::subclass::prelude::*;

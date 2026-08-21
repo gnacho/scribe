@@ -6,9 +6,9 @@ use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 use std::time::Duration;
 
-use crate::markdown_render::{analyze, Ornament, SpanKind, MAX_LIVE_BYTES};
+use crate::markdown_render::{analyze, ornaments_for, Ornament, SpanKind, MAX_LIVE_BYTES};
 use crate::markdown_view::{MarkdownView, OrnamentPalette};
-use crate::settings::{FontFamily, MarkupVisibility};
+use crate::settings::{gtk_hides_invisible_safely, FontFamily, MarkupVisibility};
 
 type ChangedCallback = Rc<RefCell<Option<Box<dyn Fn(&str)>>>>;
 
@@ -169,6 +169,16 @@ fn build_tags() -> gtk4::TextTagTable {
         .invisible(true)
         .build());
     add(gtk4::TextTag::builder().name("syn_shown").build());
+    // Encoger en vez de ocultar (mitigación de GNOME/gtk#8346): la marca
+    // sustituida sigue en la maquetación con escala mínima y totalmente
+    // transparente, así que el texto nunca queda excluido del layout y el
+    // camino del aborto es inalcanzable por construcción. El color se fija
+    // aquí y no en el tema: debe ser transparente con cualquier paleta.
+    add(gtk4::TextTag::builder()
+        .name("syn_shrink")
+        .scale(0.05)
+        .foreground_rgba(&rgba(0x000000, 0.0))
+        .build());
 
     // El modo foco atenúa todo salvo el párrafo actual: va el último para pisar
     // el color de cualquier otro tag.
@@ -358,10 +368,23 @@ fn decorate(view: &MarkdownView, buffer: &gtksourceview5::Buffer, config: Decora
 
     let analysis = analyze(&text);
     let cursor_line = buffer.iter_at_offset(buffer.cursor_position()).line();
-    // GTK aborta con texto invisible (GNOME/gtk#8346; MR !10228 sin publicar),
-    // así que mientras `gtk_hides_invisible_safely()` sea falso la visibilidad
-    // efectiva es siempre «atenuar» y `dim` es siempre cierto: NADA se oculta.
-    let dim = config.markup.effective() == MarkupVisibility::Dim;
+    // Árbol de decisión de visibilidad. La preferencia persistida
+    // (`config.markup`) decide el look; la puerta
+    // `gtk_hides_invisible_safely()` (GNOME/gtk#8346) solo decide si las
+    // marcas sustituidas se encogen (`syn_shrink`, hoy siempre) o se ocultan
+    // de verdad (`syn_hidden`, futuro GTK sano):
+    //
+    // - «Atenuar» (Dim): marcas y sustituidas → `syn_shown`; solo se pintan
+    //   los adornos ambientales y aditivos, porque un sustituto taparía su
+    //   marca visible.
+    // - «Ocultar»/«Al enfocar» sin puerta: marcas → `syn_shown`; sustituidas
+    //   → `syn_shrink` (encogidas, no ocultas: véase build_tags); se pintan
+    //   todos los adornos. «Al enfocar» equivale a «Ocultar»: ya no hay
+    //   revelado por línea (véase preferences.rs).
+    // - «Ocultar»/«Al enfocar» con puerta: comportamiento clásico —
+    //   `syn_hidden` y todos los adornos.
+    let gate = gtk_hides_invisible_safely();
+    let dim = config.markup == MarkupVisibility::Dim;
 
     for span in &analysis.spans {
         // Los rangos del parser deberían estar siempre dentro del texto, pero
@@ -379,27 +402,35 @@ fn decorate(view: &MarkdownView, buffer: &gtksourceview5::Buffer, config: Decora
         let end_iter = buffer.iter_at_offset(to);
         let name = match span.kind {
             SpanKind::Style => span.tag,
-            // Con la mitigación de GNOME/gtk#8346 activa, `dim` es siempre
-            // cierto y las marcas (sustituidas o no) se atenúan sin ocultar.
-            // La rama `syn_hidden` es la puerta de futuro: solo se alcanza
-            // con un GTK que incluya el fix (véase gtk_hides_invisible_safely).
-            SpanKind::Replaced | SpanKind::Marker => {
-                if dim {
+            SpanKind::Marker => {
+                // Las marcas normales solo se ocultan con un GTK sano; sin la
+                // puerta se atenúan en todos los modos.
+                if dim || !gate {
                     "syn_shown"
                 } else {
                     "syn_hidden"
+                }
+            }
+            SpanKind::Replaced => {
+                // Las marcas sustituidas por un adorno se encogen (nunca se
+                // ocultan sin la puerta): encoger no excluye texto del layout
+                // y por eso es seguro donde `invisible` no lo es.
+                if dim {
+                    "syn_shown"
+                } else if gate {
+                    "syn_hidden"
+                } else {
+                    "syn_shrink"
                 }
             }
         };
         buffer.apply_tag_by_name(name, &start_iter, &end_iter);
     }
 
-    // Sin texto oculto no hay hueco donde dibujar: un adorno sustitutivo se
-    // pintaría encima del marcado visible, duplicándolo. Mientras dure la
-    // mitigación (dim siempre cierto) no se generan adornos, igual que en el
-    // modo «atenuar» de antes; al reactivarse el ocultado, aquí vuelve
-    // `analysis.ornaments`.
-    let mut ornaments = if dim { Vec::new() } else { analysis.ornaments };
+    // Los adornos se filtran por familia según la preferencia (véase
+    // `ornaments_for`): en «Atenuar» solo ambientales y aditivos; en los
+    // modos WYSIWYG todos, con las marcas sustituidas encogidas u ocultas.
+    let mut ornaments = ornaments_for(&analysis.ornaments, config.markup);
     // Los adornos van por número de línea salvo `Break` y `CellSeparator`, que
     // guardan byte offsets: el widget indexa por caracteres, así que convertimos.
     for o in &mut ornaments {

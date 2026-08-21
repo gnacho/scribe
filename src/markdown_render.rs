@@ -18,6 +18,7 @@
 //! texto de sitio en cada línea. (Con la mitigación de GNOME/gtk#8346 activa
 //! no se ocultan, sino que se atenúan como cualquier otra marca.)
 
+use crate::settings::MarkupVisibility;
 use pulldown_cmark::{CodeBlockKind, Event, HeadingLevel, LinkType, Options, Parser, Tag, TagEnd};
 use std::borrow::Cow;
 
@@ -54,7 +55,9 @@ impl Span {
 }
 
 /// Elemento que hay que pintar a mano. Las líneas son lógicas y empiezan en 0.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+///
+/// No es `Copy`: algunos adornos llevan texto (la ruta de una imagen).
+#[derive(Debug, Clone, PartialEq)]
 pub enum Ornament {
     /// Viñeta de lista sin ordenar. `depth` empieza en 1.
     Bullet { line: usize, depth: usize },
@@ -80,6 +83,63 @@ pub enum Ornament {
     /// línea vertical en su posición, para dotar a la tabla de rejilla visual
     /// sin necesidad de un widget compuesto.
     CellSeparator { offset: usize },
+    /// Filete fino bajo un título H1/H2, estilo GitHub. Aditivo: no sustituye
+    /// ninguna marca.
+    HeadingRule { line: usize },
+    /// Imagen local que es el único contenido de su línea: se pinta en el
+    /// hueco que reserva el span `imagegap` bajo esa línea. Aditiva: la marca
+    /// `![alt](src)` sigue visible y editable en todos los modos.
+    Image {
+        line: usize,
+        dest: String,
+        alt: String,
+    },
+}
+
+/// Familia de un adorno, según cómo convive con el texto del buffer.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum OrnamentFamily {
+    /// Se pinta siempre: convive con el texto sin taparlo (cajas, barras).
+    Ambient,
+    /// Sustituye a una marca del fuente (`- `, `[ ]`, `---`, pipes…). Solo se
+    /// pinta cuando la marca está oculta o encogida; si la marca se ve, el
+    /// adorno la duplicaría.
+    Substitute,
+    /// No sustituye nada (filete de título, imagen): se pinta en todos los
+    /// modos sin riesgo de duplicar.
+    Additive,
+}
+
+impl Ornament {
+    /// Familia a la que pertenece el adorno; decide en qué modos se pinta.
+    pub fn family(&self) -> OrnamentFamily {
+        match self {
+            Ornament::CodeBlock { .. } | Ornament::Table { .. } | Ornament::Quote { .. } => {
+                OrnamentFamily::Ambient
+            }
+            Ornament::Bullet { .. }
+            | Ornament::Checkbox { .. }
+            | Ornament::Rule { .. }
+            | Ornament::TableRule { .. }
+            | Ornament::Break { .. }
+            | Ornament::CellSeparator { .. } => OrnamentFamily::Substitute,
+            Ornament::HeadingRule { .. } | Ornament::Image { .. } => OrnamentFamily::Additive,
+        }
+    }
+}
+
+/// Devuelve los adornos a pintar según la visibilidad elegida por el usuario.
+/// `Dim` = vista cruda atenuada: solo ambientales y aditivos. `Hidden`/`Focus`
+/// = WYSIWYG (hoy con marcas encogidas, no ocultas, por GNOME/gtk#8346): todos.
+pub fn ornaments_for(ornaments: &[Ornament], vis: MarkupVisibility) -> Vec<Ornament> {
+    ornaments
+        .iter()
+        .filter(|o| match o.family() {
+            OrnamentFamily::Ambient | OrnamentFamily::Additive => true,
+            OrnamentFamily::Substitute => vis != MarkupVisibility::Dim,
+        })
+        .cloned()
+        .collect()
 }
 
 #[derive(Debug, Default)]
@@ -1057,7 +1117,9 @@ mod tests {
                 Ornament::Bullet { line, .. }
                 | Ornament::Checkbox { line, .. }
                 | Ornament::Rule { line }
-                | Ornament::TableRule { line } => line,
+                | Ornament::TableRule { line }
+                | Ornament::HeadingRule { line }
+                | Ornament::Image { line, .. } => line,
                 Ornament::Quote { last, .. }
                 | Ornament::CodeBlock { last, .. }
                 | Ornament::Table { last, .. } => last,
@@ -1300,5 +1362,86 @@ mod tests {
     fn texto_vacio_no_revienta() {
         let a = analyze("");
         assert!(a.spans.is_empty() && a.ornaments.is_empty());
+    }
+
+    #[test]
+    fn cada_adorno_tiene_su_familia() {
+        assert_eq!(
+            Ornament::CodeBlock { first: 0, last: 1 }.family(),
+            OrnamentFamily::Ambient
+        );
+        assert_eq!(
+            Ornament::Table { first: 0, last: 1 }.family(),
+            OrnamentFamily::Ambient
+        );
+        assert_eq!(
+            Ornament::Quote { first: 0, last: 1 }.family(),
+            OrnamentFamily::Ambient
+        );
+        assert_eq!(
+            Ornament::Bullet { line: 0, depth: 1 }.family(),
+            OrnamentFamily::Substitute
+        );
+        assert_eq!(
+            Ornament::Checkbox {
+                line: 0,
+                checked: false
+            }
+            .family(),
+            OrnamentFamily::Substitute
+        );
+        assert_eq!(Ornament::Rule { line: 0 }.family(), OrnamentFamily::Substitute);
+        assert_eq!(
+            Ornament::TableRule { line: 0 }.family(),
+            OrnamentFamily::Substitute
+        );
+        assert_eq!(
+            Ornament::Break { offset: 0 }.family(),
+            OrnamentFamily::Substitute
+        );
+        assert_eq!(
+            Ornament::CellSeparator { offset: 0 }.family(),
+            OrnamentFamily::Substitute
+        );
+        assert_eq!(
+            Ornament::HeadingRule { line: 0 }.family(),
+            OrnamentFamily::Additive
+        );
+        assert_eq!(
+            Ornament::Image {
+                line: 0,
+                dest: String::new(),
+                alt: String::new()
+            }
+            .family(),
+            OrnamentFamily::Additive
+        );
+    }
+
+    #[test]
+    fn en_atenuar_solo_se_pintan_ambientales_y_aditivos() {
+        // Documento con un adorno de cada familia disponible hoy: cita y caja
+        // de código (ambientales), viñeta y regla (sustitutivos).
+        let a = analyze("> cita\n\n- uno\n\n---\n\n```\nx\n```\n");
+        let filtrados = ornaments_for(&a.ornaments, MarkupVisibility::Dim);
+        assert!(
+            filtrados
+                .iter()
+                .all(|o| o.family() != OrnamentFamily::Substitute),
+            "en «Atenuar» no debe pintarse ningún sustitutivo: {filtrados:?}"
+        );
+        assert!(filtrados
+            .iter()
+            .any(|o| matches!(o, Ornament::Quote { .. })));
+        assert!(filtrados
+            .iter()
+            .any(|o| matches!(o, Ornament::CodeBlock { .. })));
+    }
+
+    #[test]
+    fn en_ocultar_y_al_enfocar_se_pintan_todos_los_adornos() {
+        let a = analyze("> cita\n\n- uno\n\n---\n");
+        assert_eq!(ornaments_for(&a.ornaments, MarkupVisibility::Hidden), a.ornaments);
+        assert_eq!(ornaments_for(&a.ornaments, MarkupVisibility::Focus), a.ornaments);
     }
 }
