@@ -1,6 +1,13 @@
 use gtk4::prelude::*;
 use std::path::PathBuf;
 
+/// ¿Es la cancelación del usuario? El diálogo la entrega como un `gio::Error`
+/// `G_IO_ERROR_CANCELLED`; hay que distinguirla de un fallo real para no
+/// mostrar un toast de error cada vez que se cierra el diálogo sin elegir.
+fn is_cancelled(e: &glib::Error) -> bool {
+    e.kind::<gio::IOErrorEnum>() == Some(gio::IOErrorEnum::Cancelled)
+}
+
 pub enum Outcome {
     Ok(PathBuf),
     Cancelled,
@@ -42,6 +49,7 @@ impl FileManager {
                     },
                     None => OpenOutcome::Cancelled,
                 },
+                Err(e) if is_cancelled(&e) => OpenOutcome::Cancelled,
                 Err(e) => OpenOutcome::Error(e.to_string()),
             };
             callback(outcome);
@@ -91,6 +99,7 @@ impl FileManager {
                     },
                     None => Outcome::Cancelled,
                 },
+                Err(e) if is_cancelled(&e) => Outcome::Cancelled,
                 Err(e) => Outcome::Error(e.to_string()),
             };
             callback(outcome);
