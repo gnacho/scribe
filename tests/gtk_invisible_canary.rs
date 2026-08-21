@@ -24,7 +24,10 @@ use gtk4::prelude::*;
 fn visible_line_index_no_se_sale_con_texto_invisible() {
     gtk4::init().expect("GTK necesita un display; ejecuta bajo xvfb-run");
     let buffer = gtk4::TextBuffer::new(None::<&gtk4::TextTagTable>);
-    let tag = gtk4::TextTag::builder().name("hide").invisible(true).build();
+    let tag = gtk4::TextTag::builder()
+        .name("hide")
+        .invisible(true)
+        .build();
     buffer.tag_table().add(&tag);
     buffer.set_text("abcdef\nghijkl\n");
     // Oculta "cd": la longitud visible de la línea 0 pasa de 6 a 4 bytes.

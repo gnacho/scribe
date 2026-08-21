@@ -1002,7 +1002,10 @@ mod tests {
     fn la_regla_sustituye_la_linea_para_dibujarla() {
         let a = analyze("uno\n\n---\n\ndos\n");
         assert!(a.ornaments.contains(&Ornament::Rule { line: 2 }));
-        assert_eq!(syntax("uno\n\n---\n\ndos\n"), vec![(5, 8, SpanKind::Replaced)]);
+        assert_eq!(
+            syntax("uno\n\n---\n\ndos\n"),
+            vec![(5, 8, SpanKind::Replaced)]
+        );
     }
 
     #[test]

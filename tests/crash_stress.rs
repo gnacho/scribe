@@ -7,14 +7,14 @@
 //!
 //! Ejecutar: xvfb-run -a cargo test --test crash_stress -- --ignored --nocapture
 
-#[path = "../src/settings.rs"]
-mod settings;
+#[path = "../src/editor.rs"]
+mod editor;
 #[path = "../src/markdown_render.rs"]
 mod markdown_render;
 #[path = "../src/markdown_view.rs"]
 mod markdown_view;
-#[path = "../src/editor.rs"]
-mod editor;
+#[path = "../src/settings.rs"]
+mod settings;
 
 use editor::Editor;
 use gtk4::prelude::*;
@@ -25,8 +25,18 @@ use std::time::{Duration, Instant};
 /// modo vivo) para que la decoración entre en juego.
 fn torture_doc() -> String {
     let words = [
-        "lorem", "ipsum", "dolor", "sit", "amet", "consectetur", "adipiscing",
-        "elit", "sed", "do", "eiusmod", "tempor",
+        "lorem",
+        "ipsum",
+        "dolor",
+        "sit",
+        "amet",
+        "consectetur",
+        "adipiscing",
+        "elit",
+        "sed",
+        "do",
+        "eiusmod",
+        "tempor",
     ];
     let mut s = String::with_capacity(220_000);
     let mut section = 0;
@@ -37,7 +47,12 @@ fn torture_doc() -> String {
             let w = |i: usize| words[(section * 7 + r * 3 + i) % words.len()];
             s.push_str(&format!(
                 "| `{}` | **{}** | _{}_ {} | {}<br>{} |\n",
-                w(0), w(1), w(2), w(3), w(4), w(5)
+                w(0),
+                w(1),
+                w(2),
+                w(3),
+                w(4),
+                w(5)
             ));
         }
         s.push_str("\n> cita con **marcado** y `código`\n\n");
@@ -77,7 +92,10 @@ fn abrir_documento_grande_no_aborta() {
     win.present();
 
     let doc = torture_doc();
-    assert!(doc.len() > 150_000, "el doc debe estar bajo el límite pero ser grande");
+    assert!(
+        doc.len() > 150_000,
+        "el doc debe estar bajo el límite pero ser grande"
+    );
     let ctx = gtk4::glib::MainContext::default();
 
     for i in 0..60 {
