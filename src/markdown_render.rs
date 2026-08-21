@@ -1161,18 +1161,3 @@ mod tests {
         assert!(a.spans.is_empty() && a.ornaments.is_empty());
     }
 }
-
-#[cfg(test)]
-mod probe4 {
-    use super::*;
-    #[test]
-    fn probe_tab13() {
-        let a = analyze("```\ncodigo\n```\t\n\ntexto\n");
-        let b: Vec<_> = a
-            .ornaments
-            .iter()
-            .filter(|o| matches!(o, Ornament::CodeBlock { .. }))
-            .collect();
-        println!("CON 0.13 tabulador: {b:?}");
-    }
-}
