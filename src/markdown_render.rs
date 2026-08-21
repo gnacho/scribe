@@ -880,7 +880,7 @@ mod tests {
     fn enlace_automatico_marca_los_angulos() {
         assert_eq!(
             syntax("ver <https://ej.com> ya"),
-            vec![(4, 5, SpanKind::Marker), (21, 22, SpanKind::Marker)]
+            vec![(4, 5, SpanKind::Marker), (19, 20, SpanKind::Marker)]
         );
     }
 
