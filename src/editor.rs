@@ -364,7 +364,14 @@ fn decorate(view: &MarkdownView, buffer: &gtksourceview5::Buffer, config: Decora
     let dim = config.markup.effective() == MarkupVisibility::Dim;
 
     for span in &analysis.spans {
-        let (from, to) = (byte_to_char[span.start], byte_to_char[span.end]);
+        // Los rangos del parser deberían estar siempre dentro del texto, pero
+        // un cambio en pulldown-cmark o en analyze no debe convertirse en un
+        // panic en producción.
+        debug_assert!(span.end <= text.len(), "span fuera de rango: {span:?}");
+        let (from, to) = match (byte_to_char.get(span.start), byte_to_char.get(span.end)) {
+            (Some(&from), Some(&to)) => (from, to),
+            _ => continue,
+        };
         if from >= to {
             continue;
         }
