@@ -268,32 +268,32 @@ mod imp {
             }
         }
 
-    fn draw_glyphs(&self, snapshot: &gtk4::Snapshot) {
-        let ornaments = self.ornaments.borrow();
-        if ornaments.is_empty() || self.stale() {
-            return;
-        }
-        let palette = self.palette.get();
-        let (first_visible, last_visible) = self.visible_lines();
-        let (left, right) = self.column();
-
-        for ornament in ornaments.iter() {
-            let line = match ornament {
-                Ornament::Bullet { line, .. }
-                | Ornament::Checkbox { line, .. }
-                | Ornament::TableRule { line }
-                | Ornament::Rule { line } => *line as i32,
-                _ => continue,
-            };
-            if line < first_visible || line > last_visible {
-                continue;
+        fn draw_glyphs(&self, snapshot: &gtk4::Snapshot) {
+            let ornaments = self.ornaments.borrow();
+            if ornaments.is_empty() || self.stale() {
+                return;
             }
-            let Some((x, y, height)) = self.line_origin(line) else {
-                continue;
-            };
-            let middle = y + height / 2.0;
+            let palette = self.palette.get();
+            let (first_visible, last_visible) = self.visible_lines();
+            let (left, right) = self.column();
 
-            match ornament {
+            for ornament in ornaments.iter() {
+                let line = match ornament {
+                    Ornament::Bullet { line, .. }
+                    | Ornament::Checkbox { line, .. }
+                    | Ornament::TableRule { line }
+                    | Ornament::Rule { line } => *line as i32,
+                    _ => continue,
+                };
+                if line < first_visible || line > last_visible {
+                    continue;
+                }
+                let Some((x, y, height)) = self.line_origin(line) else {
+                    continue;
+                };
+                let middle = y + height / 2.0;
+
+                match ornament {
                     Ornament::Bullet { depth, .. } => {
                         draw_bullet(snapshot, x - BULLET_OFFSET, middle, *depth, &palette)
                     }
@@ -326,32 +326,32 @@ mod imp {
                     }
                     _ => {}
                 }
-        }
-
-        // Glifos posicionados por offset de carácter (no por línea). Hoy solo
-        // `Break`, el sustituto del `<br>` dentro de una tabla.
-        let view = self.obj();
-        let buffer = view.buffer();
-        for ornament in ornaments.iter() {
-            let offset = match ornament {
-                Ornament::Break { offset } => *offset as i32,
-                _ => continue,
-            };
-            let iter = buffer.iter_at_offset(offset);
-            let line = iter.line();
-            if line < first_visible || line > last_visible {
-                continue;
             }
-            let rect = view.iter_location(&iter);
-            draw_break(
-                snapshot,
-                rect.x() as f32,
-                rect.y() as f32,
-                rect.height() as f32,
-                &palette,
-            );
+
+            // Glifos posicionados por offset de carácter (no por línea). Hoy solo
+            // `Break`, el sustituto del `<br>` dentro de una tabla.
+            let view = self.obj();
+            let buffer = view.buffer();
+            for ornament in ornaments.iter() {
+                let offset = match ornament {
+                    Ornament::Break { offset } => *offset as i32,
+                    _ => continue,
+                };
+                let iter = buffer.iter_at_offset(offset);
+                let line = iter.line();
+                if line < first_visible || line > last_visible {
+                    continue;
+                }
+                let rect = view.iter_location(&iter);
+                draw_break(
+                    snapshot,
+                    rect.x() as f32,
+                    rect.y() as f32,
+                    rect.height() as f32,
+                    &palette,
+                );
+            }
         }
-    }
     }
 
     /// Nivel 1 disco, nivel 2 anillo, nivel 3 en adelante cuadrado: la misma

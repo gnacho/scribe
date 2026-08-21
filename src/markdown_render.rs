@@ -599,10 +599,7 @@ pub fn analyze(text: &str) -> Analysis {
 /// (`<br class="x">`) porque no aparecen en markdown a mano.
 fn is_br(content: &str) -> bool {
     let lower = content.to_ascii_lowercase();
-    let Some(inner) = lower
-        .strip_prefix('<')
-        .and_then(|s| s.strip_suffix('>'))
-    else {
+    let Some(inner) = lower.strip_prefix('<').and_then(|s| s.strip_suffix('>')) else {
         return false;
     };
     let inner = inner.trim_matches(|c: char| c == '/' || c.is_whitespace());
@@ -1014,7 +1011,10 @@ mod tests {
             .filter(|s| s.kind == SpanKind::Replaced && text[s.start..s.end].contains("br"))
             .count();
         assert_eq!(brs, 1, "debe haber exactamente un <br> oculto");
-        assert!(a.ornaments.iter().any(|o| matches!(o, Ornament::Break { .. })));
+        assert!(a
+            .ornaments
+            .iter()
+            .any(|o| matches!(o, Ornament::Break { .. })));
         // Y nada con tag `html` dentro de la tabla.
         assert_eq!(find(&a.spans, "html").len(), 0);
     }
@@ -1024,7 +1024,10 @@ mod tests {
         let text = "línea uno<br>línea dos\n";
         let a = analyze(text);
         assert_eq!(find(&a.spans, "html").len(), 1);
-        assert!(!a.ornaments.iter().any(|o| matches!(o, Ornament::Break { .. })));
+        assert!(!a
+            .ornaments
+            .iter()
+            .any(|o| matches!(o, Ornament::Break { .. })));
     }
 
     #[test]
