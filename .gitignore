@@ -1,3 +1,5 @@
 /target
-Cargo.lock
 files*.zip
+core
+core.*
+*.core
