@@ -537,6 +537,7 @@ impl ScribeWindow {
             Rc::new(move |path: &Path| match std::fs::read_to_string(path) {
                 Ok(content) => {
                     editor.set_text(&content);
+                    editor.set_base_dir(path.parent().map(Path::to_path_buf));
                     *current_file.borrow_mut() = Some(path.to_path_buf());
                     is_modified.set(false);
                     settings.push_recent_file(&path.to_string_lossy());
@@ -561,6 +562,9 @@ impl ScribeWindow {
                     .map(|b| templates::render(&b, "Sin título"))
                     .unwrap_or_default();
                 editor.set_text(&body);
+                // Documento sin fichero: las imágenes relativas no se
+                // resuelven y se pinta el placeholder.
+                editor.set_base_dir(None);
                 *current_file.borrow_mut() = None;
                 is_modified.set(false);
                 update_title();
@@ -785,6 +789,7 @@ impl ScribeWindow {
                 file_manager.open(&window, move |outcome| match outcome {
                     OpenOutcome::Ok((path, content)) => {
                         editor.set_text(&content);
+                        editor.set_base_dir(path.parent().map(Path::to_path_buf));
                         *current_file.borrow_mut() = Some(path.clone());
                         is_modified.set(false);
                         settings.push_recent_file(&path.to_string_lossy());
@@ -825,12 +830,16 @@ impl ScribeWindow {
                 let update_title = update_title.clone();
                 let refresh_recents = refresh_recents.clone();
                 let toast = toast.clone();
+                let editor = editor.clone();
                 file_manager.save(
                     &window,
                     path.as_ref(),
                     &content,
                     move |outcome| match outcome {
                         Outcome::Ok(p) => {
+                            // Tras «guardar como» el directorio base de las
+                            // imágenes puede haber cambiado.
+                            editor.set_base_dir(p.parent().map(Path::to_path_buf));
                             *current_file.borrow_mut() = Some(p.clone());
                             is_modified.set(false);
                             settings.push_recent_file(&p.to_string_lossy());

@@ -82,10 +82,19 @@ const CELL_SEPARATOR_THICKNESS: f32 = 1.0;
 /// acaba mas alla de lo visible, para que sus esquinas redondeadas no aparezcan
 /// cortadas a mitad del bloque.
 const BLOCK_OVERSHOOT: f32 = 4000.0;
+/// Alto del hueco que el tag `imagegap` reserva bajo la línea de una imagen.
+const IMAGE_GAP_HEIGHT: f32 = 150.0;
+/// Alto máximo de la imagen pintada en ese hueco (se escala manteniendo ratio).
+const IMAGE_MAX_HEIGHT: f32 = 144.0;
+/// Entradas máximas de la caché de texturas; al superarlo se vacía entera.
+const MAX_TEXTURE_CACHE: usize = 64;
+/// Tamaño máximo de fichero de imagen que se intenta cargar (20 MB).
+const MAX_IMAGE_BYTES: u64 = 20 * 1024 * 1024;
 
 mod imp {
     use super::*;
     use std::cell::{Cell, RefCell};
+    use std::collections::HashMap;
 
     #[derive(Default)]
     pub struct MarkdownView {
@@ -95,6 +104,9 @@ mod imp {
         /// buffer ya no coincide, los adornos apuntan a lineas que se han
         /// movido y no se dibuja nada hasta que llegue la siguiente pasada.
         pub line_count: Cell<i32>,
+        /// Texturas por ruta absoluta. Los fallos también se cachean (`None`)
+        /// para no releer del disco en cada fotograma.
+        pub textures: RefCell<HashMap<String, Option<gdk::Texture>>>,
     }
 
     #[glib::object_subclass]
@@ -112,8 +124,13 @@ mod imp {
         fn snapshot_layer(&self, layer: gtk4::TextViewLayer, snapshot: gtk4::Snapshot) {
             match layer {
                 // Las cajas y barras van debajo del texto; los glifos, encima,
-                // para que nunca queden tapados por un fondo de párrafo.
-                gtk4::TextViewLayer::BelowText => self.draw_blocks(&snapshot),
+                // para que nunca queden tapados por un fondo de párrafo. Las
+                // imágenes ocupan su propio hueco (tag `imagegap`), así que
+                // bajo el texto no tapan nada.
+                gtk4::TextViewLayer::BelowText => {
+                    self.draw_blocks(&snapshot);
+                    self.draw_images(&snapshot);
+                }
                 gtk4::TextViewLayer::AboveText => self.draw_glyphs(&snapshot),
                 _ => {}
             }
@@ -381,6 +398,117 @@ mod imp {
                 );
             }
         }
+
+        /// Textura de una ruta, cacheada. Las URLs no se cargan (sin red en
+        /// el sandbox): devuelven `None` y se pinta el placeholder.
+        fn texture_for(&self, dest: &str) -> Option<gdk::Texture> {
+            if let Some(cached) = self.textures.borrow().get(dest) {
+                return cached.clone();
+            }
+            let loaded = load_texture(dest);
+            let mut cache = self.textures.borrow_mut();
+            if cache.len() >= MAX_TEXTURE_CACHE {
+                cache.clear();
+            }
+            cache.insert(dest.to_string(), loaded.clone());
+            loaded
+        }
+
+        /// Imágenes en bloque: se pintan en el hueco que el tag `imagegap`
+        /// reserva bajo su línea, centradas y escaladas manteniendo ratio.
+        /// Si el fichero no existe o no carga, un placeholder gris.
+        fn draw_images(&self, snapshot: &gtk4::Snapshot) {
+            let ornaments = self.ornaments.borrow();
+            if ornaments.is_empty() || self.stale() {
+                return;
+            }
+            let palette = self.palette.get();
+            let (first_visible, last_visible) = self.visible_lines();
+            let (left, right) = self.column();
+            let max_w = (right - left - BLOCK_PADDING * 2.0).max(0.0);
+            if max_w <= 0.0 {
+                return;
+            }
+            let view = self.obj();
+
+            for ornament in ornaments.iter() {
+                let Ornament::Image { line, dest, alt } = ornament else {
+                    continue;
+                };
+                let line = *line as i32;
+                if line < first_visible - 1 || line > last_visible + 1 {
+                    continue;
+                }
+                let Some((line_y, line_h)) = self.line_extent(line) else {
+                    continue;
+                };
+                // El hueco de `imagegap` queda al final de la línea. Si la
+                // altura reportada lo incluye, la imagen va pegada al final;
+                // si no, justo debajo del texto.
+                let top = if line_h > IMAGE_GAP_HEIGHT + 8.0 {
+                    line_y + line_h - IMAGE_GAP_HEIGHT
+                } else {
+                    line_y + line_h
+                };
+
+                match self.texture_for(dest) {
+                    Some(texture) => {
+                        let tw = texture.width() as f32;
+                        let th = texture.height() as f32;
+                        if tw <= 0.0 || th <= 0.0 {
+                            continue;
+                        }
+                        // Escala para caber en (ancho visible) × 144px; las
+                        // imágenes pequeñas no se agrandan.
+                        let scale = (max_w / tw).min(IMAGE_MAX_HEIGHT / th).min(1.0);
+                        let (w, h) = (tw * scale, th * scale);
+                        let x = left + BLOCK_PADDING + ((max_w - w) / 2.0).max(0.0);
+                        let y = top + ((IMAGE_GAP_HEIGHT - h) / 2.0).max(0.0);
+                        snapshot.save();
+                        snapshot.translate(&graphene::Point::new(x, y));
+                        snapshot.scale(scale, scale);
+                        snapshot.append_texture(&texture, &graphene::Rect::new(0.0, 0.0, tw, th));
+                        snapshot.restore();
+                        // Borde fino alrededor, ya en coordenadas finales.
+                        let border = graphene::Rect::new(x, y, w, h);
+                        let rounded = gsk::RoundedRect::from_rect(border, 2.0);
+                        snapshot.append_border(&rounded, &[1.0, 1.0, 1.0, 1.0], &[palette.muted; 4]);
+                    }
+                    None => {
+                        // Placeholder: texto pequeño y gris, sin borde.
+                        let label = if alt.is_empty() { dest.as_str() } else { alt.as_str() };
+                        let layout =
+                            view.create_pango_layout(Some(&format!("[ imagen: {label} ]")));
+                        if let Some(desc) = view.pango_context().font_description() {
+                            let size = desc.size();
+                            if size > 0 {
+                                let mut small = desc;
+                                small.set_size(size * 4 / 5);
+                                layout.set_font_description(Some(&small));
+                            }
+                        }
+                        snapshot.save();
+                        snapshot.translate(&graphene::Point::new(left + BLOCK_PADDING, top + 6.0));
+                        snapshot.append_layout(&layout, &palette.muted);
+                        snapshot.restore();
+                    }
+                }
+            }
+        }
+    }
+
+    /// Carga una textura local con límites de seguridad: sin red (las URLs se
+    /// rechazan), solo ficheros regulares de hasta 20 MB.
+    fn load_texture(dest: &str) -> Option<gdk::Texture> {
+        if dest.starts_with("http://") || dest.starts_with("https://") {
+            return None;
+        }
+        let path = std::path::Path::new(dest);
+        let meta = std::fs::metadata(path).ok()?;
+        if !meta.is_file() || meta.len() > MAX_IMAGE_BYTES {
+            return None;
+        }
+        gdk::Texture::from_filename(path).ok()
     }
 
     /// Nivel 1 disco, nivel 2 anillo, nivel 3 en adelante cuadrado: la misma

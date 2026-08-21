@@ -9,6 +9,7 @@ use std::time::Duration;
 use crate::markdown_render::{analyze, ornaments_for, Ornament, SpanKind, MAX_LIVE_BYTES};
 use crate::markdown_view::{MarkdownView, OrnamentPalette};
 use crate::settings::{gtk_hides_invisible_safely, FontFamily, MarkupVisibility};
+use std::path::PathBuf;
 
 type ChangedCallback = Rc<RefCell<Option<Box<dyn Fn(&str)>>>>;
 
@@ -54,6 +55,9 @@ pub struct Editor {
     column_width: Rc<Cell<i32>>,
     continue_lists: Rc<Cell<bool>>,
     typewriter: Rc<Cell<bool>>,
+    /// Directorio del documento abierto, contra el que se resuelven las
+    /// rutas relativas de las imágenes. `None` = no resolver (placeholder).
+    base_dir: Rc<RefCell<Option<PathBuf>>>,
 }
 
 fn build_tags() -> gtk4::TextTagTable {
@@ -101,6 +105,12 @@ fn build_tags() -> gtk4::TextTagTable {
         .name("html")
         .family("monospace")
         .scale(0.85)
+        .build());
+    // Hueco bajo la línea de una imagen en bloque: ahí se pinta la textura
+    // (o el placeholder) desde MarkdownView.
+    add(gtk4::TextTag::builder()
+        .name("imagegap")
+        .pixels_below_lines(150)
         .build());
 
     // Nota: GtkTextTag:letter-spacing no admite valores negativos, así que el
@@ -318,6 +328,7 @@ fn schedule_decoration(
     buffer: &gtksourceview5::Buffer,
     decoration: &Rc<Cell<Decoration>>,
     generation: &Rc<Cell<u64>>,
+    base_dir: &Rc<RefCell<Option<PathBuf>>>,
     delay: Duration,
 ) {
     let current = generation.get().wrapping_add(1);
@@ -327,16 +338,37 @@ fn schedule_decoration(
     let buffer = buffer.clone();
     let decoration = decoration.clone();
     let generation = generation.clone();
+    let base_dir = base_dir.clone();
     glib::timeout_add_local_once(delay, move || {
         // Si ha llegado otra peticion mientras esperabamos, esta sobra.
         if generation.get() != current {
             return;
         }
-        decorate(&view, &buffer, decoration.get());
+        decorate(&view, &buffer, decoration.get(), &base_dir);
     });
 }
 
-fn decorate(view: &MarkdownView, buffer: &gtksourceview5::Buffer, config: Decoration) {
+/// Resuelve el destino de una imagen contra el directorio del documento.
+/// Las URLs y las rutas absolutas se devuelven tal cual; sin directorio base,
+/// la relativa se devuelve sin resolver (el widget pintará el placeholder).
+/// `~` no se expande.
+fn resolve_image_dest(dest: &str, base_dir: &Option<PathBuf>) -> String {
+    let is_url = dest.starts_with("http://") || dest.starts_with("https://");
+    if is_url || std::path::Path::new(dest).is_absolute() {
+        return dest.to_string();
+    }
+    match base_dir {
+        Some(dir) => dir.join(dest).to_string_lossy().into_owned(),
+        None => dest.to_string(),
+    }
+}
+
+fn decorate(
+    view: &MarkdownView,
+    buffer: &gtksourceview5::Buffer,
+    config: Decoration,
+    base_dir: &Rc<RefCell<Option<PathBuf>>>,
+) {
     let start = buffer.start_iter();
     let end = buffer.end_iter();
     buffer.remove_all_tags(&start, &end);
@@ -434,6 +466,12 @@ fn decorate(view: &MarkdownView, buffer: &gtksourceview5::Buffer, config: Decora
             Ornament::Break { offset } | Ornament::CellSeparator { offset } => {
                 let at = (*offset).min(cap);
                 *offset = byte_to_char[at] as usize;
+            }
+            // Las rutas relativas se resuelven contra el directorio del
+            // documento: el painter solo trabaja con rutas absolutas (o con
+            // URLs, que no carga: pinta el placeholder).
+            Ornament::Image { dest, .. } => {
+                *dest = resolve_image_dest(dest, &base_dir.borrow());
             }
             _ => {}
         }
@@ -565,6 +603,7 @@ impl Editor {
             column_width: Rc::new(Cell::new(720)),
             continue_lists: Rc::new(Cell::new(true)),
             typewriter: Rc::new(Cell::new(false)),
+            base_dir: Rc::new(RefCell::new(None)),
         };
         editor.connect_signals();
         editor
@@ -596,20 +635,24 @@ impl Editor {
         let view = self.view.downgrade();
         let decoration = Rc::downgrade(&self.decoration);
         let generation = Rc::downgrade(&self.generation);
+        let base_dir = Rc::downgrade(&self.base_dir);
         adw::StyleManager::default().connect_dark_notify(move |sm| {
-            let (tags, buffer, view, decoration, generation) = match (
+            let (tags, buffer, view, decoration, generation, base_dir) = match (
                 tags.upgrade(),
                 buffer.upgrade(),
                 view.upgrade(),
                 decoration.upgrade(),
                 generation.upgrade(),
+                base_dir.upgrade(),
             ) {
-                (Some(t), Some(b), Some(v), Some(d), Some(g)) => (t, b, v, d, g),
+                (Some(t), Some(b), Some(v), Some(d), Some(g), Some(dir)) => {
+                    (t, b, v, d, g, dir)
+                }
                 _ => return,
             };
             apply_scheme(&buffer, sm.is_dark());
             apply_theme(&tags, &view, sm.is_dark());
-            schedule_decoration(&view, &buffer, &decoration, &generation, Duration::ZERO);
+            schedule_decoration(&view, &buffer, &decoration, &generation, &base_dir, Duration::ZERO);
         });
 
         // Las señales del buffer viven tanto como el buffer, y la vista posee
@@ -618,6 +661,7 @@ impl Editor {
         let generation = self.generation.clone();
         let last_line = self.last_line.clone();
         let decoration = self.decoration.clone();
+        let base_dir = self.base_dir.clone();
         let view = self.view.downgrade();
         self.buffer.connect_changed(move |buf| {
             let text = buf.text(&buf.start_iter(), &buf.end_iter(), true);
@@ -631,6 +675,7 @@ impl Editor {
                     buf,
                     &decoration,
                     &generation,
+                    &base_dir,
                     Duration::from_millis(45),
                 );
             }
@@ -731,8 +776,17 @@ impl Editor {
             &self.buffer,
             &self.decoration,
             &self.generation,
+            &self.base_dir,
             Duration::ZERO,
         );
+    }
+
+    /// Directorio del documento, contra el que se resuelven las rutas
+    /// relativas de las imágenes. `None` = documento sin fichero: no se
+    /// resuelven y se pinta el placeholder. Programa una redecoración.
+    pub fn set_base_dir(&self, dir: Option<PathBuf>) {
+        *self.base_dir.borrow_mut() = dir;
+        self.refresh();
     }
 
     pub fn connect_changed<F: Fn(&str) + 'static>(&self, callback: F) {

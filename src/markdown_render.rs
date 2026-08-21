@@ -142,10 +142,22 @@ pub fn ornaments_for(ornaments: &[Ornament], vis: MarkupVisibility) -> Vec<Ornam
         .collect()
 }
 
+/// Imagen detectada en el fuente. Los offsets son en bytes; `line` es la
+/// línea lógica (empieza en 0) que la contiene.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ImageRef {
+    pub line: usize,
+    pub start: usize,
+    pub end: usize,
+    pub dest: String,
+    pub alt: String,
+}
+
 #[derive(Debug, Default)]
 pub struct Analysis {
     pub spans: Vec<Span>,
     pub ornaments: Vec<Ornament>,
+    pub images: Vec<ImageRef>,
 }
 
 fn style(start: usize, end: usize, tag: &'static str) -> Span {
@@ -397,6 +409,7 @@ pub fn analyze(text: &str) -> Analysis {
     let lines = LineIndex::new(text);
     let mut spans: Vec<Span> = Vec::new();
     let mut ornaments: Vec<Ornament> = Vec::new();
+    let mut images: Vec<ImageRef> = Vec::new();
     let mut list_depth = 0usize;
     let mut table_depth = 0usize;
 
@@ -479,13 +492,45 @@ pub fn analyze(text: &str) -> Analysis {
                     }
                 }
             }
-            Event::Start(Tag::Image { .. }) => {
+            Event::Start(Tag::Image { dest_url, .. }) => {
                 spans.push(style(range.start, range.end, "link"));
                 let src = &text[range.start..range.end];
                 if src.starts_with("![") {
                     if let Some(idx) = src.rfind("](") {
                         spans.push(marker(range.start, range.start + 2));
                         spans.push(marker(range.start + idx, range.end));
+                    }
+                    // v1: solo imágenes en bloque — las que son el único
+                    // contenido de su línea (salvo espacios). Con texto
+                    // alrededor no se genera nada nuevo. La marca `![alt](src)`
+                    // sigue visible y editable en todos los modos (la imagen
+                    // pintada es aditiva, no sustituye).
+                    let line_start = text[..range.start].rfind('\n').map(|i| i + 1).unwrap_or(0);
+                    let line_end = text[range.end..]
+                        .find('\n')
+                        .map(|i| range.end + i)
+                        .unwrap_or(text.len());
+                    let sola = text[line_start..range.start].trim().is_empty()
+                        && text[range.end..line_end].trim().is_empty();
+                    if sola {
+                        let alt = src
+                            .find(']')
+                            .map(|i| &src[2..i])
+                            .unwrap_or_default()
+                            .to_string();
+                        // pulldown-cmark ya ha resuelto las reference-style.
+                        let dest = dest_url.to_string();
+                        let line = lines.line_of(range.start);
+                        images.push(ImageRef {
+                            line,
+                            start: range.start,
+                            end: range.end,
+                            dest: dest.clone(),
+                            alt: alt.clone(),
+                        });
+                        ornaments.push(Ornament::Image { line, dest, alt });
+                        // Reserva bajo la línea el hueco donde se pinta.
+                        spans.push(style(line_start, line_end, "imagegap"));
                     }
                 }
             }
@@ -696,7 +741,11 @@ pub fn analyze(text: &str) -> Analysis {
         _ => true,
     });
 
-    Analysis { spans, ornaments }
+    Analysis {
+        spans,
+        ornaments,
+        images,
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -1544,6 +1593,75 @@ mod tests {
         assert!(filtrados
             .iter()
             .any(|o| matches!(o, Ornament::CodeBlock { .. })));
+    }
+
+    #[test]
+    fn imagen_sola_en_su_linea_genera_referencia_adorno_y_hueco() {
+        let text = "![gato](/tmp/g.png)\n";
+        let a = analyze(text);
+        assert_eq!(
+            a.images,
+            vec![ImageRef {
+                line: 0,
+                start: 0,
+                end: 19,
+                dest: "/tmp/g.png".to_string(),
+                alt: "gato".to_string(),
+            }]
+        );
+        assert!(a.ornaments.contains(&Ornament::Image {
+            line: 0,
+            dest: "/tmp/g.png".to_string(),
+            alt: "gato".to_string(),
+        }));
+        // El hueco lo reserva el span de estilo `imagegap`, sobre la línea.
+        assert_eq!(find(&a.spans, "imagegap").len(), 1);
+        // La marca sigue siendo eso, una marca: visible y editable.
+        assert_eq!(
+            syntax(text),
+            vec![(0, 2, SpanKind::Marker), (6, 19, SpanKind::Marker)]
+        );
+    }
+
+    #[test]
+    fn imagen_con_texto_alrededor_no_genera_nada_nuevo() {
+        let text = "ver ![gato](/tmp/g.png) ya\n";
+        let a = analyze(text);
+        assert!(a.images.is_empty());
+        assert!(!a
+            .ornaments
+            .iter()
+            .any(|o| matches!(o, Ornament::Image { .. })));
+        assert!(find(&a.spans, "imagegap").is_empty());
+        // Pero la imagen sigue decorada como hasta ahora.
+        assert_eq!(
+            syntax(text),
+            vec![(4, 6, SpanKind::Marker), (10, 23, SpanKind::Marker)]
+        );
+    }
+
+    #[test]
+    fn imagen_por_referencia_resuelve_el_destino() {
+        let text = "![gato][id]\n\n[id]: /tmp/g.png\n";
+        let a = analyze(text);
+        assert_eq!(a.images.len(), 1);
+        assert_eq!(a.images[0].dest, "/tmp/g.png");
+        assert_eq!(a.images[0].alt, "gato");
+        assert!(a.ornaments.iter().any(
+            |o| matches!(o, Ornament::Image { dest, .. } if dest == "/tmp/g.png")
+        ));
+    }
+
+    #[test]
+    fn los_adornos_aditivos_se_pintan_tambien_en_atenuar() {
+        let a = analyze("# T\n\n![gato](/tmp/g.png)\n");
+        let filtrados = ornaments_for(&a.ornaments, MarkupVisibility::Dim);
+        assert!(filtrados
+            .iter()
+            .any(|o| matches!(o, Ornament::HeadingRule { .. })));
+        assert!(filtrados
+            .iter()
+            .any(|o| matches!(o, Ornament::Image { .. })));
     }
 
     #[test]
