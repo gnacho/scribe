@@ -123,6 +123,12 @@ pub struct AppSettings {
     settings: Option<gio::Settings>,
 }
 
+/// Registra un fallo al escribir una clave (p. ej. bloqueada por dconf):
+/// sin esto, la preferencia parecería aplicarse y no se habría guardado.
+fn log_set_error(key: &str, e: glib::BoolError) {
+    glib::warning!("scribe: no se pudo guardar la clave «{key}» en GSettings: {e}");
+}
+
 macro_rules! prop {
     ($get:ident, $set:ident, $key:literal, i32, $default:expr) => {
         pub fn $get(&self) -> i32 {
@@ -130,7 +136,9 @@ macro_rules! prop {
         }
         pub fn $set(&self, v: i32) {
             self.set(|s| {
-                let _ = s.set_int($key, v);
+                if let Err(e) = s.set_int($key, v) {
+                    log_set_error($key, e);
+                }
             });
         }
     };
@@ -140,7 +148,9 @@ macro_rules! prop {
         }
         pub fn $set(&self, v: f64) {
             self.set(|s| {
-                let _ = s.set_double($key, v);
+                if let Err(e) = s.set_double($key, v) {
+                    log_set_error($key, e);
+                }
             });
         }
     };
@@ -150,7 +160,9 @@ macro_rules! prop {
         }
         pub fn $set(&self, v: bool) {
             self.set(|s| {
-                let _ = s.set_boolean($key, v);
+                if let Err(e) = s.set_boolean($key, v) {
+                    log_set_error($key, e);
+                }
             });
         }
     };
@@ -160,7 +172,9 @@ macro_rules! prop {
         }
         pub fn $set(&self, v: &str) {
             self.set(|s| {
-                let _ = s.set_string($key, v);
+                if let Err(e) = s.set_string($key, v) {
+                    log_set_error($key, e);
+                }
             });
         }
     };
@@ -245,7 +259,9 @@ impl AppSettings {
     }
     pub fn set_markup_visibility(&self, v: MarkupVisibility) {
         self.set(|s| {
-            let _ = s.set_string("markup-visibility", v.nick());
+            if let Err(e) = s.set_string("markup-visibility", v.nick()) {
+                log_set_error("markup-visibility", e);
+            }
         });
     }
 
@@ -256,7 +272,9 @@ impl AppSettings {
     }
     pub fn set_font_family(&self, v: FontFamily) {
         self.set(|s| {
-            let _ = s.set_string("font-family", v.nick());
+            if let Err(e) = s.set_string("font-family", v.nick()) {
+                log_set_error("font-family", e);
+            }
         });
     }
 
@@ -280,7 +298,9 @@ impl AppSettings {
             _ => "system",
         };
         self.set(|s| {
-            let _ = s.set_string("color-scheme", nick);
+            if let Err(e) = s.set_string("color-scheme", nick) {
+                log_set_error("color-scheme", e);
+            }
         });
     }
 
@@ -300,13 +320,17 @@ impl AppSettings {
         list.truncate(20);
         self.set(|s| {
             let refs: Vec<&str> = list.iter().map(|s| s.as_str()).collect();
-            let _ = s.set_strv("recent-files", refs);
+            if let Err(e) = s.set_strv("recent-files", refs) {
+                log_set_error("recent-files", e);
+            }
         });
     }
 
     pub fn clear_recent_files(&self) {
         self.set(|s| {
-            let _ = s.set_strv("recent-files", Vec::<&str>::new());
+            if let Err(e) = s.set_strv("recent-files", Vec::<&str>::new()) {
+                log_set_error("recent-files", e);
+            }
         });
     }
 }

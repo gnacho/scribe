@@ -967,8 +967,12 @@ impl ScribeWindow {
             let current_file = current_file.clone();
             let is_modified = is_modified.clone();
             let update_title = update_title.clone();
+            let toast = toast.clone();
             let alive = alive.clone();
             let elapsed = Cell::new(0i32);
+            // El temporizador se repite: se avisa una vez por racha de fallos,
+            // no en cada ciclo.
+            let failed = Cell::new(false);
             glib::timeout_add_seconds_local(5, move || {
                 if !alive.get() {
                     return glib::ControlFlow::Break;
@@ -981,9 +985,19 @@ impl ScribeWindow {
                 if settings.autosave() && is_modified.get() {
                     let path = current_file.borrow().clone();
                     if let Some(path) = path {
-                        if std::fs::write(&path, editor.text()).is_ok() {
-                            is_modified.set(false);
-                            update_title();
+                        match std::fs::write(&path, editor.text()) {
+                            Ok(()) => {
+                                is_modified.set(false);
+                                update_title();
+                                failed.set(false);
+                            }
+                            // Sin este aviso el usuario confía en una copia
+                            // automática que no existe.
+                            Err(e) => {
+                                if !failed.replace(true) {
+                                    toast(&format!("No se pudo autoguardar: {e}"));
+                                }
+                            }
                         }
                     }
                 }
