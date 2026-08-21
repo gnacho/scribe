@@ -54,7 +54,7 @@
     </release>
     <release version="0.1.0" type="development" date="2026-08-03">
       <description>
-        <p>Versión 1.0 con editor nativo SourceView5, preview y sidebar.</p>
+        <p>Primera versión con editor nativo SourceView5, preview y sidebar.</p>
       </description>
     </release>
   </releases>
