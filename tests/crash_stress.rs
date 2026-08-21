@@ -7,6 +7,12 @@
 //!
 //! Ejecutar: xvfb-run -a cargo test --test crash_stress -- --ignored --nocapture
 
+// Al incluir los módulos de la app vía #[path] en este target de test solo se
+// ejercita una parte de su API; el resto aparece como código muerto aunque la
+// aplicación sí lo use. Silenciamos dead_code para que `clippy --all-targets
+// -D warnings` siga siendo una puerta válida.
+#![allow(dead_code)]
+
 #[path = "../src/editor.rs"]
 mod editor;
 #[path = "../src/markdown_render.rs"]
@@ -81,7 +87,7 @@ fn pump(ctx: &gtk4::glib::MainContext, ms: u64) {
 #[ignore = "requiere display: xvfb-run -a cargo test --test crash_stress -- --ignored --nocapture"]
 fn abrir_documento_grande_no_aborta() {
     gtk4::init().expect("GTK necesita un display; ejecuta bajo xvfb-run");
-    libadwaita::init();
+    libadwaita::init().expect("libadwaita init");
 
     let editor = Editor::new();
     let win = gtk4::Window::builder()
