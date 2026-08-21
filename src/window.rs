@@ -360,9 +360,15 @@ impl ScribeWindow {
             let current_file = current_file.clone();
             let is_modified = is_modified.clone();
             let title_widget = title_widget.clone();
-            let window = window.clone();
+            // Débil: este closure acaba dentro de las señales del editor, que
+            // cuelga de la propia ventana; en fuerte sería un ciclo y la
+            // ventana no se liberaría jamás.
+            let window = window.downgrade();
             let editor = editor.clone();
             Rc::new(move || {
+                let Some(window) = window.upgrade() else {
+                    return;
+                };
                 let file = current_file.borrow();
                 let (name, subtitle) = match file.as_ref() {
                     Some(p) => (
@@ -657,12 +663,17 @@ impl ScribeWindow {
         apply_settings();
 
         {
-            let window_clone = window.clone();
+            // Débil: la ventana posee sus acciones; una captura fuerte aquí
+            // sería un ciclo ventana↔acción.
+            let window_clone = window.downgrade();
             let settings = settings.clone();
             let apply_settings = apply_settings.clone();
             let action_focus = action_focus.clone();
             let action_typewriter = action_typewriter.clone();
             action_preferences.connect_activate(move |_, _| {
+                let Some(window_clone) = window_clone.upgrade() else {
+                    return;
+                };
                 let action_focus = action_focus.clone();
                 let action_typewriter = action_typewriter.clone();
                 let settings_inner = settings.clone();
@@ -724,7 +735,8 @@ impl ScribeWindow {
 
         // ---- abrir / guardar ----
         {
-            let window = window.clone();
+            // Débil: véase action_preferences.
+            let window = window.downgrade();
             let file_manager = file_manager.clone();
             let editor = editor.clone();
             let current_file = current_file.clone();
@@ -735,6 +747,9 @@ impl ScribeWindow {
             let refresh_recents = refresh_recents.clone();
             let toast = toast.clone();
             action_open.connect_activate(move |_, _| {
+                let Some(window) = window.upgrade() else {
+                    return;
+                };
                 let editor = editor.clone();
                 let current_file = current_file.clone();
                 let is_modified = is_modified.clone();
@@ -760,7 +775,8 @@ impl ScribeWindow {
         }
 
         let make_save = |force_dialog: bool| {
-            let window = window.clone();
+            // Débil: véase action_preferences.
+            let window = window.downgrade();
             let file_manager = file_manager.clone();
             let editor = editor.clone();
             let current_file = current_file.clone();
@@ -770,6 +786,9 @@ impl ScribeWindow {
             let refresh_recents = refresh_recents.clone();
             let toast = toast.clone();
             move |_: &gio::SimpleAction, _: Option<&glib::Variant>| {
+                let Some(window) = window.upgrade() else {
+                    return;
+                };
                 let content = editor.text();
                 let path = if force_dialog {
                     None
@@ -855,8 +874,13 @@ impl ScribeWindow {
 
         // ---- acerca de ----
         {
-            let window = window.clone();
+            // Débil: la ventana posee la acción; en fuerte era un ciclo
+            // ventana↔acción y ninguna ScribeWindow llegaba a liberarse.
+            let window = window.downgrade();
             action_about.connect_activate(move |_, _| {
+                let Some(window) = window.upgrade() else {
+                    return;
+                };
                 adw::AboutWindow::builder()
                     .transient_for(&window)
                     .modal(true)

@@ -548,49 +548,66 @@ impl Editor {
             });
         }
 
-        let tags = self.tags.clone();
-        let buffer = self.buffer.clone();
-        let view = self.view.clone();
-        let decoration = self.decoration.clone();
-        let generation = self.generation.clone();
+        // El StyleManager vive toda la aplicación: capturar los widgets en
+        // fuerte impediría liberar este editor al cerrar su ventana.
+        let tags = self.tags.downgrade();
+        let buffer = self.buffer.downgrade();
+        let view = self.view.downgrade();
+        let decoration = Rc::downgrade(&self.decoration);
+        let generation = Rc::downgrade(&self.generation);
         adw::StyleManager::default().connect_dark_notify(move |sm| {
+            let (tags, buffer, view, decoration, generation) = match (
+                tags.upgrade(),
+                buffer.upgrade(),
+                view.upgrade(),
+                decoration.upgrade(),
+                generation.upgrade(),
+            ) {
+                (Some(t), Some(b), Some(v), Some(d), Some(g)) => (t, b, v, d, g),
+                _ => return,
+            };
             apply_scheme(&buffer, sm.is_dark());
             apply_theme(&tags, &view, sm.is_dark());
             schedule_decoration(&view, &buffer, &decoration, &generation, Duration::ZERO);
         });
 
+        // Las señales del buffer viven tanto como el buffer, y la vista posee
+        // el buffer: capturar la vista en débil rompe el ciclo.
         let on_changed = self.on_changed.clone();
         let generation = self.generation.clone();
         let last_line = self.last_line.clone();
         let decoration = self.decoration.clone();
-        let view = self.view.clone();
+        let view = self.view.downgrade();
         self.buffer.connect_changed(move |buf| {
             let text = buf.text(&buf.start_iter(), &buf.end_iter(), true);
             if let Some(cb) = on_changed.borrow().as_ref() {
                 cb(&text);
             }
             last_line.set(buf.iter_at_offset(buf.cursor_position()).line());
-            schedule_decoration(
-                &view,
-                buf,
-                &decoration,
-                &generation,
-                Duration::from_millis(45),
-            );
+            if let Some(view) = view.upgrade() {
+                schedule_decoration(
+                    &view,
+                    buf,
+                    &decoration,
+                    &generation,
+                    Duration::from_millis(45),
+                );
+            }
         });
 
         let last_line = self.last_line.clone();
         let decoration = self.decoration.clone();
         let generation = self.generation.clone();
         let typewriter = self.typewriter.clone();
-        let view = self.view.clone();
+        let view = self.view.downgrade();
         self.buffer.connect_cursor_position_notify(move |buf| {
             if typewriter.get() {
-                let view = view.clone();
-                let mark = buf.get_insert();
-                glib::idle_add_local_once(move || {
-                    view.scroll_to_mark(&mark, 0.0, true, 0.0, 0.5);
-                });
+                if let Some(view) = view.upgrade() {
+                    let mark = buf.get_insert();
+                    glib::idle_add_local_once(move || {
+                        view.scroll_to_mark(&mark, 0.0, true, 0.0, 0.5);
+                    });
+                }
             }
             let line = buf.iter_at_offset(buf.cursor_position()).line();
             if last_line.get() == line {
@@ -601,7 +618,9 @@ impl Editor {
             // En «ocultar» y «atenuar» el marcado no depende del cursor; solo
             // hay que repintar si algo lo sigue.
             if config.markup == MarkupVisibility::Focus || config.focus_mode {
-                schedule_decoration(&view, buf, &decoration, &generation, Duration::ZERO);
+                if let Some(view) = view.upgrade() {
+                    schedule_decoration(&view, buf, &decoration, &generation, Duration::ZERO);
+                }
             }
         });
 
