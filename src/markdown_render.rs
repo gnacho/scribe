@@ -795,6 +795,21 @@ pub fn format_tables(text: &str) -> Option<String> {
         table.push(delim);
         table.extend(body.iter().map(|row| render(row)));
 
+        // Conserva el EOL original de cada línea: en un documento CRLF las
+        // líneas rehechas deben seguir llevando su "\r" (out se une con
+        // "\n"), si no el fichero acaba con finales de línea mezclados.
+        let table: Vec<String> = table
+            .into_iter()
+            .enumerate()
+            .map(|(k, l)| {
+                if lines[i + k].ends_with('\r') {
+                    format!("{l}\r")
+                } else {
+                    l
+                }
+            })
+            .collect();
+
         if table != lines[i..end] {
             changed = true;
         }
@@ -1234,6 +1249,21 @@ mod tests {
         let entrada = "| a | b | c |\n|---|---|---|\n| 1 | 2 |\n";
         let esperado = "| a   | b   | c   |\n| --- | --- | --- |\n| 1   | 2   |     |\n";
         assert_eq!(format_tables(entrada).unwrap(), esperado);
+    }
+
+    #[test]
+    fn alinear_conserva_los_finales_crlf() {
+        // GtkTextBuffer conserva los \r al abrir ficheros CRLF: las líneas
+        // rehechas no pueden salir con LF o el documento queda con EOL mixto.
+        let entrada = "| a | b |\r\n|---|---|\r\n| 1 | 22 |\r\n\r\nTexto\r\n";
+        let esperado = "| a   | b   |\r\n| --- | --- |\r\n| 1   | 22  |\r\n\r\nTexto\r\n";
+        assert_eq!(format_tables(entrada).unwrap(), esperado);
+    }
+
+    #[test]
+    fn alinear_una_tabla_crlf_ya_alineada_devuelve_none() {
+        let entrada = "| a   | b   |\r\n| --- | --- |\r\n| 1   | 2   |\r\n";
+        assert_eq!(format_tables(entrada), None);
     }
 
     #[test]
