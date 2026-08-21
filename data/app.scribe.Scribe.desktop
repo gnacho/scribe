@@ -5,4 +5,6 @@ Exec=scribe %F
 Icon=app.scribe.Scribe
 Type=Application
 Categories=GNOME;GTK;Office;WordProcessor;
+MimeType=text/markdown;text/x-markdown;text/plain;
+Keywords=markdown;editor;notes;
 StartupNotify=true
