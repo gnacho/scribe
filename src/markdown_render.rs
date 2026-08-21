@@ -1078,16 +1078,16 @@ mod tests {
     }
 
     #[test]
-    fn br_dentro_de_tabla_se_oculta_y_genera_adorno() {
+    fn br_dentro_de_tabla_se_sustituye_y_genera_adorno() {
         let text = "| a | b |\n|---|---|\n| x<br>y | z |\n";
         let a = analyze(text);
-        // El `<br>` debe quedar como marca reemplazada (oculta), no como html.
+        // El `<br>` debe quedar como marca sustituida (Replaced), no como html.
         let brs = a
             .spans
             .iter()
             .filter(|s| s.kind == SpanKind::Replaced && text[s.start..s.end].contains("br"))
             .count();
-        assert_eq!(brs, 1, "debe haber exactamente un <br> oculto");
+        assert_eq!(brs, 1, "debe haber exactamente un <br> sustituido");
         assert!(a
             .ornaments
             .iter()
