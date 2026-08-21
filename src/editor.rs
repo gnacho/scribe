@@ -159,6 +159,11 @@ fn build_tags() -> gtk4::TextTagTable {
         .weight(700)
         .build());
 
+    // Registrado pero NUNCA aplicado mientras
+    // `settings::gtk_hides_invisible_safely()` sea falso: GTK aborta en
+    // `gtk_text_iter_set_visible_line_index` cuando el buffer contiene texto
+    // invisible (GNOME/gtk#8346; el fix, MR !10228, sigue sin publicarse).
+    // Se conserva para reactivar el modo «ocultar» con un GTK sano.
     add(gtk4::TextTag::builder()
         .name("syn_hidden")
         .invisible(true)
@@ -353,7 +358,10 @@ fn decorate(view: &MarkdownView, buffer: &gtksourceview5::Buffer, config: Decora
 
     let analysis = analyze(&text);
     let cursor_line = buffer.iter_at_offset(buffer.cursor_position()).line();
-    let dim = config.markup == MarkupVisibility::Dim;
+    // GTK aborta con texto invisible (GNOME/gtk#8346; MR !10228 sin publicar),
+    // así que mientras `gtk_hides_invisible_safely()` sea falso la visibilidad
+    // efectiva es siempre «atenuar» y `dim` es siempre cierto: NADA se oculta.
+    let dim = config.markup.effective() == MarkupVisibility::Dim;
 
     for span in &analysis.spans {
         let (from, to) = (byte_to_char[span.start], byte_to_char[span.end]);
@@ -364,26 +372,26 @@ fn decorate(view: &MarkdownView, buffer: &gtksourceview5::Buffer, config: Decora
         let end_iter = buffer.iter_at_offset(to);
         let name = match span.kind {
             SpanKind::Style => span.tag,
-            // Las marcas sustituidas por un adorno no se revelan al pasar el
-            // cursor: hacerlo movería el texto de sitio en cada línea.
-            SpanKind::Replaced => {
+            // Con la mitigación de GNOME/gtk#8346 activa, `dim` es siempre
+            // cierto y las marcas (sustituidas o no) se atenúan sin ocultar.
+            // La rama `syn_hidden` es la puerta de futuro: solo se alcanza
+            // con un GTK que incluya el fix (véase gtk_hides_invisible_safely).
+            SpanKind::Replaced | SpanKind::Marker => {
                 if dim {
                     "syn_shown"
                 } else {
                     "syn_hidden"
                 }
             }
-            SpanKind::Marker => {
-                // invisible descuadra la maquetación de GTK combinado con
-                // bloques de código y adornos. Se atenúa sin ocultar.
-                "syn_shown"
-            }
         };
         buffer.apply_tag_by_name(name, &start_iter, &end_iter);
     }
 
-    // En modo «atenuar» las marcas están a la vista, así que dibujar encima
-    // duplicaría la información.
+    // Sin texto oculto no hay hueco donde dibujar: un adorno sustitutivo se
+    // pintaría encima del marcado visible, duplicándolo. Mientras dure la
+    // mitigación (dim siempre cierto) no se generan adornos, igual que en el
+    // modo «atenuar» de antes; al reactivarse el ocultado, aquí vuelve
+    // `analysis.ornaments`.
     let mut ornaments = if dim { Vec::new() } else { analysis.ornaments };
     // Los adornos van por número de línea salvo `Break` y `CellSeparator`, que
     // guardan byte offsets: el widget indexa por caracteres, así que convertimos.

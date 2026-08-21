@@ -14,6 +14,13 @@
 //! El widget no sabe nada de Scribe: recibe una lista de [`Ornament`] y una
 //! paleta, y dibuja. Junto con [`crate::markdown_render`] forma una pieza
 //! autocontenida, sin dependencias de la aplicación.
+//!
+//! **Aviso (mitigación GNOME/gtk#8346):** mientras
+//! [`crate::settings::gtk_hides_invisible_safely`] devuelva `false`, el editor
+//! no oculta texto y pasa siempre una lista de adornos vacía, así que todo el
+//! dibujado de aquí abajo queda inactivo. Se conserva a propósito: los adornos
+//! vuelven cuando GTK publique el fix (MR !10228) o se adopte una alternativa
+//! de ocultado sin `invisible` (p. ej. escala ≈ 0).
 
 use gtk4::prelude::*;
 use gtk4::subclass::prelude::*;

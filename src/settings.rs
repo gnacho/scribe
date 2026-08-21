@@ -11,7 +11,37 @@ pub enum MarkupVisibility {
     Dim,
 }
 
+/// ¿Puede el GTK del sistema ocultar texto sin riesgo de aborto?
+///
+/// GTK aborta en `gtk_text_iter_set_visible_line_index` («byte index off the
+/// end of the line») cuando un buffer contiene texto invisible y su
+/// maquetación perezosa conserva índices calculados con otra visibilidad
+/// (GNOME/gtk#8346; el fix, MR !10228, aún no está publicado en ninguna
+/// versión). Mientras no exista una versión con el parche — verificable con
+/// el test canario `tests/gtk_invisible_canary.rs` — esto devuelve `false`
+/// y nada en el editor se oculta.
+///
+/// Al publicarse el fix en GTK, hay que comparar aquí
+/// `gtk4::major_version()`/`minor_version()`/`micro_version()` contra la
+/// primera versión que lo incluya.
+pub fn gtk_hides_invisible_safely() -> bool {
+    false
+}
+
 impl MarkupVisibility {
+    /// Lo que el editor aplica de verdad. Mientras GTK no pueda ocultar texto
+    /// sin abortar (véase [`gtk_hides_invisible_safely`]), «ocultar» y «al
+    /// enfocar» se comportan como «atenuar». El valor guardado en GSettings
+    /// no se toca: si el GTK del sistema se actualiza con el fix, la opción
+    /// elegida por el usuario vuelve a funcionar sola.
+    pub fn effective(self) -> Self {
+        if gtk_hides_invisible_safely() {
+            self
+        } else {
+            Self::Dim
+        }
+    }
+
     fn from_nick(nick: &str) -> Self {
         match nick {
             "hidden" => Self::Hidden,
