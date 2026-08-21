@@ -83,7 +83,7 @@ const CELL_SEPARATOR_THICKNESS: f32 = 1.0;
 /// cortadas a mitad del bloque.
 const BLOCK_OVERSHOOT: f32 = 4000.0;
 /// Alto del hueco que el tag `imagegap` reserva bajo la línea de una imagen.
-const IMAGE_GAP_HEIGHT: f32 = 150.0;
+const IMAGE_GAP_HEIGHT: f32 = crate::markdown_render::IMAGE_GAP_HEIGHT as f32;
 /// Alto máximo de la imagen pintada en ese hueco (se escala manteniendo ratio).
 const IMAGE_MAX_HEIGHT: f32 = 144.0;
 /// Entradas máximas de la caché de texturas; al superarlo se vacía entera.
@@ -480,7 +480,11 @@ mod imp {
                     }
                     None => {
                         // Placeholder: texto pequeño y gris, sin borde.
-                        let label = if alt.is_empty() { dest.as_str() } else { alt.as_str() };
+                        let label = if alt.is_empty() {
+                            dest.as_str()
+                        } else {
+                            alt.as_str()
+                        };
                         let layout =
                             view.create_pango_layout(Some(&format!("[ imagen: {label} ]")));
                         if let Some(desc) = view.pango_context().font_description() {

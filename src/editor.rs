@@ -95,7 +95,10 @@ fn build_tags() -> gtk4::TextTagTable {
         .build());
     // Texto de la fila de cabecera de una tabla: negrita, sin fondo (la caja
     // del bloque ya lo da).
-    add(gtk4::TextTag::builder().name("tablehead").weight(700).build());
+    add(gtk4::TextTag::builder()
+        .name("tablehead")
+        .weight(700)
+        .build());
     add(gtk4::TextTag::builder()
         .name("fence")
         .family("monospace")
@@ -110,7 +113,7 @@ fn build_tags() -> gtk4::TextTagTable {
     // (o el placeholder) desde MarkdownView.
     add(gtk4::TextTag::builder()
         .name("imagegap")
-        .pixels_below_lines(150)
+        .pixels_below_lines(crate::markdown_render::IMAGE_GAP_HEIGHT)
         .build());
 
     // Nota: GtkTextTag:letter-spacing no admite valores negativos, así que el
@@ -174,6 +177,13 @@ fn build_tags() -> gtk4::TextTagTable {
         .invisible(true)
         .build());
     add(gtk4::TextTag::builder().name("syn_shown").build());
+
+    // El modo foco atenúa todo salvo el párrafo actual. Va DESPUÉS de todos
+    // los tags de estilo para pisar su color, pero ANTES de `syn_shrink`: si
+    // no, su foreground opaco haría visibles las marcas encogidas (motas de
+    // ~1px) en los párrafos atenuados.
+    add(gtk4::TextTag::builder().name("unfocused").build());
+
     // Encoger en vez de ocultar (mitigación de GNOME/gtk#8346): la marca
     // sustituida sigue en la maquetación con escala mínima y totalmente
     // transparente, así que el texto nunca queda excluido del layout y el
@@ -184,10 +194,6 @@ fn build_tags() -> gtk4::TextTagTable {
         .scale(0.05)
         .foreground_rgba(&rgba(0x000000, 0.0))
         .build());
-
-    // El modo foco atenúa todo salvo el párrafo actual: va el último para pisar
-    // el color de cualquier otro tag.
-    add(gtk4::TextTag::builder().name("unfocused").build());
 
     table
 }
@@ -645,9 +651,7 @@ impl Editor {
                 generation.upgrade(),
                 base_dir.upgrade(),
             ) {
-                (Some(t), Some(b), Some(v), Some(d), Some(g), Some(dir)) => {
-                    (t, b, v, d, g, dir)
-                }
+                (Some(t), Some(b), Some(v), Some(d), Some(g), Some(dir)) => (t, b, v, d, g, dir),
                 _ => return,
             };
             apply_scheme(&buffer, sm.is_dark());

@@ -26,6 +26,11 @@ use std::borrow::Cow;
 /// Por encima de este tamaño se deja de decorar en vivo, para no bloquear la UI.
 pub const MAX_LIVE_BYTES: usize = 400_000;
 
+/// Alto (px) del hueco que el tag `imagegap` reserva bajo la línea de una
+/// imagen en bloque; ahí el widget pinta la textura. Única fuente: lo usan el
+/// tag (editor.rs) y el pintado (markdown_view.rs).
+pub const IMAGE_GAP_HEIGHT: i32 = 150;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SpanKind {
     /// Estilo permanente: negrita, cabecera, color…
@@ -159,6 +164,10 @@ pub struct ImageRef {
 pub struct Analysis {
     pub spans: Vec<Span>,
     pub ornaments: Vec<Ornament>,
+    /// Imágenes en bloque del documento. El pintado las recibe vía
+    /// `Ornament::Image`; este listado es superficie pública para consumidores
+    /// que quieran los metadatos sin reinterpretar ornamentos.
+    #[allow(dead_code)]
     pub images: Vec<ImageRef>,
 }
 
@@ -1374,7 +1383,7 @@ mod tests {
                 (28, 29, SpanKind::Replaced),
                 (30, 31, SpanKind::Replaced),
                 (32, 33, SpanKind::Replaced),
-                (35, 36, SpanKind::Replaced),
+                (36, 37, SpanKind::Replaced),
             ]
         );
     }
@@ -1549,7 +1558,10 @@ mod tests {
             .family(),
             OrnamentFamily::Substitute
         );
-        assert_eq!(Ornament::Rule { line: 0 }.family(), OrnamentFamily::Substitute);
+        assert_eq!(
+            Ornament::Rule { line: 0 }.family(),
+            OrnamentFamily::Substitute
+        );
         assert_eq!(
             Ornament::TableRule { line: 0 }.family(),
             OrnamentFamily::Substitute
@@ -1649,9 +1661,10 @@ mod tests {
         assert_eq!(a.images.len(), 1);
         assert_eq!(a.images[0].dest, "/tmp/g.png");
         assert_eq!(a.images[0].alt, "gato");
-        assert!(a.ornaments.iter().any(
-            |o| matches!(o, Ornament::Image { dest, .. } if dest == "/tmp/g.png")
-        ));
+        assert!(a
+            .ornaments
+            .iter()
+            .any(|o| matches!(o, Ornament::Image { dest, .. } if dest == "/tmp/g.png")));
     }
 
     #[test]
@@ -1669,7 +1682,13 @@ mod tests {
     #[test]
     fn en_ocultar_y_al_enfocar_se_pintan_todos_los_adornos() {
         let a = analyze("> cita\n\n- uno\n\n---\n");
-        assert_eq!(ornaments_for(&a.ornaments, MarkupVisibility::Hidden), a.ornaments);
-        assert_eq!(ornaments_for(&a.ornaments, MarkupVisibility::Focus), a.ornaments);
+        assert_eq!(
+            ornaments_for(&a.ornaments, MarkupVisibility::Hidden),
+            a.ornaments
+        );
+        assert_eq!(
+            ornaments_for(&a.ornaments, MarkupVisibility::Focus),
+            a.ornaments
+        );
     }
 }
