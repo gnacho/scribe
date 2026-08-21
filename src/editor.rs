@@ -408,15 +408,23 @@ fn decorate(view: &MarkdownView, buffer: &gtksourceview5::Buffer, config: Decora
     view.set_ornaments(ornaments, line_count);
 
     if config.focus_mode {
-        let (first, last) = paragraph_bounds(buffer, cursor_line);
-        if let Some(para_start) = buffer.iter_at_line(first) {
-            buffer.apply_tag_by_name("unfocused", &buffer.start_iter(), &para_start);
-        }
-        let after = buffer
-            .iter_at_line(last + 1)
-            .unwrap_or_else(|| buffer.end_iter());
-        buffer.apply_tag_by_name("unfocused", &after, &buffer.end_iter());
+        apply_focus_shade(buffer, cursor_line);
     }
+}
+
+/// Atenúa todo salvo el párrafo del cursor (modo foco). Es barato — solo
+/// mueve un tag, sin re-analizar el documento — y por eso puede llamarse en
+/// cada cambio de línea del cursor.
+fn apply_focus_shade(buffer: &gtksourceview5::Buffer, cursor_line: i32) {
+    buffer.remove_tag_by_name("unfocused", &buffer.start_iter(), &buffer.end_iter());
+    let (first, last) = paragraph_bounds(buffer, cursor_line);
+    if let Some(para_start) = buffer.iter_at_line(first) {
+        buffer.apply_tag_by_name("unfocused", &buffer.start_iter(), &para_start);
+    }
+    let after = buffer
+        .iter_at_line(last + 1)
+        .unwrap_or_else(|| buffer.end_iter());
+    buffer.apply_tag_by_name("unfocused", &after, &buffer.end_iter());
 }
 
 /// Marcador que continúa una lista, o `None` si la línea no es un elemento.
@@ -597,7 +605,6 @@ impl Editor {
 
         let last_line = self.last_line.clone();
         let decoration = self.decoration.clone();
-        let generation = self.generation.clone();
         let typewriter = self.typewriter.clone();
         let view = self.view.downgrade();
         self.buffer.connect_cursor_position_notify(move |buf| {
@@ -614,13 +621,11 @@ impl Editor {
                 return;
             }
             last_line.set(line);
-            let config = decoration.get();
-            // En «ocultar» y «atenuar» el marcado no depende del cursor; solo
-            // hay que repintar si algo lo sigue.
-            if config.markup == MarkupVisibility::Focus || config.focus_mode {
-                if let Some(view) = view.upgrade() {
-                    schedule_decoration(&view, buf, &decoration, &generation, Duration::ZERO);
-                }
+            // La visibilidad del marcado ya no depende del cursor: lo único
+            // que lo sigue es el atenuado del modo foco, que se re-aplica en
+            // el acto (barato) en vez de programar un decorate() O(n) entero.
+            if decoration.get().focus_mode {
+                apply_focus_shade(buf, line);
             }
         });
 
