@@ -393,26 +393,41 @@ impl ScribeWindow {
             })
         };
 
-        let update_status: Rc<dyn Fn()> = {
+        // Lo barato (posición del cursor) se actualiza en cada evento; los
+        // contadores de palabras/caracteres son O(n) y se calculan dentro del
+        // timeout ya debounced de connect_changed, reutilizando la copia del
+        // texto que se hace para la vista previa y el índice.
+        let update_counts: Rc<dyn Fn(&str)> = {
             let editor = editor.clone();
             let words_label = words_label.clone();
-            let position_button = position_button.clone();
             let props_label = props_label.clone();
-            let goto_spin = goto_spin.clone();
-            Rc::new(move || {
-                let text = editor.text();
+            Rc::new(move |text: &str| {
                 let words = text.split_whitespace().count();
                 let chars = text.chars().count();
                 let lines = editor.line_count();
                 words_label.set_label(&format!("{words} palabras"));
-                let (line, column) = editor.cursor_position();
-                position_button.set_label(&format!("Ln {line}, Col {column}"));
-                goto_spin.set_range(1.0, lines.max(1) as f64);
-                goto_spin.set_value(line as f64);
                 let minutes = (words as f64 / 200.0).ceil().max(1.0) as usize;
                 props_label.set_label(&format!(
                     "Palabras: {words}\nCaracteres: {chars}\nLíneas: {lines}\nLectura: ~{minutes} min"
                 ));
+            })
+        };
+
+        let update_status: Rc<dyn Fn()> = {
+            let editor = editor.clone();
+            let position_button = position_button.clone();
+            let goto_spin = goto_spin.clone();
+            let goto_popover = goto_popover.clone();
+            Rc::new(move || {
+                let lines = editor.line_count();
+                let (line, column) = editor.cursor_position();
+                position_button.set_label(&format!("Ln {line}, Col {column}"));
+                // Con el popover «Ir a la línea» abierto el spin es del
+                // usuario: no pisar lo que está escribiendo.
+                if !goto_popover.is_visible() {
+                    goto_spin.set_range(1.0, lines.max(1) as f64);
+                    goto_spin.set_value(line as f64);
+                }
             })
         };
 
@@ -905,6 +920,7 @@ impl ScribeWindow {
             let is_modified = is_modified.clone();
             let update_title = update_title.clone();
             let update_status = update_status.clone();
+            let update_counts = update_counts.clone();
             let generation = Rc::new(Cell::new(0u64));
             editor.connect_changed(move |text| {
                 if !is_modified.replace(true) {
@@ -920,10 +936,12 @@ impl ScribeWindow {
                 let preview_visible = preview_visible.clone();
                 let toc_list = toc_list.clone();
                 let toc_lines = toc_lines.clone();
+                let update_counts = update_counts.clone();
                 glib::timeout_add_local_once(Duration::from_millis(120), move || {
                     if generation.get() != current {
                         return;
                     }
+                    update_counts(&text);
                     if preview_visible.get() {
                         preview.update(&text);
                     }
@@ -1097,6 +1115,7 @@ impl ScribeWindow {
 
         update_title();
         update_status();
+        update_counts(&editor.text());
         Self { window, load_file }
     }
 
