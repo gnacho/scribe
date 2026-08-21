@@ -69,11 +69,10 @@ fn build_tags() -> gtk4::TextTagTable {
         let builder = gtk4::TextTag::builder().name(name);
         let tag = match name {
             "quote" => builder.style(pango::Style::Italic).build(),
-            // `table` ya no es monoespaciada: deja que el inline (strong, em,
+            // `table` no es monoespaciada: deja que el inline (strong, em,
             // code, links) que genera `analyze` se interprete dentro de las
             // celdas. El padding del fuente (véase `format_tables`) queda como
-            // separación natural; los pipes se atenúan por separado con
-            // `tablepipe`.
+            // separación natural; los pipes son marcas sustituidas.
             "codeblock" => builder.family("monospace").scale(0.9).build(),
             // Sin sangría francesa: la viñeta se dibuja en el canalón, así que
             // todas las líneas del elemento arrancan en el mismo sitio.
@@ -90,13 +89,9 @@ fn build_tags() -> gtk4::TextTagTable {
         .pixels_above_lines(0)
         .pixels_below_lines(0)
         .build());
-    // Los pipes siguen en monoespaciada para que cuadren con el padding del
-    // fuente aunque el contenido de la celda sea proporcional.
-    add(gtk4::TextTag::builder()
-        .name("tablepipe")
-        .family("monospace")
-        .scale(0.9)
-        .build());
+    // Texto de la fila de cabecera de una tabla: negrita, sin fondo (la caja
+    // del bloque ya lo da).
+    add(gtk4::TextTag::builder().name("tablehead").weight(700).build());
     add(gtk4::TextTag::builder()
         .name("fence")
         .family("monospace")
@@ -226,7 +221,7 @@ fn apply_theme(tags: &gtk4::TextTagTable, view: &MarkdownView, dark: bool) {
         set("code", Some("#f0a868"), None);
         set("codeblock", Some("#e4e4e4"), None);
         set("table", Some("#e0e0e0"), None);
-        set("tablepipe", Some("#5f5f5f"), None);
+        set("tablehead", Some("#e0e0e0"), None);
         set("fence", Some("#8a8a8a"), None);
         set("quote", Some("#c2c2c2"), None);
         set("link", Some("#82b8f0"), None);
@@ -248,7 +243,7 @@ fn apply_theme(tags: &gtk4::TextTagTable, view: &MarkdownView, dark: bool) {
         set("code", Some("#a34a00"), None);
         set("codeblock", Some("#1f1f1f"), None);
         set("table", Some("#1f1f1f"), None);
-        set("tablepipe", Some("#c0bfbc"), None);
+        set("tablehead", Some("#1f1f1f"), None);
         set("fence", Some("#8b8a88"), None);
         set("quote", Some("#54535a"), None);
         set("link", Some("#1a6ed8"), None);

@@ -253,6 +253,32 @@ fn line_ranges(text: &str, start: usize, end: usize) -> Vec<(usize, usize)> {
     out
 }
 
+/// Segmentos de texto (offsets relativos a la fila, ya sin espacios a los
+/// lados) de cada celda. Los pipes — incluidos los exteriores — quedan fuera;
+/// los escapados (`\|`) no cortan.
+fn cell_text_ranges(row: &str) -> Vec<(usize, usize)> {
+    let bytes = row.as_bytes();
+    let mut cuts: Vec<usize> = Vec::new();
+    for (i, b) in bytes.iter().enumerate() {
+        if *b == b'|' && (i == 0 || bytes[i - 1] != b'\\') {
+            cuts.push(i);
+        }
+    }
+    cuts.push(row.len());
+    let mut out = Vec::new();
+    let mut prev = 0;
+    for cut in cuts {
+        let seg = &row[prev..cut];
+        let trimmed = seg.trim();
+        if !trimmed.is_empty() {
+            let lead = seg.len() - seg.trim_start().len();
+            out.push((prev + lead, prev + lead + trimmed.len()));
+        }
+        prev = cut + 1;
+    }
+    out
+}
+
 /// ¿Es la fila de guiones que separa la cabecera de una tabla?
 fn is_delimiter_row(line: &str) -> bool {
     let trimmed = line.trim();
@@ -560,10 +586,10 @@ pub fn analyze(text: &str) -> Analysis {
             }
 
             Event::Start(Tag::Table(_)) => {
-                // La tabla ya no es monoespaciada (véase editor.rs): aquí solo
+                // La tabla no es monoespaciada (véase editor.rs): aquí solo
                 // marcamos el bloque para el indent y la caja de fondo, y los
-                // pipes se atenúan por separado. El inline (strong, em, code)
-                // fluye dentro de las celdas.
+                // pipes se sustituyen por separado. El inline (strong, em,
+                // code) fluye dentro de las celdas.
                 table_depth += 1;
                 let end = trim_nl(text, range.end);
                 spans.push(style(range.start, end, "table"));
@@ -571,10 +597,13 @@ pub fn analyze(text: &str) -> Analysis {
                 let last = lines.line_of(end.saturating_sub(1).max(range.start));
                 ornaments.push(Ornament::Table { first, last });
 
-                for (ls, le) in line_ranges(text, range.start, end) {
+                let rows = line_ranges(text, range.start, end);
+                // La primera línea del rango es la fila de cabecera.
+                let header_start = rows.first().map(|&(ls, _)| ls);
+                for (ls, le) in rows {
                     if is_delimiter_row(&text[ls..le]) {
-                        // La fila de guiones se oculta y en su hueco se pinta
-                        // la línea que separa la cabecera.
+                        // La fila de guiones se sustituye y en su hueco se
+                        // pinta la línea que separa la cabecera.
                         spans.push(replaced(ls, le));
                         spans.push(style(ls, le, "tablerule"));
                         ornaments.push(Ornament::TableRule {
@@ -582,16 +611,23 @@ pub fn analyze(text: &str) -> Analysis {
                         });
                         continue;
                     }
-                    // Los pipes se quedan, pero atenuados: hacen de separador
-                    // de columna sin competir con el contenido. Además emitimos
-                    // un `CellSeparator` para que el widget dibuje una línea
-                    // vertical y la tabla gane estructura visual.
+                    // Los pipes son marcas sustituidas: en WYSIWYG se encogen
+                    // y en su sitio el widget dibuja un separador vertical
+                    // (`CellSeparator`), para dotar a la tabla de rejilla
+                    // visual sin necesidad de un widget compuesto.
                     let row = &text[ls..le];
                     let bytes = row.as_bytes();
                     for (i, b) in bytes.iter().enumerate() {
                         if *b == b'|' && (i == 0 || bytes[i - 1] != b'\\') {
-                            spans.push(style(ls + i, ls + i + 1, "tablepipe"));
+                            spans.push(replaced(ls + i, ls + i + 1));
                             ornaments.push(Ornament::CellSeparator { offset: ls + i });
+                        }
+                    }
+                    // Cabecera: el texto de las celdas en negrita (span
+                    // `tablehead`); los pipes quedan fuera.
+                    if Some(ls) == header_start {
+                        for (s, e) in cell_text_ranges(row) {
+                            spans.push(style(ls + s, ls + e, "tablehead"));
                         }
                     }
                 }
@@ -1137,14 +1173,44 @@ mod tests {
         let a = analyze(text);
         assert!(a.ornaments.contains(&Ornament::TableRule { line: 1 }));
         assert!(a.ornaments.contains(&Ornament::Table { first: 0, last: 2 }));
-        assert_eq!(syntax(text), vec![(10, 19, SpanKind::Replaced)]);
+        // Los pipes también son marcas sustituidas (se encogen en WYSIWYG).
+        assert_eq!(
+            syntax(text),
+            vec![
+                (0, 1, SpanKind::Replaced),
+                (4, 5, SpanKind::Replaced),
+                (8, 9, SpanKind::Replaced),
+                (10, 19, SpanKind::Replaced),
+                (20, 21, SpanKind::Replaced),
+                (24, 25, SpanKind::Replaced),
+                (28, 29, SpanKind::Replaced),
+            ]
+        );
     }
 
     #[test]
-    fn los_pipes_se_atenuan() {
+    fn los_pipes_de_tabla_son_marcas_sustituidas() {
+        // Tres por fila de contenido, dos filas: se encogen en WYSIWYG y el
+        // widget dibuja un separador vertical en su sitio.
         let a = analyze("| a | b |\n|---|---|\n| 1 | 2 |\n");
-        // Tres por fila de contenido, dos filas.
-        assert_eq!(find(&a.spans, "tablepipe").len(), 6);
+        let pipes = a
+            .spans
+            .iter()
+            .filter(|s| s.kind == SpanKind::Replaced && s.end == s.start + 1)
+            .count();
+        assert_eq!(pipes, 6);
+    }
+
+    #[test]
+    fn la_cabecera_de_tabla_lleva_tablehead_sobre_el_texto_de_las_celdas() {
+        let text = "| a | b |\n|---|---|\n| 1 | 2 |\n";
+        let a = analyze(text);
+        let heads = find(&a.spans, "tablehead");
+        assert_eq!(heads.len(), 2);
+        assert_eq!(&text[heads[0].start..heads[0].end], "a");
+        assert_eq!(&text[heads[1].start..heads[1].end], "b");
+        // Solo la cabecera: el cuerpo no lleva tablehead.
+        assert!(heads.iter().all(|s| s.end <= 9));
     }
 
     #[test]
@@ -1210,18 +1276,24 @@ mod tests {
             !a.spans.iter().any(|s| s.kind == SpanKind::Marker),
             "ninguna marca `Marker` debe quedar dentro de la tabla: {a:?}"
         );
-        // Los dos delimitadores de `**a**`, los dos de `` `b` ``, la fila de
-        // guiones y los dos de `*c*`, por orden de posición.
+        // Los pipes, los dos delimitadores de `**a**`, los dos de `` `b` ``,
+        // la fila de guiones y los dos de `*c*`, por orden de posición.
         assert_eq!(
             syntax(text),
             vec![
+                (0, 1, SpanKind::Replaced),
                 (2, 4, SpanKind::Replaced),
                 (5, 7, SpanKind::Replaced),
+                (8, 9, SpanKind::Replaced),
                 (10, 11, SpanKind::Replaced),
                 (12, 13, SpanKind::Replaced),
+                (14, 15, SpanKind::Replaced),
                 (16, 25, SpanKind::Replaced),
+                (26, 27, SpanKind::Replaced),
                 (28, 29, SpanKind::Replaced),
                 (30, 31, SpanKind::Replaced),
+                (32, 33, SpanKind::Replaced),
+                (35, 36, SpanKind::Replaced),
             ]
         );
     }
@@ -1240,8 +1312,14 @@ mod tests {
             .count();
         // 2 filas (cabecera + 1 body) × 3 pipes por fila = 6.
         assert_eq!(seps, 6, "una tubería por pipe de cabecera/cuerpo");
-        // y debe coincidir con el número de spans `tablepipe`.
-        assert_eq!(seps, find(&a.spans, "tablepipe").len());
+        // y debe coincidir con el número de pipes sustituidos (spans
+        // Replaced de un byte; la fila de guiones es uno solo y más largo).
+        let pipes = a
+            .spans
+            .iter()
+            .filter(|s| s.kind == SpanKind::Replaced && s.end == s.start + 1)
+            .count();
+        assert_eq!(seps, pipes);
     }
 
     #[test]
