@@ -290,6 +290,7 @@ mod imp {
                     Ornament::Bullet { line, .. }
                     | Ornament::Checkbox { line, .. }
                     | Ornament::TableRule { line }
+                    | Ornament::HeadingRule { line }
                     | Ornament::Rule { line } => *line as i32,
                     _ => continue,
                 };
@@ -317,6 +318,26 @@ mod imp {
                             left,
                             (middle - RULE_THICKNESS / 2.0).round(),
                             (right - left).max(0.0),
+                            RULE_THICKNESS,
+                        );
+                        snapshot.append_color(&palette.muted, &rect);
+                    }
+                    // Filete fino bajo un título H1/H2 (estilo GitHub), con
+                    // el ancho del propio texto del título.
+                    Ornament::HeadingRule { .. } => {
+                        let view = self.obj();
+                        let Some(mut end_iter) = view.buffer().iter_at_line(line) else {
+                            continue;
+                        };
+                        if !end_iter.ends_line() {
+                            end_iter.forward_to_line_end();
+                        }
+                        let end_rect = view.iter_location(&end_iter);
+                        let y = (end_rect.y() + end_rect.height()) as f32 - RULE_THICKNESS;
+                        let rect = graphene::Rect::new(
+                            x,
+                            y.round(),
+                            (end_rect.x() as f32 - x).max(0.0),
                             RULE_THICKNESS,
                         );
                         snapshot.append_color(&palette.muted, &rect);

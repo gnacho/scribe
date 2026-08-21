@@ -408,11 +408,20 @@ pub fn analyze(text: &str) -> Analysis {
                     continue;
                 }
                 spans.push(style(range.start, end, heading_tag(level)));
+                // Filete fino bajo los títulos H1/H2, estilo GitHub.
+                if matches!(level, HeadingLevel::H1 | HeadingLevel::H2) {
+                    ornaments.push(Ornament::HeadingRule {
+                        line: lines.line_of(range.start),
+                    });
+                }
                 let src = &text[range.start..end];
                 let hashes = src.bytes().take_while(|b| *b == b'#').count();
                 if hashes > 0 {
                     let gap = src[hashes..].bytes().take_while(|b| *b == b' ').count();
-                    spans.push(marker(range.start, range.start + hashes + gap));
+                    // Las almohadillas (y el espacio que las sigue) son marca
+                    // sustituida: en WYSIWYG se encogen y el título queda
+                    // limpio; en «Atenuar» siguen visibles, atenuadas.
+                    spans.push(replaced(range.start, range.start + hashes + gap));
                 } else {
                     // Cabecera setext: se oculta el subrayado `===` / `---` con
                     // su salto de línea, para no dejar un renglón en blanco.
@@ -945,7 +954,28 @@ mod tests {
     fn cabecera_marca_las_almohadillas() {
         let text = "## Título\n";
         assert_eq!(find(&spans(text), "h2").len(), 1);
-        assert_eq!(syntax(text), vec![(0, 3, SpanKind::Marker)]);
+        // Las almohadillas (con el espacio) son marca sustituida: en WYSIWYG
+        // se encogen y el título queda limpio; en «Atenuar» se atenúan.
+        assert_eq!(syntax(text), vec![(0, 3, SpanKind::Replaced)]);
+    }
+
+    #[test]
+    fn h1_y_h2_piden_filete_bajo_el_titulo_y_h3_no() {
+        let a = analyze("# Uno\n\n## Dos\n\n### Tres\n");
+        let reglas: Vec<usize> = a
+            .ornaments
+            .iter()
+            .filter_map(|o| match o {
+                Ornament::HeadingRule { line } => Some(*line),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(reglas, vec![0, 2]);
+        // La cabecera setext (H1) también lo pide.
+        let setext = analyze("Título\n======\n");
+        assert!(setext
+            .ornaments
+            .contains(&Ornament::HeadingRule { line: 0 }));
     }
 
     #[test]
