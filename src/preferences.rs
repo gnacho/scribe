@@ -6,7 +6,7 @@ use libadwaita as adw;
 use libadwaita::prelude::*;
 use std::rc::Rc;
 
-use crate::settings::{AppSettings, FontFamily, MarkupVisibility};
+use crate::settings::{gtk_hides_invisible_safely, AppSettings, FontFamily, MarkupVisibility};
 use crate::templates;
 
 fn spin(title: &str, subtitle: &str, adj: &gtk4::Adjustment, digits: u32) -> adw::SpinRow {
@@ -153,10 +153,29 @@ fn editor_page(settings: &Rc<AppSettings>, apply: &Rc<dyn Fn()>) -> adw::Prefere
         .title("Marcado")
         .description("Qué hacer con los asteriscos, almohadillas y URLs mientras escribes")
         .build();
+    // Mientras `gtk_hides_invisible_safely()` sea falso (mitigación de
+    // GNOME/gtk#8346), «Ocultar» y «Al enfocar» se comportan como «Atenuar»:
+    // la UI debe decirlo. Al reactivarse el ocultado con un GTK sano, quitar
+    // este aviso y volver a las cadenas y el subtítulo originales.
+    let (subtitle, options): (&str, &[&str]) = if gtk_hides_invisible_safely() {
+        (
+            "«Al enfocar» las revela solo en la línea del cursor",
+            &["Ocultar siempre", "Mostrar al enfocar", "Atenuar siempre"],
+        )
+    } else {
+        (
+            "Temporalmente las tres atenúan: ocultar está desactivado por un bug de GTK",
+            &[
+                "Ocultar siempre (temporalmente atenúa)",
+                "Mostrar al enfocar (temporalmente atenúa)",
+                "Atenuar siempre",
+            ],
+        )
+    };
     let markup = combo(
         "Marcas de Markdown",
-        "«Al enfocar» las revela solo en la línea del cursor",
-        &["Ocultar siempre", "Mostrar al enfocar", "Atenuar siempre"],
+        subtitle,
+        options,
         settings.markup_visibility().index(),
     );
     markup_group.add(&markup);
