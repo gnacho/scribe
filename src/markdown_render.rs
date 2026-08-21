@@ -15,8 +15,9 @@
 //!
 //! Las marcas que un adorno sustituye se marcan como [`SpanKind::Replaced`]:
 //! no deben revelarse nunca al pasar el cursor, porque hacerlo movería el
-//! texto de sitio en cada línea. (Con la mitigación de GNOME/gtk#8346 activa
-//! no se ocultan, sino que se atenúan como cualquier otra marca.)
+//! texto de sitio en cada línea. Con la mitigación de GNOME/gtk#8346 activa
+//! no se ocultan: en los modos WYSIWYG se encogen (tag `syn_shrink`) y en
+//! «Atenuar» se atenúan como cualquier otra marca.
 
 use crate::settings::MarkupVisibility;
 use pulldown_cmark::{CodeBlockKind, Event, HeadingLevel, LinkType, Options, Parser, Tag, TagEnd};
@@ -33,7 +34,8 @@ pub enum SpanKind {
     /// la mitigación de GNOME/gtk#8346: véase `settings::gtk_hides_invisible_safely`).
     Marker,
     /// Marca sustituida por un adorno dibujado. No se revela con el cursor;
-    /// se oculta o se atenúa según `settings::gtk_hides_invisible_safely`.
+    /// se encoge, se oculta o se atenúa según la preferencia del usuario y
+    /// `settings::gtk_hides_invisible_safely` (véase `decorate` en editor.rs).
     Replaced,
 }
 
@@ -71,12 +73,12 @@ pub enum Ornament {
     CodeBlock { first: usize, last: usize },
     /// Caja de fondo de una tabla, de `first` a `last` inclusive.
     Table { first: usize, last: usize },
-    /// Línea que separa la cabecera de una tabla del resto. Ocupa el hueco que
-    /// deja la fila de guiones del fuente, que se oculta.
+    /// Línea que separa la cabecera de una tabla del resto. Ocupa el hueco
+    /// que deja la fila de guiones del fuente, que se encoge.
     TableRule { line: usize },
     /// Salto de línea dentro de una celda de tabla, producido por `<br>`.
-    /// `offset` es el byte donde iba el `<br>` (ya oculto); el widget dibuja en
-    /// su sitio un glifo de retorno. Fuera de tablas no se genera: ahí el
+    /// `offset` es el byte donde iba el `<br>` (ya encogido); el widget dibuja
+    /// en su sitio un glifo de retorno. Fuera de tablas no se genera: ahí el
     /// `<br>` se deja con su tag `html` como hasta ahora.
     Break { offset: usize },
     /// Separador de columna de tabla (un `|` del fuente). El widget dibuja una

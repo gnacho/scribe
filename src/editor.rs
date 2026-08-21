@@ -652,7 +652,14 @@ impl Editor {
             };
             apply_scheme(&buffer, sm.is_dark());
             apply_theme(&tags, &view, sm.is_dark());
-            schedule_decoration(&view, &buffer, &decoration, &generation, &base_dir, Duration::ZERO);
+            schedule_decoration(
+                &view,
+                &buffer,
+                &decoration,
+                &generation,
+                &base_dir,
+                Duration::ZERO,
+            );
         });
 
         // Las señales del buffer viven tanto como el buffer, y la vista posee

@@ -472,7 +472,11 @@ mod imp {
                         // Borde fino alrededor, ya en coordenadas finales.
                         let border = graphene::Rect::new(x, y, w, h);
                         let rounded = gsk::RoundedRect::from_rect(border, 2.0);
-                        snapshot.append_border(&rounded, &[1.0, 1.0, 1.0, 1.0], &[palette.muted; 4]);
+                        snapshot.append_border(
+                            &rounded,
+                            &[1.0, 1.0, 1.0, 1.0],
+                            &[palette.muted; 4],
+                        );
                     }
                     None => {
                         // Placeholder: texto pequeño y gris, sin borde.
