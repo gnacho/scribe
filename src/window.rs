@@ -360,13 +360,14 @@ impl ScribeWindow {
             let current_file = current_file.clone();
             let is_modified = is_modified.clone();
             let title_widget = title_widget.clone();
-            // Débil: este closure acaba dentro de las señales del editor, que
-            // cuelga de la propia ventana; en fuerte sería un ciclo y la
-            // ventana no se liberaría jamás.
+            // Débiles: este closure acaba dentro de las señales del editor
+            // (on_changed), que cuelga de la propia ventana; en fuerte sería
+            // un ciclo (Editor → callback → Editor) y ni la ventana ni el
+            // editor se liberarían jamás.
             let window = window.downgrade();
-            let editor = editor.clone();
+            let editor = Rc::downgrade(&editor);
             Rc::new(move || {
-                let Some(window) = window.upgrade() else {
+                let (Some(window), Some(editor)) = (window.upgrade(), editor.upgrade()) else {
                     return;
                 };
                 let file = current_file.borrow();
@@ -398,10 +399,14 @@ impl ScribeWindow {
         // timeout ya debounced de connect_changed, reutilizando la copia del
         // texto que se hace para la vista previa y el índice.
         let update_counts: Rc<dyn Fn(&str)> = {
-            let editor = editor.clone();
+            // Débil: véase update_title.
+            let editor = Rc::downgrade(&editor);
             let words_label = words_label.clone();
             let props_label = props_label.clone();
             Rc::new(move |text: &str| {
+                let Some(editor) = editor.upgrade() else {
+                    return;
+                };
                 let words = text.split_whitespace().count();
                 let chars = text.chars().count();
                 let lines = editor.line_count();
@@ -414,11 +419,15 @@ impl ScribeWindow {
         };
 
         let update_status: Rc<dyn Fn()> = {
-            let editor = editor.clone();
+            // Débil: véase update_title.
+            let editor = Rc::downgrade(&editor);
             let position_button = position_button.clone();
             let goto_spin = goto_spin.clone();
             let goto_popover = goto_popover.clone();
             Rc::new(move || {
+                let Some(editor) = editor.upgrade() else {
+                    return;
+                };
                 let lines = editor.line_count();
                 let (line, column) = editor.cursor_position();
                 position_button.set_label(&format!("Ln {line}, Col {column}"));
