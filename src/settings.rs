@@ -126,7 +126,10 @@ pub struct AppSettings {
 /// Registra un fallo al escribir una clave (p. ej. bloqueada por dconf):
 /// sin esto, la preferencia parecería aplicarse y no se habría guardado.
 fn log_set_error(key: &str, e: glib::BoolError) {
-    glib::warning!("scribe: no se pudo guardar la clave «{key}» en GSettings: {e}");
+    glib::g_warning!(
+        "scribe",
+        "no se pudo guardar la clave «{key}» en GSettings: {e}"
+    );
 }
 
 macro_rules! prop {
