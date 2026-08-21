@@ -673,6 +673,24 @@ fn pad(cell: &str, width: usize, align: Align) -> String {
     }
 }
 
+/// Rangos de línea (primera, última inclusive) que pulldown-cmark reconoce
+/// como tablas. Acotar con el parser evita absorber líneas ajenas que solo
+/// contienen un `|` (una cabecera, una regla con pipes…) después de la tabla.
+fn table_line_ranges(text: &str) -> Vec<(usize, usize)> {
+    let mut opts = Options::empty();
+    opts.insert(Options::ENABLE_TABLES);
+    let lines = LineIndex::new(text);
+    let mut out = Vec::new();
+    for (event, range) in Parser::new_ext(text, opts).into_offset_iter() {
+        if let Event::Start(Tag::Table(_)) = event {
+            let first = lines.line_of(range.start);
+            let last = lines.line_of(trim_nl(text, range.end).saturating_sub(1).max(range.start));
+            out.push((first, last));
+        }
+    }
+    out
+}
+
 fn delimiter_cell(width: usize, align: Align) -> String {
     let w = width.max(3);
     match align {
@@ -690,6 +708,7 @@ fn delimiter_cell(width: usize, align: Align) -> String {
 /// texto de ejemplo, no tablas.
 pub fn format_tables(text: &str) -> Option<String> {
     let lines: Vec<&str> = text.split('\n').collect();
+    let tables = table_line_ranges(text);
     let mut out: Vec<String> = Vec::with_capacity(lines.len());
     let mut i = 0;
     let mut in_fence = false;
@@ -717,11 +736,17 @@ pub fn format_tables(text: &str) -> Option<String> {
             continue;
         }
 
-        // Cuerpo: todo lo que siga conteniendo un pipe.
-        let mut end = i + 2;
-        while end < lines.len() && lines[end].contains('|') && !lines[end].trim().is_empty() {
-            end += 1;
-        }
+        // El cuerpo lo acota el parser: solo las líneas que forman la tabla
+        // de verdad. Antes se absorbía cualquier línea posterior con un `|`,
+        // aunque fuera una cabecera o un párrafo ajeno a la tabla.
+        let Some(&(_, last)) = tables.iter().find(|(first, _)| *first == i) else {
+            // La heurística local vio una tabla que el parser no reconoce:
+            // no se toca nada.
+            out.push(line.to_string());
+            i += 1;
+            continue;
+        };
+        let end = last + 1;
 
         let header = split_row(lines[i]);
         let aligns: Vec<Align> = split_row(lines[i + 1])
@@ -730,7 +755,11 @@ pub fn format_tables(text: &str) -> Option<String> {
             .collect();
         let body: Vec<Vec<String>> = lines[i + 2..end].iter().map(|l| split_row(l)).collect();
 
-        let columns = header.len();
+        // Nunca se suelta una celda: las columnas cubren la cabecera Y la
+        // fila más ancha del cuerpo (las celdas sobrantes antes se perdían).
+        let columns = header
+            .len()
+            .max(body.iter().map(|row| row.len()).max().unwrap_or(0));
         let mut widths = vec![3usize; columns];
         for (width, cell) in widths.iter_mut().zip(header.iter()) {
             *width = (*width).max(cell.chars().count());
@@ -1177,6 +1206,31 @@ mod tests {
         let salida = format_tables(entrada).unwrap();
         assert!(salida.contains("\\|"));
         assert_eq!(salida.lines().count(), 3);
+    }
+
+    #[test]
+    fn alinear_no_absorbe_lineas_ajenas_con_pipes() {
+        // La cabecera `#` cierra la tabla aunque contenga un `|`: antes se
+        // absorbía como si fuera una fila más y se reformateaba.
+        let entrada = "| a | b |\n|---|---|\n| 1 | 2 |\n# Título | con pipe\n";
+        let esperado = "| a   | b   |\n| --- | --- |\n| 1   | 2   |\n# Título | con pipe\n";
+        assert_eq!(format_tables(entrada).unwrap(), esperado);
+    }
+
+    #[test]
+    fn alinear_conserva_las_celdas_sobrantes() {
+        // La fila es más ancha que la cabecera: la celda extra no se pierde,
+        // la tabla crece a tres columnas.
+        let entrada = "| a | b |\n|---|---|\n| 1 | 2 | 3 |\n";
+        let esperado = "| a   | b   |     |\n| --- | --- | --- |\n| 1   | 2   | 3   |\n";
+        assert_eq!(format_tables(entrada).unwrap(), esperado);
+    }
+
+    #[test]
+    fn alinear_rellena_las_celdas_que_faltan() {
+        let entrada = "| a | b | c |\n|---|---|---|\n| 1 | 2 |\n";
+        let esperado = "| a   | b   | c   |\n| --- | --- | --- |\n| 1   | 2   |     |\n";
+        assert_eq!(format_tables(entrada).unwrap(), esperado);
     }
 
     #[test]
