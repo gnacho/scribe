@@ -360,9 +360,15 @@ impl ScribeWindow {
             let current_file = current_file.clone();
             let is_modified = is_modified.clone();
             let title_widget = title_widget.clone();
-            let window = window.clone();
+            // Débil: este closure acaba dentro de las señales del editor, que
+            // cuelga de la propia ventana; en fuerte sería un ciclo y la
+            // ventana no se liberaría jamás.
+            let window = window.downgrade();
             let editor = editor.clone();
             Rc::new(move || {
+                let Some(window) = window.upgrade() else {
+                    return;
+                };
                 let file = current_file.borrow();
                 let (name, subtitle) = match file.as_ref() {
                     Some(p) => (
@@ -387,26 +393,41 @@ impl ScribeWindow {
             })
         };
 
-        let update_status: Rc<dyn Fn()> = {
+        // Lo barato (posición del cursor) se actualiza en cada evento; los
+        // contadores de palabras/caracteres son O(n) y se calculan dentro del
+        // timeout ya debounced de connect_changed, reutilizando la copia del
+        // texto que se hace para la vista previa y el índice.
+        let update_counts: Rc<dyn Fn(&str)> = {
             let editor = editor.clone();
             let words_label = words_label.clone();
-            let position_button = position_button.clone();
             let props_label = props_label.clone();
-            let goto_spin = goto_spin.clone();
-            Rc::new(move || {
-                let text = editor.text();
+            Rc::new(move |text: &str| {
                 let words = text.split_whitespace().count();
                 let chars = text.chars().count();
                 let lines = editor.line_count();
                 words_label.set_label(&format!("{words} palabras"));
-                let (line, column) = editor.cursor_position();
-                position_button.set_label(&format!("Ln {line}, Col {column}"));
-                goto_spin.set_range(1.0, lines.max(1) as f64);
-                goto_spin.set_value(line as f64);
                 let minutes = (words as f64 / 200.0).ceil().max(1.0) as usize;
                 props_label.set_label(&format!(
                     "Palabras: {words}\nCaracteres: {chars}\nLíneas: {lines}\nLectura: ~{minutes} min"
                 ));
+            })
+        };
+
+        let update_status: Rc<dyn Fn()> = {
+            let editor = editor.clone();
+            let position_button = position_button.clone();
+            let goto_spin = goto_spin.clone();
+            let goto_popover = goto_popover.clone();
+            Rc::new(move || {
+                let lines = editor.line_count();
+                let (line, column) = editor.cursor_position();
+                position_button.set_label(&format!("Ln {line}, Col {column}"));
+                // Con el popover «Ir a la línea» abierto el spin es del
+                // usuario: no pisar lo que está escribiendo.
+                if !goto_popover.is_visible() {
+                    goto_spin.set_range(1.0, lines.max(1) as f64);
+                    goto_spin.set_value(line as f64);
+                }
             })
         };
 
@@ -657,12 +678,17 @@ impl ScribeWindow {
         apply_settings();
 
         {
-            let window_clone = window.clone();
+            // Débil: la ventana posee sus acciones; una captura fuerte aquí
+            // sería un ciclo ventana↔acción.
+            let window_clone = window.downgrade();
             let settings = settings.clone();
             let apply_settings = apply_settings.clone();
             let action_focus = action_focus.clone();
             let action_typewriter = action_typewriter.clone();
             action_preferences.connect_activate(move |_, _| {
+                let Some(window_clone) = window_clone.upgrade() else {
+                    return;
+                };
                 let action_focus = action_focus.clone();
                 let action_typewriter = action_typewriter.clone();
                 let settings_inner = settings.clone();
@@ -724,7 +750,8 @@ impl ScribeWindow {
 
         // ---- abrir / guardar ----
         {
-            let window = window.clone();
+            // Débil: véase action_preferences.
+            let window = window.downgrade();
             let file_manager = file_manager.clone();
             let editor = editor.clone();
             let current_file = current_file.clone();
@@ -735,6 +762,9 @@ impl ScribeWindow {
             let refresh_recents = refresh_recents.clone();
             let toast = toast.clone();
             action_open.connect_activate(move |_, _| {
+                let Some(window) = window.upgrade() else {
+                    return;
+                };
                 let editor = editor.clone();
                 let current_file = current_file.clone();
                 let is_modified = is_modified.clone();
@@ -760,7 +790,8 @@ impl ScribeWindow {
         }
 
         let make_save = |force_dialog: bool| {
-            let window = window.clone();
+            // Débil: véase action_preferences.
+            let window = window.downgrade();
             let file_manager = file_manager.clone();
             let editor = editor.clone();
             let current_file = current_file.clone();
@@ -770,6 +801,9 @@ impl ScribeWindow {
             let refresh_recents = refresh_recents.clone();
             let toast = toast.clone();
             move |_: &gio::SimpleAction, _: Option<&glib::Variant>| {
+                let Some(window) = window.upgrade() else {
+                    return;
+                };
                 let content = editor.text();
                 let path = if force_dialog {
                     None
@@ -855,8 +889,13 @@ impl ScribeWindow {
 
         // ---- acerca de ----
         {
-            let window = window.clone();
+            // Débil: la ventana posee la acción; en fuerte era un ciclo
+            // ventana↔acción y ninguna ScribeWindow llegaba a liberarse.
+            let window = window.downgrade();
             action_about.connect_activate(move |_, _| {
+                let Some(window) = window.upgrade() else {
+                    return;
+                };
                 adw::AboutWindow::builder()
                     .transient_for(&window)
                     .modal(true)
@@ -881,6 +920,7 @@ impl ScribeWindow {
             let is_modified = is_modified.clone();
             let update_title = update_title.clone();
             let update_status = update_status.clone();
+            let update_counts = update_counts.clone();
             let generation = Rc::new(Cell::new(0u64));
             editor.connect_changed(move |text| {
                 if !is_modified.replace(true) {
@@ -896,10 +936,12 @@ impl ScribeWindow {
                 let preview_visible = preview_visible.clone();
                 let toc_list = toc_list.clone();
                 let toc_lines = toc_lines.clone();
+                let update_counts = update_counts.clone();
                 glib::timeout_add_local_once(Duration::from_millis(120), move || {
                     if generation.get() != current {
                         return;
                     }
+                    update_counts(&text);
                     if preview_visible.get() {
                         preview.update(&text);
                     }
@@ -943,8 +985,12 @@ impl ScribeWindow {
             let current_file = current_file.clone();
             let is_modified = is_modified.clone();
             let update_title = update_title.clone();
+            let toast = toast.clone();
             let alive = alive.clone();
             let elapsed = Cell::new(0i32);
+            // El temporizador se repite: se avisa una vez por racha de fallos,
+            // no en cada ciclo.
+            let failed = Cell::new(false);
             glib::timeout_add_seconds_local(5, move || {
                 if !alive.get() {
                     return glib::ControlFlow::Break;
@@ -957,9 +1003,19 @@ impl ScribeWindow {
                 if settings.autosave() && is_modified.get() {
                     let path = current_file.borrow().clone();
                     if let Some(path) = path {
-                        if std::fs::write(&path, editor.text()).is_ok() {
-                            is_modified.set(false);
-                            update_title();
+                        match std::fs::write(&path, editor.text()) {
+                            Ok(()) => {
+                                is_modified.set(false);
+                                update_title();
+                                failed.set(false);
+                            }
+                            // Sin este aviso el usuario confía en una copia
+                            // automática que no existe.
+                            Err(e) => {
+                                if !failed.replace(true) {
+                                    toast(&format!("No se pudo autoguardar: {e}"));
+                                }
+                            }
                         }
                     }
                 }
@@ -1059,6 +1115,7 @@ impl ScribeWindow {
 
         update_title();
         update_status();
+        update_counts(&editor.text());
         Self { window, load_file }
     }
 

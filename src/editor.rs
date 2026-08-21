@@ -159,6 +159,11 @@ fn build_tags() -> gtk4::TextTagTable {
         .weight(700)
         .build());
 
+    // Registrado pero NUNCA aplicado mientras
+    // `settings::gtk_hides_invisible_safely()` sea falso: GTK aborta en
+    // `gtk_text_iter_set_visible_line_index` cuando el buffer contiene texto
+    // invisible (GNOME/gtk#8346; el fix, MR !10228, sigue sin publicarse).
+    // Se conserva para reactivar el modo «ocultar» con un GTK sano.
     add(gtk4::TextTag::builder()
         .name("syn_hidden")
         .invisible(true)
@@ -353,10 +358,20 @@ fn decorate(view: &MarkdownView, buffer: &gtksourceview5::Buffer, config: Decora
 
     let analysis = analyze(&text);
     let cursor_line = buffer.iter_at_offset(buffer.cursor_position()).line();
-    let dim = config.markup == MarkupVisibility::Dim;
+    // GTK aborta con texto invisible (GNOME/gtk#8346; MR !10228 sin publicar),
+    // así que mientras `gtk_hides_invisible_safely()` sea falso la visibilidad
+    // efectiva es siempre «atenuar» y `dim` es siempre cierto: NADA se oculta.
+    let dim = config.markup.effective() == MarkupVisibility::Dim;
 
     for span in &analysis.spans {
-        let (from, to) = (byte_to_char[span.start], byte_to_char[span.end]);
+        // Los rangos del parser deberían estar siempre dentro del texto, pero
+        // un cambio en pulldown-cmark o en analyze no debe convertirse en un
+        // panic en producción.
+        debug_assert!(span.end <= text.len(), "span fuera de rango: {span:?}");
+        let (from, to) = match (byte_to_char.get(span.start), byte_to_char.get(span.end)) {
+            (Some(&from), Some(&to)) => (from, to),
+            _ => continue,
+        };
         if from >= to {
             continue;
         }
@@ -364,26 +379,26 @@ fn decorate(view: &MarkdownView, buffer: &gtksourceview5::Buffer, config: Decora
         let end_iter = buffer.iter_at_offset(to);
         let name = match span.kind {
             SpanKind::Style => span.tag,
-            // Las marcas sustituidas por un adorno no se revelan al pasar el
-            // cursor: hacerlo movería el texto de sitio en cada línea.
-            SpanKind::Replaced => {
+            // Con la mitigación de GNOME/gtk#8346 activa, `dim` es siempre
+            // cierto y las marcas (sustituidas o no) se atenúan sin ocultar.
+            // La rama `syn_hidden` es la puerta de futuro: solo se alcanza
+            // con un GTK que incluya el fix (véase gtk_hides_invisible_safely).
+            SpanKind::Replaced | SpanKind::Marker => {
                 if dim {
                     "syn_shown"
                 } else {
                     "syn_hidden"
                 }
             }
-            SpanKind::Marker => {
-                // invisible descuadra la maquetación de GTK combinado con
-                // bloques de código y adornos. Se atenúa sin ocultar.
-                "syn_shown"
-            }
         };
         buffer.apply_tag_by_name(name, &start_iter, &end_iter);
     }
 
-    // En modo «atenuar» las marcas están a la vista, así que dibujar encima
-    // duplicaría la información.
+    // Sin texto oculto no hay hueco donde dibujar: un adorno sustitutivo se
+    // pintaría encima del marcado visible, duplicándolo. Mientras dure la
+    // mitigación (dim siempre cierto) no se generan adornos, igual que en el
+    // modo «atenuar» de antes; al reactivarse el ocultado, aquí vuelve
+    // `analysis.ornaments`.
     let mut ornaments = if dim { Vec::new() } else { analysis.ornaments };
     // Los adornos van por número de línea salvo `Break` y `CellSeparator`, que
     // guardan byte offsets: el widget indexa por caracteres, así que convertimos.
@@ -400,15 +415,23 @@ fn decorate(view: &MarkdownView, buffer: &gtksourceview5::Buffer, config: Decora
     view.set_ornaments(ornaments, line_count);
 
     if config.focus_mode {
-        let (first, last) = paragraph_bounds(buffer, cursor_line);
-        if let Some(para_start) = buffer.iter_at_line(first) {
-            buffer.apply_tag_by_name("unfocused", &buffer.start_iter(), &para_start);
-        }
-        let after = buffer
-            .iter_at_line(last + 1)
-            .unwrap_or_else(|| buffer.end_iter());
-        buffer.apply_tag_by_name("unfocused", &after, &buffer.end_iter());
+        apply_focus_shade(buffer, cursor_line);
     }
+}
+
+/// Atenúa todo salvo el párrafo del cursor (modo foco). Es barato — solo
+/// mueve un tag, sin re-analizar el documento — y por eso puede llamarse en
+/// cada cambio de línea del cursor.
+fn apply_focus_shade(buffer: &gtksourceview5::Buffer, cursor_line: i32) {
+    buffer.remove_tag_by_name("unfocused", &buffer.start_iter(), &buffer.end_iter());
+    let (first, last) = paragraph_bounds(buffer, cursor_line);
+    if let Some(para_start) = buffer.iter_at_line(first) {
+        buffer.apply_tag_by_name("unfocused", &buffer.start_iter(), &para_start);
+    }
+    let after = buffer
+        .iter_at_line(last + 1)
+        .unwrap_or_else(|| buffer.end_iter());
+    buffer.apply_tag_by_name("unfocused", &after, &buffer.end_iter());
 }
 
 /// Marcador que continúa una lista, o `None` si la línea no es un elemento.
@@ -540,60 +563,76 @@ impl Editor {
             });
         }
 
-        let tags = self.tags.clone();
-        let buffer = self.buffer.clone();
-        let view = self.view.clone();
-        let decoration = self.decoration.clone();
-        let generation = self.generation.clone();
+        // El StyleManager vive toda la aplicación: capturar los widgets en
+        // fuerte impediría liberar este editor al cerrar su ventana.
+        let tags = self.tags.downgrade();
+        let buffer = self.buffer.downgrade();
+        let view = self.view.downgrade();
+        let decoration = Rc::downgrade(&self.decoration);
+        let generation = Rc::downgrade(&self.generation);
         adw::StyleManager::default().connect_dark_notify(move |sm| {
+            let (tags, buffer, view, decoration, generation) = match (
+                tags.upgrade(),
+                buffer.upgrade(),
+                view.upgrade(),
+                decoration.upgrade(),
+                generation.upgrade(),
+            ) {
+                (Some(t), Some(b), Some(v), Some(d), Some(g)) => (t, b, v, d, g),
+                _ => return,
+            };
             apply_scheme(&buffer, sm.is_dark());
             apply_theme(&tags, &view, sm.is_dark());
             schedule_decoration(&view, &buffer, &decoration, &generation, Duration::ZERO);
         });
 
+        // Las señales del buffer viven tanto como el buffer, y la vista posee
+        // el buffer: capturar la vista en débil rompe el ciclo.
         let on_changed = self.on_changed.clone();
         let generation = self.generation.clone();
         let last_line = self.last_line.clone();
         let decoration = self.decoration.clone();
-        let view = self.view.clone();
+        let view = self.view.downgrade();
         self.buffer.connect_changed(move |buf| {
             let text = buf.text(&buf.start_iter(), &buf.end_iter(), true);
             if let Some(cb) = on_changed.borrow().as_ref() {
                 cb(&text);
             }
             last_line.set(buf.iter_at_offset(buf.cursor_position()).line());
-            schedule_decoration(
-                &view,
-                buf,
-                &decoration,
-                &generation,
-                Duration::from_millis(45),
-            );
+            if let Some(view) = view.upgrade() {
+                schedule_decoration(
+                    &view,
+                    buf,
+                    &decoration,
+                    &generation,
+                    Duration::from_millis(45),
+                );
+            }
         });
 
         let last_line = self.last_line.clone();
         let decoration = self.decoration.clone();
-        let generation = self.generation.clone();
         let typewriter = self.typewriter.clone();
-        let view = self.view.clone();
+        let view = self.view.downgrade();
         self.buffer.connect_cursor_position_notify(move |buf| {
             if typewriter.get() {
-                let view = view.clone();
-                let mark = buf.get_insert();
-                glib::idle_add_local_once(move || {
-                    view.scroll_to_mark(&mark, 0.0, true, 0.0, 0.5);
-                });
+                if let Some(view) = view.upgrade() {
+                    let mark = buf.get_insert();
+                    glib::idle_add_local_once(move || {
+                        view.scroll_to_mark(&mark, 0.0, true, 0.0, 0.5);
+                    });
+                }
             }
             let line = buf.iter_at_offset(buf.cursor_position()).line();
             if last_line.get() == line {
                 return;
             }
             last_line.set(line);
-            let config = decoration.get();
-            // En «ocultar» y «atenuar» el marcado no depende del cursor; solo
-            // hay que repintar si algo lo sigue.
-            if config.markup == MarkupVisibility::Focus || config.focus_mode {
-                schedule_decoration(&view, buf, &decoration, &generation, Duration::ZERO);
+            // La visibilidad del marcado ya no depende del cursor: lo único
+            // que lo sigue es el atenuado del modo foco, que se re-aplica en
+            // el acto (barato) en vez de programar un decorate() O(n) entero.
+            if decoration.get().focus_mode {
+                apply_focus_shade(buf, line);
             }
         });
 

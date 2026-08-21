@@ -5,16 +5,18 @@
 //!
 //! - **Tramos** ([`Span`]): rangos en bytes con el nombre del `GtkTextTag` que
 //!   les corresponde. Los tramos de tipo [`SpanKind::Marker`] son las marcas del
-//!   Markdown (`**`, `#`, backticks, la URL de un enlace) y se ocultan según la
-//!   preferencia del usuario.
+//!   Markdown (`**`, `#`, backticks, la URL de un enlace); su visibilidad la
+//!   decide el editor según la preferencia del usuario y la salud del GTK del
+//!   sistema (véase `settings::gtk_hides_invisible_safely`).
 //! - **Adornos** ([`Ornament`]): elementos que no se pueden expresar con un tag
 //!   porque hay que *dibujarlos* — viñetas, casillas, reglas, la barra de las
 //!   citas y la caja de los bloques de código. Van referidos a número de línea
 //!   para que el widget solo tenga que preguntar por su geometría.
 //!
 //! Las marcas que un adorno sustituye se marcan como [`SpanKind::Replaced`]:
-//! se ocultan siempre (salvo en modo «atenuar»), porque revelarlas movería el
-//! texto de sitio cada vez que el cursor cambia de línea.
+//! no deben revelarse nunca al pasar el cursor, porque hacerlo movería el
+//! texto de sitio en cada línea. (Con la mitigación de GNOME/gtk#8346 activa
+//! no se ocultan, sino que se atenúan como cualquier otra marca.)
 
 use pulldown_cmark::{CodeBlockKind, Event, HeadingLevel, LinkType, Options, Parser, Tag, TagEnd};
 use std::borrow::Cow;
@@ -26,9 +28,11 @@ pub const MAX_LIVE_BYTES: usize = 400_000;
 pub enum SpanKind {
     /// Estilo permanente: negrita, cabecera, color…
     Style,
-    /// Marca de Markdown. Su visibilidad la decide el usuario.
+    /// Marca de Markdown. Su visibilidad la decide el usuario (y, de momento,
+    /// la mitigación de GNOME/gtk#8346: véase `settings::gtk_hides_invisible_safely`).
     Marker,
-    /// Marca sustituida por un adorno dibujado. Se oculta salvo en modo «atenuar».
+    /// Marca sustituida por un adorno dibujado. No se revela con el cursor;
+    /// se oculta o se atenúa según `settings::gtk_hides_invisible_safely`.
     Replaced,
 }
 
@@ -166,10 +170,10 @@ fn mark_delims(out: &mut Vec<Span>, start: usize, end: usize, len: usize, inside
     if len == 0 || end < start + len * 2 {
         return;
     }
-    // Dentro de una tabla ocultamos siempre los delimitadores (`**`, `_`,
-    // backticks): el modo `focus` solo los oculta en la línea del cursor, así
-    // que fuera de ella aparecerían los asteriscos literalmente encima del
-    // texto en negrita. Marcándolos como Replaced se ocultan siempre.
+    // Dentro de una tabla los delimitadores (`**`, `_`, backticks) se marcan
+    // como Replaced: el modo `focus` solo los trata distinto en la línea del
+    // cursor, así que fuera de ella aparecerían los asteriscos literalmente
+    // encima del texto en negrita. Su visibilidad no depende del cursor.
     let mk = if inside_table { replaced } else { marker };
     out.push(mk(start, start + len));
     out.push(mk(end - len, end));
@@ -669,6 +673,24 @@ fn pad(cell: &str, width: usize, align: Align) -> String {
     }
 }
 
+/// Rangos de línea (primera, última inclusive) que pulldown-cmark reconoce
+/// como tablas. Acotar con el parser evita absorber líneas ajenas que solo
+/// contienen un `|` (una cabecera, una regla con pipes…) después de la tabla.
+fn table_line_ranges(text: &str) -> Vec<(usize, usize)> {
+    let mut opts = Options::empty();
+    opts.insert(Options::ENABLE_TABLES);
+    let lines = LineIndex::new(text);
+    let mut out = Vec::new();
+    for (event, range) in Parser::new_ext(text, opts).into_offset_iter() {
+        if let Event::Start(Tag::Table(_)) = event {
+            let first = lines.line_of(range.start);
+            let last = lines.line_of(trim_nl(text, range.end).saturating_sub(1).max(range.start));
+            out.push((first, last));
+        }
+    }
+    out
+}
+
 fn delimiter_cell(width: usize, align: Align) -> String {
     let w = width.max(3);
     match align {
@@ -686,6 +708,7 @@ fn delimiter_cell(width: usize, align: Align) -> String {
 /// texto de ejemplo, no tablas.
 pub fn format_tables(text: &str) -> Option<String> {
     let lines: Vec<&str> = text.split('\n').collect();
+    let tables = table_line_ranges(text);
     let mut out: Vec<String> = Vec::with_capacity(lines.len());
     let mut i = 0;
     let mut in_fence = false;
@@ -713,11 +736,17 @@ pub fn format_tables(text: &str) -> Option<String> {
             continue;
         }
 
-        // Cuerpo: todo lo que siga conteniendo un pipe.
-        let mut end = i + 2;
-        while end < lines.len() && lines[end].contains('|') && !lines[end].trim().is_empty() {
-            end += 1;
-        }
+        // El cuerpo lo acota el parser: solo las líneas que forman la tabla
+        // de verdad. Antes se absorbía cualquier línea posterior con un `|`,
+        // aunque fuera una cabecera o un párrafo ajeno a la tabla.
+        let Some(&(_, last)) = tables.iter().find(|(first, _)| *first == i) else {
+            // La heurística local vio una tabla que el parser no reconoce:
+            // no se toca nada.
+            out.push(line.to_string());
+            i += 1;
+            continue;
+        };
+        let end = last + 1;
 
         let header = split_row(lines[i]);
         let aligns: Vec<Align> = split_row(lines[i + 1])
@@ -726,7 +755,11 @@ pub fn format_tables(text: &str) -> Option<String> {
             .collect();
         let body: Vec<Vec<String>> = lines[i + 2..end].iter().map(|l| split_row(l)).collect();
 
-        let columns = header.len();
+        // Nunca se suelta una celda: las columnas cubren la cabecera Y la
+        // fila más ancha del cuerpo (las celdas sobrantes antes se perdían).
+        let columns = header
+            .len()
+            .max(body.iter().map(|row| row.len()).max().unwrap_or(0));
         let mut widths = vec![3usize; columns];
         for (width, cell) in widths.iter_mut().zip(header.iter()) {
             *width = (*width).max(cell.chars().count());
@@ -784,69 +817,98 @@ mod tests {
         spans.iter().filter(|s| s.tag == tag).collect()
     }
 
-    /// Reconstruye lo que se vería con todas las marcas ocultas.
-    fn hidden(text: &str) -> String {
-        let mut keep = vec![true; text.len()];
-        for s in spans(text).iter().filter(|s| s.is_syntax()) {
-            for k in keep.iter_mut().take(s.end).skip(s.start) {
-                *k = false;
-            }
-        }
-        text.char_indices()
-            .filter(|(i, _)| keep[*i])
-            .map(|(_, c)| c)
-            .collect()
+    /// Tramos de sintaxis (marca o sustitución) ordenados por posición:
+    /// (inicio, fin, clase). Son los rangos cuya visibilidad decide el editor;
+    /// los tests asertan sobre ellos, no sobre una visibilidad simulada.
+    fn syntax(text: &str) -> Vec<(usize, usize, SpanKind)> {
+        let mut v: Vec<_> = spans(text)
+            .iter()
+            .filter(|s| s.is_syntax())
+            .map(|s| (s.start, s.end, s.kind))
+            .collect();
+        v.sort_by_key(|s| (s.0, s.1));
+        v
     }
 
     #[test]
-    fn cabecera_oculta_las_almohadillas() {
-        assert_eq!(find(&spans("## Título\n"), "h2").len(), 1);
-        assert_eq!(hidden("## Título\n"), "Título\n");
+    fn cabecera_marca_las_almohadillas() {
+        let text = "## Título\n";
+        assert_eq!(find(&spans(text), "h2").len(), 1);
+        assert_eq!(syntax(text), vec![(0, 3, SpanKind::Marker)]);
     }
 
     #[test]
-    fn cabecera_setext_oculta_el_subrayado() {
-        assert_eq!(find(&spans("Título\n======\n"), "h1").len(), 1);
-        assert_eq!(hidden("Título\n======\n"), "Título\n");
+    fn cabecera_setext_marca_el_subrayado() {
+        let text = "Título\n======\n";
+        assert_eq!(find(&spans(text), "h1").len(), 1);
+        // El subrayado y el salto que lo precede quedan como marca sustituida
+        // (ojo: «í» ocupa dos bytes, el subrayado empieza en el byte 8).
+        assert_eq!(syntax(text), vec![(7, 14, SpanKind::Replaced)]);
     }
 
     #[test]
     fn negrita_y_cursiva() {
-        assert_eq!(hidden("un **texto** y *otro*\n"), "un texto y otro\n");
         assert_eq!(find(&spans("un **texto**\n"), "bold").len(), 1);
+        assert_eq!(
+            syntax("un **texto** y *otro*\n"),
+            vec![
+                (3, 5, SpanKind::Marker),
+                (10, 12, SpanKind::Marker),
+                (15, 16, SpanKind::Marker),
+                (20, 21, SpanKind::Marker),
+            ]
+        );
     }
 
     #[test]
     fn codigo_en_linea_con_varios_backticks() {
-        assert_eq!(hidden("esto es ``a ` b`` fin"), "esto es a ` b fin");
+        assert_eq!(
+            syntax("esto es ``a ` b`` fin"),
+            vec![(8, 10, SpanKind::Marker), (15, 17, SpanKind::Marker)]
+        );
     }
 
     #[test]
-    fn enlace_oculta_la_url() {
-        assert_eq!(hidden("ver [la web](https://ej.com) ya"), "ver la web ya");
+    fn enlace_marca_la_url() {
+        assert_eq!(
+            syntax("ver [la web](https://ej.com) ya"),
+            vec![(4, 5, SpanKind::Marker), (11, 28, SpanKind::Marker)]
+        );
     }
 
     #[test]
-    fn enlace_automatico_oculta_los_angulos() {
-        assert_eq!(hidden("ver <https://ej.com> ya"), "ver https://ej.com ya");
+    fn enlace_automatico_marca_los_angulos() {
+        assert_eq!(
+            syntax("ver <https://ej.com> ya"),
+            vec![(4, 5, SpanKind::Marker), (19, 20, SpanKind::Marker)]
+        );
     }
 
     #[test]
-    fn imagen_oculta_marcas() {
-        assert_eq!(hidden("![gato](/tmp/g.png)"), "gato");
+    fn imagen_marca_las_marcas() {
+        assert_eq!(
+            syntax("![gato](/tmp/g.png)"),
+            vec![(0, 2, SpanKind::Marker), (6, 19, SpanKind::Marker)]
+        );
     }
 
     #[test]
-    fn cita_oculta_el_mayor_que_y_pide_barra() {
-        assert_eq!(hidden("> una cita\n> y otra\n"), "una cita\ny otra\n");
+    fn cita_marca_el_mayor_que_y_pide_barra() {
         let a = analyze("> una cita\n> y otra\n");
+        assert_eq!(
+            syntax("> una cita\n> y otra\n"),
+            vec![(0, 2, SpanKind::Replaced), (11, 13, SpanKind::Replaced)]
+        );
         assert_eq!(a.ornaments, vec![Ornament::Quote { first: 0, last: 1 }]);
     }
 
     #[test]
     fn lista_sin_ordenar_cambia_el_guion_por_una_vineta() {
         let a = analyze("- uno\n- dos\n");
-        assert_eq!(hidden("- uno\n- dos\n"), "uno\ndos\n");
+        assert_eq!(
+            syntax("- uno\n- dos\n"),
+            vec![(0, 2, SpanKind::Replaced), (6, 8, SpanKind::Replaced)]
+        );
         assert_eq!(
             a.ornaments,
             vec![
@@ -857,15 +919,18 @@ mod tests {
     }
 
     #[test]
-    fn la_sangria_literal_de_una_lista_anidada_se_oculta() {
+    fn la_sangria_literal_de_una_lista_anidada_es_sustituida() {
         // La sangría la pone el margen del tag; el texto no debe llevarla dos veces.
-        assert_eq!(hidden("- uno\n    - dos\n"), "uno\ndos\n");
+        assert_eq!(
+            syntax("- uno\n    - dos\n"),
+            vec![(0, 2, SpanKind::Replaced), (6, 12, SpanKind::Replaced)]
+        );
     }
 
     #[test]
     fn lista_ordenada_conserva_el_numero() {
         let a = analyze("1. uno\n2. dos\n");
-        assert_eq!(hidden("1. uno\n2. dos\n"), "1. uno\n2. dos\n");
+        assert!(syntax("1. uno\n2. dos\n").is_empty());
         assert_eq!(find(&a.spans, "listmarker").len(), 2);
         assert!(a.ornaments.is_empty());
     }
@@ -882,9 +947,15 @@ mod tests {
     #[test]
     fn tareas_producen_casillas() {
         let a = analyze("- [x] hecho\n- [ ] pendiente\n");
+        // Viñeta y casilla de cada elemento, sustituidas por adornos.
         assert_eq!(
-            hidden("- [x] hecho\n- [ ] pendiente\n"),
-            "hecho\npendiente\n"
+            syntax("- [x] hecho\n- [ ] pendiente\n"),
+            vec![
+                (0, 2, SpanKind::Replaced),
+                (2, 6, SpanKind::Replaced),
+                (12, 14, SpanKind::Replaced),
+                (14, 18, SpanKind::Replaced),
+            ]
         );
         assert!(a.ornaments.contains(&Ornament::Checkbox {
             line: 0,
@@ -906,17 +977,20 @@ mod tests {
     }
 
     #[test]
-    fn bloque_de_codigo_pide_caja_y_oculta_las_vallas() {
-        let a = analyze("```rust\nfn main() {}\n```\n");
+    fn bloque_de_codigo_pide_caja_y_marca_las_vallas() {
+        let text = "```rust\nfn main() {}\n```\n";
+        let a = analyze(text);
         assert_eq!(find(&a.spans, "codeblock").len(), 1);
         assert!(a
             .ornaments
             .contains(&Ornament::CodeBlock { first: 0, last: 2 }));
-        // Queda el nombre del lenguaje y el hueco de la valla de cierre.
+        // Se sustituyen las comillas de apertura (el nombre del lenguaje queda
+        // como etiqueta) y la línea entera de la valla de cierre.
         assert_eq!(
-            hidden("```rust\nfn main() {}\n```\n"),
-            "rust\nfn main() {}\n\n"
+            syntax(text),
+            vec![(0, 3, SpanKind::Replaced), (21, 24, SpanKind::Replaced)]
         );
+        assert_eq!(find(&a.spans, "fence").len(), 1);
     }
 
     #[test]
@@ -925,16 +999,19 @@ mod tests {
     }
 
     #[test]
-    fn la_regla_deja_la_linea_vacia_para_dibujarla() {
+    fn la_regla_sustituye_la_linea_para_dibujarla() {
         let a = analyze("uno\n\n---\n\ndos\n");
         assert!(a.ornaments.contains(&Ornament::Rule { line: 2 }));
-        assert_eq!(hidden("uno\n\n---\n\ndos\n"), "uno\n\n\n\ndos\n");
+        assert_eq!(syntax("uno\n\n---\n\ndos\n"), vec![(5, 8, SpanKind::Replaced)]);
     }
 
     #[test]
-    fn las_notas_al_pie_dejan_solo_el_numero() {
+    fn las_notas_al_pie_marcan_los_corchetes() {
         let text = "Texto[^1].\n\n[^1]: La nota.\n";
-        assert_eq!(hidden(text), "Texto1.\n\n[^1]: La nota.\n");
+        assert_eq!(
+            syntax(text),
+            vec![(5, 7, SpanKind::Marker), (8, 9, SpanKind::Marker)]
+        );
         assert_eq!(find(&spans(text), "footnotedef").len(), 1);
     }
 
@@ -975,12 +1052,12 @@ mod tests {
     }
 
     #[test]
-    fn la_fila_de_guiones_se_oculta_y_pide_una_linea() {
+    fn la_fila_de_guiones_se_sustituye_y_pide_una_linea() {
         let text = "| a | b |\n|---|---|\n| 1 | 2 |\n";
         let a = analyze(text);
         assert!(a.ornaments.contains(&Ornament::TableRule { line: 1 }));
         assert!(a.ornaments.contains(&Ornament::Table { first: 0, last: 2 }));
-        assert_eq!(hidden(text), "| a | b |\n\n| 1 | 2 |\n");
+        assert_eq!(syntax(text), vec![(10, 19, SpanKind::Replaced)]);
     }
 
     #[test]
@@ -1001,16 +1078,16 @@ mod tests {
     }
 
     #[test]
-    fn br_dentro_de_tabla_se_oculta_y_genera_adorno() {
+    fn br_dentro_de_tabla_se_sustituye_y_genera_adorno() {
         let text = "| a | b |\n|---|---|\n| x<br>y | z |\n";
         let a = analyze(text);
-        // El `<br>` debe quedar como marca reemplazada (oculta), no como html.
+        // El `<br>` debe quedar como marca sustituida (Replaced), no como html.
         let brs = a
             .spans
             .iter()
             .filter(|s| s.kind == SpanKind::Replaced && text[s.start..s.end].contains("br"))
             .count();
-        assert_eq!(brs, 1, "debe haber exactamente un <br> oculto");
+        assert_eq!(brs, 1, "debe haber exactamente un <br> sustituido");
         assert!(a
             .ornaments
             .iter()
@@ -1042,25 +1119,31 @@ mod tests {
     }
 
     #[test]
-    fn los_delimitadores_inline_de_tabla_se_ocultan_siempre() {
+    fn los_delimitadores_inline_de_tabla_son_siempre_sustituidos() {
         // En las tablas los delimitadores (`**`, `*`, backticks) se marcan como
-        // Replaced, de modo que se ocultan aunque el cursor esté en la línea:
-        // el modo `focus` solo los revela en la línea del cursor, y encimarlos
-        // sobre el texto en negrita descuadraría la celda.
+        // Replaced, no como Marker: su visibilidad no puede depender de la
+        // línea del cursor, porque revelarlos sobre el texto en negrita
+        // descuadraría la celda.
         let text = "| **a** | `b` |\n|---|---|\n| *c* | d |\n";
         let a = analyze(text);
-        let visible_markers = a
-            .spans
-            .iter()
-            .filter(|s| s.kind == SpanKind::Marker)
-            .count();
-        assert_eq!(
-            visible_markers, 0,
-            "ninguna marca visible debe quedar dentro de la tabla: {a:?}"
+        assert!(
+            !a.spans.iter().any(|s| s.kind == SpanKind::Marker),
+            "ninguna marca `Marker` debe quedar dentro de la tabla: {a:?}"
         );
-        // El texto visto por el usuario queda limpio: solo pipes, texto y el
-        // hueco de la fila de guiones.
-        assert_eq!(hidden(text), "| a | b |\n\n| c | d |\n");
+        // Los dos delimitadores de `**a**`, los dos de `` `b` ``, la fila de
+        // guiones y los dos de `*c*`, por orden de posición.
+        assert_eq!(
+            syntax(text),
+            vec![
+                (2, 4, SpanKind::Replaced),
+                (5, 7, SpanKind::Replaced),
+                (10, 11, SpanKind::Replaced),
+                (12, 13, SpanKind::Replaced),
+                (16, 25, SpanKind::Replaced),
+                (28, 29, SpanKind::Replaced),
+                (30, 31, SpanKind::Replaced),
+            ]
+        );
     }
 
     #[test]
@@ -1123,6 +1206,31 @@ mod tests {
         let salida = format_tables(entrada).unwrap();
         assert!(salida.contains("\\|"));
         assert_eq!(salida.lines().count(), 3);
+    }
+
+    #[test]
+    fn alinear_no_absorbe_lineas_ajenas_con_pipes() {
+        // La cabecera `#` cierra la tabla aunque contenga un `|`: antes se
+        // absorbía como si fuera una fila más y se reformateaba.
+        let entrada = "| a | b |\n|---|---|\n| 1 | 2 |\n# Título | con pipe\n";
+        let esperado = "| a   | b   |\n| --- | --- |\n| 1   | 2   |\n# Título | con pipe\n";
+        assert_eq!(format_tables(entrada).unwrap(), esperado);
+    }
+
+    #[test]
+    fn alinear_conserva_las_celdas_sobrantes() {
+        // La fila es más ancha que la cabecera: la celda extra no se pierde,
+        // la tabla crece a tres columnas.
+        let entrada = "| a | b |\n|---|---|\n| 1 | 2 | 3 |\n";
+        let esperado = "| a   | b   |     |\n| --- | --- | --- |\n| 1   | 2   | 3   |\n";
+        assert_eq!(format_tables(entrada).unwrap(), esperado);
+    }
+
+    #[test]
+    fn alinear_rellena_las_celdas_que_faltan() {
+        let entrada = "| a | b | c |\n|---|---|---|\n| 1 | 2 |\n";
+        let esperado = "| a   | b   | c   |\n| --- | --- | --- |\n| 1   | 2   |     |\n";
+        assert_eq!(format_tables(entrada).unwrap(), esperado);
     }
 
     #[test]
