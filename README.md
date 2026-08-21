@@ -89,7 +89,7 @@ workspace.
 
 ## Requisitos de compilacion
 
-- Rust 1.78+
+- Rust 1.83+
 - GTK4, libadwaita, GtkSourceView 5 y GLib development files
 
 Arch/CachyOS:
@@ -128,4 +128,4 @@ flatpak-builder --user --install build-dir app.scribe.Scribe.json --force-clean
 
 ## License
 
-AGPL-3.0. See [LICENSE](LICENSE).
+AGPL-3.0-or-later. See [LICENSE](LICENSE).
