@@ -1,7 +1,7 @@
 [Desktop Entry]
 Name=Scribe
 Comment=Editor Markdown nativo para GNOME
-Exec=scribe
+Exec=scribe %F
 Icon=app.scribe.Scribe
 Type=Application
 Categories=GNOME;GTK;Office;WordProcessor;
