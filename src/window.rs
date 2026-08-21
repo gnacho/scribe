@@ -975,7 +975,8 @@ impl ScribeWindow {
             let alive = alive.clone();
             let current_file = current_file.clone();
             let editor = editor.clone();
-            let action_save_as = action_save_as.clone();
+            let file_manager = file_manager.clone();
+            let toast = toast.clone();
             window.connect_close_request(move |win| {
                 let (w, h) = win.default_size();
                 settings.set_window_width(w);
@@ -1004,7 +1005,8 @@ impl ScribeWindow {
                 let force_close = force_close.clone();
                 let current_file = current_file.clone();
                 let editor = editor.clone();
-                let action_save_as = action_save_as.clone();
+                let file_manager = file_manager.clone();
+                let toast = toast.clone();
                 dialog.choose(gio::Cancellable::NONE, move |response| {
                     match response.as_str() {
                         "discard" => {
@@ -1014,12 +1016,38 @@ impl ScribeWindow {
                         "save" => {
                             let path = current_file.borrow().clone();
                             match path {
-                                Some(p) if std::fs::write(&p, editor.text()).is_ok() => {
-                                    force_close.set(true);
-                                    win.close();
+                                Some(p) => match std::fs::write(&p, editor.text()) {
+                                    Ok(()) => {
+                                        force_close.set(true);
+                                        win.close();
+                                    }
+                                    Err(e) => toast(&format!("No se pudo guardar: {e}")),
+                                },
+                                // Documento sin fichero: se abre «Guardar como» y
+                                // la ventana debe cerrarse al terminar; si no, el
+                                // usuario se queda con ella abierta tras pedir
+                                // guardar y cerrar.
+                                None => {
+                                    let parent = win.clone();
+                                    let win = win.clone();
+                                    let force_close = force_close.clone();
+                                    let toast = toast.clone();
+                                    file_manager.save(
+                                        &parent,
+                                        None,
+                                        &editor.text(),
+                                        move |outcome| match outcome {
+                                            Outcome::Ok(_) => {
+                                                force_close.set(true);
+                                                win.close();
+                                            }
+                                            Outcome::Error(e) => {
+                                                toast(&format!("No se pudo guardar: {e}"));
+                                            }
+                                            Outcome::Cancelled => {}
+                                        },
+                                    );
                                 }
-                                Some(_) => {}
-                                None => action_save_as.activate(None),
                             }
                         }
                         _ => {}
