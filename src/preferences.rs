@@ -154,9 +154,10 @@ fn editor_page(settings: &Rc<AppSettings>, apply: &Rc<dyn Fn()>) -> adw::Prefere
         .description("Qué hacer con los asteriscos, almohadillas y URLs mientras escribes")
         .build();
     // Mientras `gtk_hides_invisible_safely()` sea falso (mitigación de
-    // GNOME/gtk#8346), «Ocultar» y «Al enfocar» se comportan como «Atenuar»:
-    // la UI debe decirlo. Al reactivarse el ocultado con un GTK sano, quitar
-    // este aviso y volver a las cadenas y el subtítulo originales.
+    // GNOME/gtk#8346), «Ocultar» y «Al enfocar» no ocultan de verdad: las
+    // marcas sustituidas se encogen (tag `syn_shrink`) y las demás se
+    // atenúan, y «Al enfocar» equivale a «Ocultar» porque ya no hay revelado
+    // por línea. Con un GTK sano, sin sufijo y ocultado real.
     let (subtitle, options): (&str, &[&str]) = if gtk_hides_invisible_safely() {
         (
             "«Al enfocar» las revela solo en la línea del cursor",
@@ -164,10 +165,10 @@ fn editor_page(settings: &Rc<AppSettings>, apply: &Rc<dyn Fn()>) -> adw::Prefere
         )
     } else {
         (
-            "Temporalmente las tres atenúan: ocultar está desactivado por un bug de GTK",
+            "Ocultar texto aún aborta con este GTK: las marcas se encogen en su lugar",
             &[
-                "Ocultar siempre (temporalmente atenúa)",
-                "Mostrar al enfocar (temporalmente atenúa)",
+                "Ocultar siempre (encoge las marcas; GTK aún no permite ocultarlas)",
+                "Mostrar al enfocar (encoge las marcas; GTK aún no permite ocultarlas)",
                 "Atenuar siempre",
             ],
         )
