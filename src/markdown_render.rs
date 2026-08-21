@@ -162,12 +162,17 @@ fn trim_nl(text: &str, mut end: usize) -> usize {
 }
 
 /// Marca los delimitadores de un elemento en línea (`**`, `_`, `~~`, backticks).
-fn mark_delims(out: &mut Vec<Span>, start: usize, end: usize, len: usize) {
+fn mark_delims(out: &mut Vec<Span>, start: usize, end: usize, len: usize, inside_table: bool) {
     if len == 0 || end < start + len * 2 {
         return;
     }
-    out.push(marker(start, start + len));
-    out.push(marker(end - len, end));
+    // Dentro de una tabla ocultamos siempre los delimitadores (`**`, `_`,
+    // backticks): el modo `focus` solo los oculta en la línea del cursor, así
+    // que fuera de ella aparecerían los asteriscos literalmente encima del
+    // texto en negrita. Marcándolos como Replaced se ocultan siempre.
+    let mk = if inside_table { replaced } else { marker };
+    out.push(mk(start, start + len));
+    out.push(mk(end - len, end));
 }
 
 fn line_ranges(text: &str, start: usize, end: usize) -> Vec<(usize, usize)> {
@@ -335,15 +340,15 @@ pub fn analyze(text: &str) -> Analysis {
 
             Event::Start(Tag::Strong) => {
                 spans.push(style(range.start, range.end, "bold"));
-                mark_delims(&mut spans, range.start, range.end, 2);
+                mark_delims(&mut spans, range.start, range.end, 2, table_depth > 0);
             }
             Event::Start(Tag::Emphasis) => {
                 spans.push(style(range.start, range.end, "italic"));
-                mark_delims(&mut spans, range.start, range.end, 1);
+                mark_delims(&mut spans, range.start, range.end, 1, table_depth > 0);
             }
             Event::Start(Tag::Strikethrough) => {
                 spans.push(style(range.start, range.end, "strike"));
-                mark_delims(&mut spans, range.start, range.end, 2);
+                mark_delims(&mut spans, range.start, range.end, 2, table_depth > 0);
             }
 
             Event::Code(_) => {
@@ -352,7 +357,7 @@ pub fn analyze(text: &str) -> Analysis {
                     .bytes()
                     .take_while(|b| *b == b'`')
                     .count();
-                mark_delims(&mut spans, range.start, range.end, ticks);
+                mark_delims(&mut spans, range.start, range.end, ticks, table_depth > 0);
             }
 
             Event::Start(Tag::Link { link_type, .. }) => {
@@ -1029,8 +1034,30 @@ mod tests {
         // propios tramos, que el editor aplicará encima.
         let text = "| a | b |\n|---|---|\n| **x** | `y` |\n";
         let a = analyze(text);
-        assert!(find(&a.spans, "bold").len() >= 1, "bold dentro de celda");
-        assert!(find(&a.spans, "code").len() >= 1, "code dentro de celda");
+        assert!(!find(&a.spans, "bold").is_empty(), "bold dentro de celda");
+        assert!(!find(&a.spans, "code").is_empty(), "code dentro de celda");
+    }
+
+    #[test]
+    fn los_delimitadores_inline_de_tabla_se_ocultan_siempre() {
+        // En las tablas los delimitadores (`**`, `*`, backticks) se marcan como
+        // Replaced, de modo que se ocultan aunque el cursor esté en la línea:
+        // el modo `focus` solo los revela en la línea del cursor, y encimarlos
+        // sobre el texto en negrita descuadraría la celda.
+        let text = "| **a** | `b` |\n|---|---|\n| *c* | d |\n";
+        let a = analyze(text);
+        let visible_markers = a
+            .spans
+            .iter()
+            .filter(|s| s.kind == SpanKind::Marker)
+            .count();
+        assert_eq!(
+            visible_markers, 0,
+            "ninguna marca visible debe quedar dentro de la tabla: {a:?}"
+        );
+        // El texto visto por el usuario queda limpio: solo pipes, texto y el
+        // hueco de la fila de guiones.
+        assert_eq!(hidden(text), "| a | b |\n\n| c | d |\n");
     }
 
     #[test]
