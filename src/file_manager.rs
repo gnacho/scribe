@@ -20,6 +20,24 @@ pub enum OpenOutcome {
     Error(String),
 }
 
+/// Añade el sufijo `.md` si el nombre elegido no lleva una extensión
+/// Markdown: el diálogo no lo pone solo y el documento acabaría sin
+/// extensión reconocible.
+fn with_md_suffix(path: PathBuf) -> PathBuf {
+    let has_markdown_suffix = path
+        .extension()
+        .and_then(|e| e.to_str())
+        .map(|e| matches!(e.to_ascii_lowercase().as_str(), "md" | "markdown"))
+        .unwrap_or(false);
+    if has_markdown_suffix {
+        path
+    } else {
+        let mut name = path.into_os_string();
+        name.push(".md");
+        PathBuf::from(name)
+    }
+}
+
 pub struct FileManager;
 
 impl FileManager {
@@ -83,20 +101,17 @@ impl FileManager {
         filters.append(&filter);
         dialog.set_filters(Some(&filters));
 
-        if let Some(path) = current {
-            if let Some(parent_dir) = path.parent() {
-                dialog.set_initial_folder(Some(&gio::File::for_path(parent_dir)));
-            }
-        }
-
         let content = content.to_string();
         dialog.save(Some(parent), gio::Cancellable::NONE, move |result| {
             let outcome = match result {
                 Ok(file) => match file.path() {
-                    Some(path) => match std::fs::write(&path, &content) {
-                        Ok(()) => Outcome::Ok(path),
-                        Err(e) => Outcome::Error(e.to_string()),
-                    },
+                    Some(path) => {
+                        let path = with_md_suffix(path);
+                        match std::fs::write(&path, &content) {
+                            Ok(()) => Outcome::Ok(path),
+                            Err(e) => Outcome::Error(e.to_string()),
+                        }
+                    }
                     None => Outcome::Cancelled,
                 },
                 Err(e) if is_cancelled(&e) => Outcome::Cancelled,
