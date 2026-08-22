@@ -25,6 +25,13 @@
   </developer>
   <content_rating type="oars-1.1" />
   <releases>
+    <release version="0.3.8" date="2026-08-22">
+      <description>
+        <p>La caja de las tablas y la regla de cabecera abrazan ahora el
+        contenido real (desaparece la «columna fantasma» y la línea que cruzaba
+        de margen a margen), y las celdas con pipe escapado muestran solo «|».</p>
+      </description>
+    </release>
     <release version="0.3.6" date="2026-08-22">
       <description>
         <p>Pestañas reales multi-documento (AdwTabView/AdwTabBar): cada

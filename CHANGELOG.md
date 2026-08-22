@@ -5,6 +5,18 @@ All notable changes to Scribe will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.8] - 2026-08-22
+
+### Fixed
+
+- **Caja de las tablas y regla de cabecera abrazan el contenido**: la caja de
+  fondo se pintaba a todo el ancho de la columna de texto (sobraba un
+  rectángulo pálido a la derecha, la «columna fantasma») y la regla bajo la
+  cabecera cruzaba de margen a margen. Ahora miden el contenido real de las
+  filas (con los pipes encogidos, el texto de las celdas); tablas de más de 200
+  filas se miden solo en la ventana visible. Las celdas con pipe escapado
+  (`\|`) muestran solo `|`; la barra invertida se encoge como marca de escape.
+
 ## [0.3.6] - 2026-08-22
 
 ### Added
