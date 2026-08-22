@@ -6,7 +6,9 @@ use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 use std::time::Duration;
 
-use crate::markdown_render::{analyze, ornaments_for, Ornament, SpanKind, MAX_LIVE_BYTES};
+use crate::markdown_render::{
+    analyze, ornaments_for, Ornament, SpanKind, UnclosedFence, MAX_LIVE_BYTES,
+};
 use crate::markdown_view::{MarkdownView, OrnamentPalette};
 use crate::settings::{gtk_hides_invisible_safely, FontFamily, MarkupVisibility};
 use std::path::PathBuf;
@@ -73,6 +75,9 @@ pub struct Editor {
     /// Directorio del documento abierto, contra el que se resuelven las
     /// rutas relativas de las imágenes. `None` = no resolver (placeholder).
     base_dir: Rc<RefCell<Option<PathBuf>>>,
+    /// Vallas de código abiertas detectadas en el último `decorate`. La barra
+    /// de estado de la ventana las consulta para avisar al usuario.
+    unclosed_fences: Rc<RefCell<Vec<UnclosedFence>>>,
 }
 
 fn build_tags() -> gtk4::TextTagTable {
@@ -351,6 +356,7 @@ fn schedule_decoration(
     decoration: &Rc<Cell<Decoration>>,
     generation: &Rc<Cell<u64>>,
     base_dir: &Rc<RefCell<Option<PathBuf>>>,
+    unclosed_fences: &Rc<RefCell<Vec<UnclosedFence>>>,
     delay: Duration,
 ) {
     let current = generation.get().wrapping_add(1);
@@ -361,12 +367,19 @@ fn schedule_decoration(
     let decoration = decoration.clone();
     let generation = generation.clone();
     let base_dir = base_dir.clone();
+    let unclosed_fences = unclosed_fences.clone();
     glib::timeout_add_local_once(delay, move || {
         // Si ha llegado otra peticion mientras esperabamos, esta sobra.
         if generation.get() != current {
             return;
         }
-        decorate(&view, &buffer, decoration.get(), &base_dir);
+        decorate(
+            &view,
+            &buffer,
+            decoration.get(),
+            &base_dir,
+            &unclosed_fences,
+        );
     });
 }
 
@@ -390,6 +403,7 @@ fn decorate(
     buffer: &gtksourceview5::Buffer,
     config: Decoration,
     base_dir: &Rc<RefCell<Option<PathBuf>>>,
+    unclosed_fences: &Rc<RefCell<Vec<UnclosedFence>>>,
 ) {
     let start = buffer.start_iter();
     let end = buffer.end_iter();
@@ -398,6 +412,7 @@ fn decorate(
     let line_count = end.line() + 1;
     let text = buffer.text(&start, &end, true).to_string();
     if text.is_empty() || text.len() > MAX_LIVE_BYTES {
+        unclosed_fences.borrow_mut().clear();
         view.set_ornaments(Vec::new(), line_count);
         return;
     }
@@ -416,6 +431,7 @@ fn decorate(
     byte_to_char[text.len()] = char_index;
 
     let analysis = analyze(&text);
+    *unclosed_fences.borrow_mut() = analysis.unclosed_fences.clone();
     let cursor_line = buffer.iter_at_offset(buffer.cursor_position()).line();
     // Árbol de decisión de visibilidad. La preferencia persistida
     // (`config.markup`) decide el look; la puerta
@@ -618,6 +634,7 @@ impl Editor {
             continue_lists: Rc::new(Cell::new(true)),
             typewriter: Rc::new(Cell::new(false)),
             base_dir: Rc::new(RefCell::new(None)),
+            unclosed_fences: Rc::new(RefCell::new(Vec::new())),
         };
         editor.connect_signals();
         editor
@@ -654,16 +671,20 @@ impl Editor {
         let decoration = Rc::downgrade(&self.decoration);
         let generation = Rc::downgrade(&self.generation);
         let base_dir = Rc::downgrade(&self.base_dir);
+        let unclosed_fences = Rc::downgrade(&self.unclosed_fences);
         adw::StyleManager::default().connect_dark_notify(move |sm| {
-            let (tags, buffer, view, decoration, generation, base_dir) = match (
+            let (tags, buffer, view, decoration, generation, base_dir, unclosed_fences) = match (
                 tags.upgrade(),
                 buffer.upgrade(),
                 view.upgrade(),
                 decoration.upgrade(),
                 generation.upgrade(),
                 base_dir.upgrade(),
+                unclosed_fences.upgrade(),
             ) {
-                (Some(t), Some(b), Some(v), Some(d), Some(g), Some(dir)) => (t, b, v, d, g, dir),
+                (Some(t), Some(b), Some(v), Some(d), Some(g), Some(dir), Some(u)) => {
+                    (t, b, v, d, g, dir, u)
+                }
                 _ => return,
             };
             apply_scheme(&buffer, sm.is_dark());
@@ -674,6 +695,7 @@ impl Editor {
                 &decoration,
                 &generation,
                 &base_dir,
+                &unclosed_fences,
                 Duration::ZERO,
             );
         });
@@ -685,6 +707,7 @@ impl Editor {
         let last_line = self.last_line.clone();
         let decoration = self.decoration.clone();
         let base_dir = self.base_dir.clone();
+        let unclosed_fences = self.unclosed_fences.clone();
         let view = self.view.downgrade();
         self.buffer.connect_changed(move |buf| {
             let text = buf.text(&buf.start_iter(), &buf.end_iter(), true);
@@ -699,6 +722,7 @@ impl Editor {
                     &decoration,
                     &generation,
                     &base_dir,
+                    &unclosed_fences,
                     Duration::from_millis(45),
                 );
             }
@@ -781,6 +805,10 @@ impl Editor {
     pub fn set_text(&self, text: &str) {
         self.buffer.set_text(text);
         self.buffer.set_modified(false);
+        // Detecta las vallas abiertas ya en el arranque, para que el aviso de
+        // la barra de estado aparezca al abrir el documento (decorate es
+        // diferido y no puede esperarse para el primer pintado).
+        *self.unclosed_fences.borrow_mut() = analyze(text).unclosed_fences;
         let start = self.buffer.start_iter();
         self.buffer.place_cursor(&start);
         self.last_line.set(0);
@@ -800,6 +828,7 @@ impl Editor {
             &self.decoration,
             &self.generation,
             &self.base_dir,
+            &self.unclosed_fences,
             Duration::ZERO,
         );
     }
@@ -828,6 +857,12 @@ impl Editor {
 
     pub fn line_count(&self) -> i32 {
         self.buffer.end_iter().line() + 1
+    }
+
+    /// Vallas de código abiertas detectadas en el último `decorate` (1-based).
+    /// La barra de estado de la ventana las consulta para avisar al usuario.
+    pub fn unclosed_fences(&self) -> Vec<UnclosedFence> {
+        self.unclosed_fences.borrow().clone()
     }
 
     pub fn go_to_line(&self, line: i32) {
@@ -946,5 +981,27 @@ impl Editor {
         let width = width.clamp(2, 8) as u32;
         self.view.set_tab_width(width);
         self.view.set_indent_width(width as i32);
+    }
+
+    /// Cierra las vallas de código abiertas donde la heurística lo sugiera
+    /// (véase `markdown_render::close_unclosed_fences`). Es una sola acción de
+    /// usuario, así que se deshace de golpe con Ctrl+Z, como `format_tables`.
+    pub fn close_unclosed_fences(&self) -> bool {
+        let text = self.text();
+        let Some(fixed) = crate::markdown_render::close_unclosed_fences(&text) else {
+            return false;
+        };
+        let offset = self.buffer.cursor_position();
+        self.buffer.begin_user_action();
+        let (mut start, mut end) = (self.buffer.start_iter(), self.buffer.end_iter());
+        self.buffer.delete(&mut start, &mut end);
+        let mut at = self.buffer.start_iter();
+        self.buffer.insert(&mut at, &fixed);
+        self.buffer.end_user_action();
+        let restored = self
+            .buffer
+            .iter_at_offset(offset.min(self.buffer.end_iter().offset()));
+        self.buffer.place_cursor(&restored);
+        true
     }
 }

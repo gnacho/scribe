@@ -160,6 +160,16 @@ pub struct ImageRef {
     pub alt: String,
 }
 
+/// Valla de código (``` o ~~~) que abre un bloque y nunca se cierra.
+/// CommonMark trata todo lo que sigue como un único bloque de código, así que
+/// el autor no ve sus secciones. `line` es 1-based (para mostrar al usuario);
+/// `offset` es el byte donde empieza la valla de apertura.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct UnclosedFence {
+    pub line: usize,
+    pub offset: usize,
+}
+
 #[derive(Debug, Default)]
 pub struct Analysis {
     pub spans: Vec<Span>,
@@ -169,6 +179,10 @@ pub struct Analysis {
     /// que quieran los metadatos sin reinterpretar ornamentos.
     #[allow(dead_code)]
     pub images: Vec<ImageRef>,
+    /// Vallas de código que abren y nunca cierran. La barra de estado y la
+    /// acción `win.close-fences` se apoyan en esto para avisar y ofrecer
+    /// recuperación.
+    pub unclosed_fences: Vec<UnclosedFence>,
 }
 
 fn style(start: usize, end: usize, tag: &'static str) -> Span {
@@ -407,6 +421,201 @@ fn normalize_fences(text: &str) -> Cow<'_, str> {
     }
 }
 
+/// ¿Es `line` una valla de cierre válida para una apertura de `open_ch` con
+/// `open_len` caracteres? CommonMark exige: mismo carácter, al menos la misma
+/// longitud, y tras la valla solo espacios. Se ignoran la indentación (hasta
+/// tres espacios) y los marcadores de contenedor (`>` de las citas, con su
+/// espacio), que pulldown-cmark consume antes de mirar la valla.
+fn line_is_closing_fence(line: &str, open_ch: u8, open_len: usize) -> bool {
+    let mut rest = line;
+    loop {
+        let t = rest.trim_start_matches([' ', '\t']);
+        if let Some(after) = t.strip_prefix('>') {
+            rest = after.trim_start_matches([' ', '\t']);
+        } else {
+            rest = t;
+            break;
+        }
+    }
+    let trimmed = rest.trim_end_matches([' ', '\t', '\r']);
+    let n = trimmed.bytes().take_while(|&b| b == open_ch).count();
+    n >= open_len && trimmed[n..].is_empty()
+}
+
+/// ¿El bloque fenced [start, end) de pulldown-cmark quedó cerrado con su valla
+/// de cierre?
+///
+/// Un fence sin cerrar produce un CodeBlock que se traga el resto del
+/// documento sin ninguna línea de cierre válida. Como pulldown-cmark cierra el
+/// bloque en la PRIMERA valla válida que encuentra, si el rango contiene una
+/// línea de cierre válida el bloque está cerrado; si no la contiene (llega a
+/// EOF), la valla quedó abierta. Se ignora la línea de apertura.
+fn fenced_block_is_closed(text: &str, start: usize, end: usize) -> bool {
+    let bytes = text.as_bytes();
+    let Some(&open_ch) = bytes.get(start) else {
+        return true;
+    };
+    if open_ch != b'`' && open_ch != b'~' {
+        return true;
+    }
+    let open_len = bytes[start..].iter().take_while(|&&b| b == open_ch).count();
+
+    // Salta la línea de apertura.
+    let Some(i) = text[start..end].find('\n') else {
+        return false;
+    };
+    let mut pos = start + i + 1;
+    while pos < end {
+        let line_end = match text[pos..end].find('\n') {
+            Some(i) => pos + i,
+            None => end,
+        };
+        if line_is_closing_fence(&text[pos..line_end], open_ch, open_len) {
+            return true;
+        }
+        pos = line_end + 1;
+    }
+    false
+}
+
+/// ¿Es `line` una cabecera ATX válida (`#`, `##`… seguida de espacio o fin)?
+/// `#pragma` u otras líneas que solo empiezan por `#` no lo son.
+fn is_atx_heading(line: &str) -> bool {
+    let l = line.trim_end_matches([' ', '\t', '\r']);
+    let hashes = l.bytes().take_while(|&b| b == b'#').count();
+    if hashes == 0 || hashes > 6 {
+        return false;
+    }
+    l[hashes..].is_empty() || l.as_bytes().get(hashes) == Some(&b' ')
+}
+
+fn is_rule_line(line: &str) -> bool {
+    let l = line.trim_end_matches([' ', '\t', '\r']);
+    if l.len() < 3 {
+        return false;
+    }
+    l.bytes().all(|b| matches!(b, b'-' | b'*' | b'_'))
+}
+
+/// Punto donde cerrar una valla abierta, según la mejor heurística documentada.
+///
+/// Un fence sin cerrar se traga el resto del documento, así que el cierre no
+/// puede adivinarse con certeza. Se cierra justo antes de la primera línea
+/// que claramente empieza una sección nueva, en orden de preferencia:
+///
+/// 1. Cabecera ATX (`#`) u horizontal rule (`---`): el marcador estructural
+///    más común con el que un autor separa secciones. Recupera el documento
+///    «sección a sección», que es lo que busca el usuario.
+/// 2. La siguiente valla de apertura (``` o ~~~): el autor empezó otro bloque,
+///    así que el anterior debía estar cerrado.
+/// 3. Si no hay nada más, el final del documento (EOF).
+///
+/// Devuelve el offset en bytes donde insertar la valla de cierre.
+fn best_fence_close(text: &str, open_start: usize) -> usize {
+    let mut pos = open_start + 1;
+    while pos < text.len() {
+        let line_end = match text[pos..].find('\n') {
+            Some(i) => pos + i,
+            None => text.len(),
+        };
+        let line = &text[pos..line_end];
+        let indent = line.len() - line.trim_start_matches(' ').len();
+        if indent <= 3 {
+            let rest = &line[indent..];
+            let trimmed = rest.trim_end_matches([' ', '\t', '\r']);
+            let first = trimmed.as_bytes().first().copied();
+            // 1. Cabecera ATX o regla horizontal.
+            if is_atx_heading(trimmed) || is_rule_line(trimmed) {
+                return pos;
+            }
+            // 2. Apertura de otra valla.
+            if matches!(first, Some(b'`') | Some(b'~')) {
+                let n = trimmed.bytes().take_while(|&b| Some(b) == first).count();
+                if n >= 3 {
+                    return pos;
+                }
+            }
+        }
+        if line_end == text.len() {
+            break;
+        }
+        pos = line_end + 1;
+    }
+    text.len()
+}
+
+/// Cierra todas las vallas abiertas del documento aplicando la heurística de
+/// [`best_fence_close`] a cada una. Devuelve `Some(nuevo texto)` si algo cambió
+/// y `None` si no había vallas abiertas (misma forma que `format_tables`).
+pub fn close_unclosed_fences(text: &str) -> Option<String> {
+    let mut out = text.to_string();
+    let mut changed = false;
+    // Cerrar la primera valla puede dejar a la vista otra que estaba tapada
+    // por ella (caso del informe del usuario: dos vallas sin cerrar). Se
+    // itera hasta que no quede ninguna, con tope de seguridad.
+    for _ in 0..16 {
+        let unclosed = collect_unclosed_fences(&out);
+        if unclosed.is_empty() {
+            break;
+        }
+        changed = true;
+        // De abajo a arriba para no invalidar los offsets mientras insertamos.
+        let mut fences: Vec<(usize, u8, usize)> = unclosed
+            .iter()
+            .filter_map(|f| {
+                let ch = out.as_bytes().get(f.offset).copied()?;
+                let len = out.as_bytes()[f.offset..]
+                    .iter()
+                    .take_while(|&&b| b == ch)
+                    .count();
+                Some((f.offset, ch, len))
+            })
+            .collect();
+        fences.sort_unstable_by_key(|f| std::cmp::Reverse(f.0));
+        for (offset, open_ch, open_len) in fences {
+            let at = best_fence_close(&out, offset);
+            let fence: String = std::iter::repeat_n(open_ch as char, open_len).collect();
+            let with_nl = if out.ends_with('\n') || at == out.len() {
+                format!("{fence}\n")
+            } else {
+                format!("\n{fence}\n")
+            };
+            out.insert_str(at, &with_nl);
+        }
+    }
+    if changed {
+        Some(out)
+    } else {
+        None
+    }
+}
+
+/// Recolecta las vallas abiertas parseando igual que `analyze` pero sin
+/// construir spans ni adornos. Se usa desde `close_unclosed_fences` (una
+/// pasada extra barata) y desde los tests.
+fn collect_unclosed_fences(text: &str) -> Vec<UnclosedFence> {
+    let mut opts = Options::empty();
+    opts.insert(Options::ENABLE_STRIKETHROUGH);
+    opts.insert(Options::ENABLE_TABLES);
+    opts.insert(Options::ENABLE_TASKLISTS);
+    opts.insert(Options::ENABLE_FOOTNOTES);
+    let normalized = normalize_fences(text);
+    let text: &str = &normalized;
+    let lines = LineIndex::new(text);
+    let mut out = Vec::new();
+    for (event, range) in Parser::new_ext(text, opts).into_offset_iter() {
+        if let Event::Start(Tag::CodeBlock(CodeBlockKind::Fenced(_))) = event {
+            if !fenced_block_is_closed(text, range.start, range.end) {
+                out.push(UnclosedFence {
+                    line: lines.line_of(range.start) + 1,
+                    offset: range.start,
+                });
+            }
+        }
+    }
+    out
+}
+
 pub fn analyze(text: &str) -> Analysis {
     let mut opts = Options::empty();
     opts.insert(Options::ENABLE_STRIKETHROUGH);
@@ -421,6 +630,7 @@ pub fn analyze(text: &str) -> Analysis {
     let mut spans: Vec<Span> = Vec::new();
     let mut ornaments: Vec<Ornament> = Vec::new();
     let mut images: Vec<ImageRef> = Vec::new();
+    let mut unclosed_fences: Vec<UnclosedFence> = Vec::new();
     let mut list_depth = 0usize;
     let mut table_depth = 0usize;
 
@@ -622,6 +832,18 @@ pub fn analyze(text: &str) -> Analysis {
                 let last = lines.line_of(end.saturating_sub(1).max(range.start));
                 ornaments.push(Ornament::CodeBlock { first, last });
 
+                if matches!(kind, CodeBlockKind::Fenced(_))
+                    && !fenced_block_is_closed(text, range.start, range.end)
+                {
+                    // La valla abre y nunca cierra: el resto del documento se
+                    // renderiza como un único bloque de código. Se avisa en la
+                    // barra de estado y se ofrece cerrarla con una acción.
+                    unclosed_fences.push(UnclosedFence {
+                        line: lines.line_of(range.start) + 1,
+                        offset: range.start,
+                    });
+                }
+
                 if matches!(kind, CodeBlockKind::Fenced(_)) {
                     let block_lines = line_ranges(text, range.start, end);
                     // Valla de apertura: se ocultan las comillas y se deja el
@@ -762,6 +984,7 @@ pub fn analyze(text: &str) -> Analysis {
         spans,
         ornaments,
         images,
+        unclosed_fences,
     }
 }
 
@@ -1696,5 +1919,140 @@ mod tests {
             ornaments_for(&a.ornaments, MarkupVisibility::Focus),
             a.ornaments
         );
+    }
+
+    #[test]
+    fn un_fence_sin_cerrar_se_detecta_con_su_linea() {
+        let text = "# titulo\n\n```rust\nlet x = 1;\nesto queda como codigo\n";
+        let a = analyze(text);
+        assert_eq!(a.unclosed_fences.len(), 1);
+        assert_eq!(a.unclosed_fences[0].line, 3);
+        // El offset apunta a la valla de apertura.
+        assert_eq!(
+            &text[a.unclosed_fences[0].offset..a.unclosed_fences[0].offset + 3],
+            "```"
+        );
+    }
+
+    #[test]
+    fn un_fence_cerrado_no_se_reporta_como_abierto() {
+        for text in [
+            "```\nx\n```\n",
+            "```rust\nx\n```\n\ntras el bloque\n",
+            // Cerrado al final del documento, sin newline final.
+            "```\nx\n```",
+        ] {
+            let a = analyze(text);
+            assert!(a.unclosed_fences.is_empty(), "falso positivo en {text:?}");
+        }
+    }
+
+    #[test]
+    fn un_fence_cerrado_con_tab_en_la_valla_no_se_reporta() {
+        // normalize_fences convierte el tab de la valla de cierre en espacio:
+        // pulldown ya la ve cerrada y no debe aparecer como abierta.
+        let text = "```\nx\n```\t\n\ntexto\n";
+        let a = analyze(text);
+        assert!(a.unclosed_fences.is_empty());
+    }
+
+    #[test]
+    fn un_fence_dentro_de_cita_cerrado_no_se_reporta() {
+        let text = "> ```rust\n> x\n> ```\n\ntras\n";
+        let a = analyze(text);
+        assert!(a.unclosed_fences.is_empty());
+    }
+
+    #[test]
+    fn un_fence_de_tilde_sin_cerrar_se_detecta() {
+        let a = analyze("~~~\nx\nresto\n");
+        assert_eq!(a.unclosed_fences.len(), 1);
+        assert_eq!(a.unclosed_fences[0].line, 1);
+    }
+
+    #[test]
+    fn la_primera_valla_sin_cerrar_tapa_las_demas() {
+        // El informe del usuario: dos vallas sin cerrar (líneas 16 y 262).
+        // CommonMark las ve como UN bloque desde la primera hasta EOF, así que
+        // la detección reporta solo la primera; cerrarla deja ver la segunda.
+        let text = "# a\n\n```\nx\n\n```c#\ny\n";
+        let a = analyze(text);
+        assert_eq!(a.unclosed_fences.len(), 1);
+        assert_eq!(a.unclosed_fences[0].line, 3);
+    }
+
+    #[test]
+    fn cerrar_vallas_sin_abiertas_devuelve_none() {
+        assert_eq!(close_unclosed_fences("```\nx\n```\n"), None);
+        assert_eq!(close_unclosed_fences("sin vallas\n"), None);
+    }
+
+    #[test]
+    fn cerrar_valla_sin_cerrar_la_cierra_donde_empezaba_la_siguiente_seccion() {
+        // Valla abierta, luego una cabecera: el cierre se inserta antes de ella.
+        let text = "```\ncodigo\n\n# Siguiente\n\ntexto\n";
+        let out = close_unclosed_fences(text).unwrap();
+        assert!(out.contains("codigo\n\n```\n# Siguiente"), "{out}");
+        // Tras cerrar, ya no hay vallas abiertas.
+        assert!(analyze(&out).unclosed_fences.is_empty());
+    }
+
+    #[test]
+    fn cerrar_valla_sin_cerrar_la_cierra_al_eof_si_no_hay_seccion() {
+        let text = "```\ncodigo sin cerrar\n";
+        let out = close_unclosed_fences(text).unwrap();
+        assert!(out.ends_with("```\n"), "{out}");
+        assert!(analyze(&out).unclosed_fences.is_empty());
+    }
+
+    #[test]
+    fn cerrar_vallas_respeta_la_valla_de_tabulador_de_apertura() {
+        // Apertura con tab tras la valla (como la del usuario): normalize la
+        // convierte en espacio y el bloque queda abierto; se debe cerrar.
+        let text = "```\t\ncodigo\n\n# Seccion\n";
+        let out = close_unclosed_fences(text).unwrap();
+        assert!(out.contains("codigo\n\n```\n# Seccion"), "{out}");
+    }
+
+    #[test]
+    fn cerrar_vallas_dos_abiertas_cierra_ambas() {
+        // Caso del usuario: dos vallas sin cerrar (la segunda era contenido de
+        // la primera). Tras cerrar la primera, la segunda queda abierta y
+        // también se cierra en una sola pasada.
+        let text = "# Encabezado\n\n```\nprimera\n\n```c#\nsegunda\n";
+        let out = close_unclosed_fences(text).unwrap();
+        assert!(analyze(&out).unclosed_fences.is_empty(), "{out}");
+        assert!(out.matches("```").count() >= 4, "{out}");
+    }
+
+    #[test]
+    fn cerrar_valla_respeta_fence_tilde() {
+        let text = "~~~\ncodigo\n\n# Siguiente\n";
+        let out = close_unclosed_fences(text).unwrap();
+        assert!(out.contains("codigo\n\n~~~\n# Siguiente"), "{out}");
+        assert!(analyze(&out).unclosed_fences.is_empty());
+    }
+
+    #[test]
+    fn el_fichero_del_usuario_se_detecta_y_se_recupera() {
+        // Issue #11: fichero de 492 líneas con dos vallas sin cerrar (16 con
+        // tabulador y 262). CommonMark ve un único bloque de código de la 16
+        // al final; Scribe debe avisar y ofrecer cerrar.
+        let text = include_str!("testdata/usuario-vallas-sin-cerrar.md");
+        let a = analyze(text);
+        // La primera valla sin cerrar (línea 16) es la única visible.
+        assert_eq!(a.unclosed_fences.len(), 1);
+        assert_eq!(a.unclosed_fences[0].line, 16);
+
+        // La acción cierra la primera y deja a la vista la segunda; al final
+        // no queda ninguna valla abierta.
+        let fixed = close_unclosed_fences(text).unwrap();
+        assert!(analyze(&fixed).unclosed_fences.is_empty());
+        // El documento ya no es un único bloque de código hasta el final: la
+        // sección «Emphasis» (que en el original quedaba tragada) vuelve a ser
+        // un encabezado real.
+        assert!(find(&analyze(&fixed).spans, "h1")
+            .iter()
+            .any(|s| fixed[s.start..s.end].contains("Emphasis")));
     }
 }
