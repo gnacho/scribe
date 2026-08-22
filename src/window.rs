@@ -466,6 +466,7 @@ impl ScribeWindow {
 
         let edit_section = gio::Menu::new();
         edit_section.append(Some("Alinear tablas"), Some("win.format-tables"));
+        edit_section.append(Some("Cerrar vallas abiertas"), Some("win.close-fences"));
         menu.append_section(None, &edit_section);
 
         let view_section = gio::Menu::new();
@@ -517,6 +518,18 @@ impl ScribeWindow {
             .css_classes(vec!["caption".to_string(), "dim-label".to_string()])
             .build();
 
+        // Aviso de vallas de código sin cerrar: aparece cuando el documento
+        // activo tiene alguna y al pulsarlo se cierran con la heurística.
+        let fence_warning = gtk4::Button::builder()
+            .css_classes(vec![
+                "caption".to_string(),
+                "flat".to_string(),
+                "error".to_string(),
+            ])
+            .action_name("win.close-fences")
+            .visible(false)
+            .tooltip_text("Cerrar las vallas de código abiertas")
+            .build();
         let goto_spin = gtk4::SpinButton::with_range(1.0, 1.0, 1.0);
         goto_spin.set_numeric(true);
         let goto_button = gtk4::Button::builder()
@@ -566,7 +579,10 @@ impl ScribeWindow {
             .margin_start(12)
             .margin_end(6)
             .build();
-        status_bar.set_start_widget(Some(&words_label));
+        let status_start = gtk4::Box::new(gtk4::Orientation::Horizontal, 8);
+        status_start.append(&words_label);
+        status_start.append(&fence_warning);
+        status_bar.set_start_widget(Some(&status_start));
         status_bar.set_end_widget(Some(&status_end));
 
         let toolbar_view = adw::ToolbarView::new();
@@ -672,6 +688,7 @@ impl ScribeWindow {
             let position_button = position_button.clone();
             let goto_spin = goto_spin.clone();
             let goto_popover = goto_popover.clone();
+            let fence_warning = fence_warning.clone();
             Rc::new(move || {
                 let Some(doc) = active_document() else {
                     return;
@@ -679,6 +696,21 @@ impl ScribeWindow {
                 let lines = doc.editor.line_count();
                 let (line, column) = doc.editor.cursor_position();
                 position_button.set_label(&format!("Ln {line}, Col {column}"));
+                // Aviso de vallas de código sin cerrar (issue #11): solo se
+                // muestra si el documento activo tiene alguna.
+                let fences = doc.editor.unclosed_fences();
+                if fences.is_empty() {
+                    fence_warning.set_visible(false);
+                } else {
+                    let first = fences[0].line;
+                    let extra = if fences.len() > 1 {
+                        format!(" (+{})", fences.len() - 1)
+                    } else {
+                        String::new()
+                    };
+                    fence_warning.set_label(&format!("Valla abierta (línea {first}){extra}"));
+                    fence_warning.set_visible(true);
+                }
                 // Con el popover «Ir a la línea» abierto el spin es del
                 // usuario: no pisar lo que está escribiendo.
                 if !goto_popover.is_visible() {
@@ -1072,6 +1104,7 @@ impl ScribeWindow {
         let action_italic = gio::SimpleAction::new("italic", None);
         let action_code = gio::SimpleAction::new("code", None);
         let action_format_tables = gio::SimpleAction::new("format-tables", None);
+        let action_close_fences = gio::SimpleAction::new("close-fences", None);
         let action_close_tab = gio::SimpleAction::new("close-tab", None);
         let action_tab_next = gio::SimpleAction::new("tab-next", None);
         let action_tab_prev = gio::SimpleAction::new("tab-prev", None);
@@ -1112,6 +1145,7 @@ impl ScribeWindow {
             &action_italic,
             &action_code,
             &action_format_tables,
+            &action_close_fences,
             &action_close_tab,
             &action_tab_next,
             &action_tab_prev,
@@ -1150,6 +1184,20 @@ impl ScribeWindow {
                     toast("Tablas alineadas");
                 } else {
                     toast("No hay tablas que alinear");
+                }
+            });
+        }
+        {
+            let active_document = active_document.clone();
+            let toast = toast.clone();
+            action_close_fences.connect_activate(move |_, _| {
+                let Some(doc) = active_document() else {
+                    return;
+                };
+                if doc.editor.close_unclosed_fences() {
+                    toast("Vallas de código cerradas");
+                } else {
+                    toast("No hay vallas abiertas");
                 }
             });
         }
