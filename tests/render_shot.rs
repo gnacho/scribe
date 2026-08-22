@@ -96,8 +96,10 @@ fn captura_vista_enriquecida() {
     gtk4::init().expect("GTK necesita un display; ejecuta bajo xvfb-run");
     libadwaita::init().expect("libadwaita init");
 
-    let out = std::path::Path::new("/mnt/agents/work/shots");
-    std::fs::create_dir_all(out).expect("crear dir de salida");
+    let out = std::env::var("SCRIBE_SHOTS_DIR")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|_| std::env::temp_dir().join("scribe-shots"));
+    std::fs::create_dir_all(&out).expect("crear dir de salida");
     std::fs::write(out.join("test.png"), TEST_PNG).expect("escribir imagen de prueba");
 
     let editor = Editor::new();
