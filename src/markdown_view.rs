@@ -78,10 +78,6 @@ const QUOTE_BAR_OFFSET: f32 = 20.0;
 const RULE_THICKNESS: f32 = 1.0;
 /// Grosor de los separadores verticales de las tablas.
 const CELL_SEPARATOR_THICKNESS: f32 = 1.0;
-/// Cuanto se alarga fuera de la pantalla la caja de un bloque que empieza o
-/// acaba mas alla de lo visible, para que sus esquinas redondeadas no aparezcan
-/// cortadas a mitad del bloque.
-const BLOCK_OVERSHOOT: f32 = 4000.0;
 /// Alto del hueco que el tag `imagegap` reserva bajo la línea de una imagen.
 const IMAGE_GAP_HEIGHT: f32 = crate::markdown_render::IMAGE_GAP_HEIGHT as f32;
 /// Alto máximo de la imagen pintada en ese hueco (se escala manteniendo ratio).
@@ -207,7 +203,12 @@ mod imp {
                 // la maquetacion de miles de lineas en mitad del dibujado, y
                 // eso deja la vista en un estado incoherente: gtksourceview
                 // aborta despues con «byte index off the end of the line».
-                let anchor_top = first.max(first_visible - 1);
+                //
+                // El rect se LIMITA al rango visible (mas una linea de margen):
+                // un fill uniforme no necesita cubrir el bloque entero, y los
+                // rects enormes o con origen negativo rompen el clip redondeado
+                // de GSK (la caja desaparecia en medio de bloques largos).
+                let anchor_top = first.max(first_visible - 1).max(0);
                 let anchor_bottom = last.min(last_visible + 1);
                 let Some((anchor_y, _)) = self.line_extent(anchor_top) else {
                     continue;
@@ -215,14 +216,22 @@ mod imp {
                 let Some((bottom_y, bottom_h)) = self.line_extent(anchor_bottom) else {
                     continue;
                 };
-                let mut top = anchor_y;
-                let mut bottom = bottom_y + bottom_h;
-                if first < anchor_top {
-                    top -= BLOCK_OVERSHOOT;
-                }
-                if last > anchor_bottom {
-                    bottom += BLOCK_OVERSHOOT;
-                }
+                let top = anchor_y;
+                let bottom = bottom_y + bottom_h;
+                // Esquinas redondeadas solo en los bordes reales del bloque; si
+                // el bloque sigue fuera de pantalla, el borde visible va recto.
+                let corners = |radius: f32| {
+                    let corner = |visible_edge: bool| {
+                        let r = if visible_edge { radius } else { 0.0 };
+                        graphene::Size::new(r, r)
+                    };
+                    [
+                        corner(first == anchor_top),   // sup-izq
+                        corner(first == anchor_top),   // sup-dcha
+                        corner(last == anchor_bottom), // inf-dcha
+                        corner(last == anchor_bottom), // inf-izq
+                    ]
+                };
 
                 match ornament {
                     Ornament::CodeBlock { .. } | Ornament::Table { .. } => {
@@ -237,7 +246,8 @@ mod imp {
                             (right - left - BLOCK_PADDING * 2.0).max(0.0),
                             (bottom - top).max(0.0),
                         );
-                        let rounded = gsk::RoundedRect::from_rect(rect, BLOCK_RADIUS);
+                        let [tl, tr, br, bl] = corners(BLOCK_RADIUS);
+                        let rounded = gsk::RoundedRect::new(rect, tl, tr, br, bl);
                         snapshot.push_rounded_clip(&rounded);
                         snapshot.append_color(&fill, &rect);
                         snapshot.pop();
@@ -251,7 +261,8 @@ mod imp {
                             .unwrap_or(left + BLOCK_PADDING);
                         let rect =
                             graphene::Rect::new(x, top, QUOTE_BAR_WIDTH, (bottom - top).max(0.0));
-                        let rounded = gsk::RoundedRect::from_rect(rect, QUOTE_BAR_WIDTH / 2.0);
+                        let [tl, tr, br, bl] = corners(QUOTE_BAR_WIDTH / 2.0);
+                        let rounded = gsk::RoundedRect::new(rect, tl, tr, br, bl);
                         snapshot.push_rounded_clip(&rounded);
                         snapshot.append_color(&palette.quote, &rect);
                         snapshot.pop();

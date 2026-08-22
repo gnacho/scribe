@@ -5,6 +5,31 @@ All notable changes to Scribe will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.6] - 2026-08-22
+
+### Added
+
+- **Pestañas reales multi-documento** (`AdwTabView` + `AdwTabBar`, estilo
+  gnome-text-editor). Cada documento tiene su editor, su undo, su estado de
+  guardado y su pestaña, con botón de cierre, reordenado por arrastre y
+  overflow. `Ctrl+N` nueva pestaña; `Ctrl+O`, recientes o `scribe fichero.md`
+  abren pestañas en la ventana activa; `Ctrl+W` cierra; `Ctrl+Tab` /
+  `Ctrl+Mayús+Tab` / `Ctrl+AvPág` / `Ctrl+RePág` navegan. Abrir un fichero ya
+  abierto enfoca su pestaña (dedupe por ruta canónica). Al cerrar una pestaña
+  con cambios: diálogo Guardar/Descartar/Cancelar; al cerrar la ventana con
+  varios modificados: diálogos secuenciales. Punto «•» en la pestaña modificada
+  + badge de atención en segundo plano; autoguardado por documento. La última
+  pestaña no se cierra (queda una en blanco).
+
+### Fixed
+
+- **Caja de fondo continua en bloques largos**: la caja se alargaba fuera de
+  pantalla para esconder las esquinas, y con origen muy negativo GSK no pintaba
+  nada (la caja desaparecía a mitad de un bloque de código de 120 líneas). Ahora
+  el rectángulo se limita a lo visible y las esquinas redondeadas solo se
+  dibujan en los bordes reales del bloque; la barra de cita usa el mismo
+  criterio.
+
 ## [0.3.4] - 2026-08-22
 
 ### Fixed

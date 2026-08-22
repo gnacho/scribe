@@ -49,6 +49,35 @@
         </child>
         <child>
           <object class="GtkShortcutsGroup">
+            <property name="title">Pestañas</property>
+            <child>
+              <object class="GtkShortcutsShortcut">
+                <property name="title">Cerrar pestaña</property>
+                <property name="accelerator">&lt;Control&gt;w</property>
+              </object>
+            </child>
+            <child>
+              <object class="GtkShortcutsShortcut">
+                <property name="title">Pestaña siguiente</property>
+                <property name="accelerator">&lt;Control&gt;Tab</property>
+              </object>
+            </child>
+            <child>
+              <object class="GtkShortcutsShortcut">
+                <property name="title">Pestaña anterior</property>
+                <property name="accelerator">&lt;Control&gt;&lt;Shift&gt;Tab</property>
+              </object>
+            </child>
+            <child>
+              <object class="GtkShortcutsShortcut">
+                <property name="title">Cambiar de pestaña</property>
+                <property name="accelerator">&lt;Control&gt;Page_Down &lt;Control&gt;Page_Up</property>
+              </object>
+            </child>
+          </object>
+        </child>
+        <child>
+          <object class="GtkShortcutsGroup">
             <property name="title">Formato</property>
             <child>
               <object class="GtkShortcutsShortcut">

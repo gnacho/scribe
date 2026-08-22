@@ -74,7 +74,7 @@ impl FileManager {
         });
     }
 
-    pub fn save<F: Fn(Outcome) + 'static>(
+    pub fn save<F: FnOnce(Outcome) + 'static>(
         &self,
         parent: &impl IsA<gtk4::Window>,
         current: Option<&PathBuf>,

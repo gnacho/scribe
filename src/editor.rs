@@ -15,6 +15,22 @@ type ChangedCallback = Rc<RefCell<Option<Box<dyn Fn(&str)>>>>;
 
 const MIN_MARGIN: i32 = 24;
 
+thread_local! {
+    /// Provider CSS único de la aplicación (D9): antes cada Editor instalaba
+    /// el suyo en el display y nunca lo retiraba, así que con pestañas se
+    /// acumulaban tantos providers como documentos. Ahora lo crea main una
+    /// sola vez y `set_font` lo recarga (el selector `textview.scribe-editor`
+    /// aplica a todos los editores, que comparten la misma fuente).
+    static APP_CSS: RefCell<Option<gtk4::CssProvider>> = const { RefCell::new(None) };
+}
+
+/// Instala el provider CSS de la aplicación. Lo llama main en el arranque;
+/// sin él (tests headless que crean un Editor suelto) `set_font` simplemente
+/// no inyecta CSS.
+pub fn install_app_css(provider: gtk4::CssProvider) {
+    APP_CSS.with(|slot| *slot.borrow_mut() = Some(provider));
+}
+
 /// Márgenes extra (izquierdo, derecho) de cada tag de bloque respecto al margen
 /// de la columna. El derecho importa en los bloques con caja dibujada: deja el
 /// texto por dentro del recuadro en vez de pegado al borde.
@@ -48,7 +64,6 @@ pub struct Editor {
     buffer: gtksourceview5::Buffer,
     tags: gtk4::TextTagTable,
     on_changed: ChangedCallback,
-    css: gtk4::CssProvider,
     last_line: Rc<Cell<i32>>,
     generation: Rc<Cell<u64>>,
     decoration: Rc<Cell<Decoration>>,
@@ -583,14 +598,7 @@ impl Editor {
             .child(&view)
             .build();
 
-        let css = gtk4::CssProvider::new();
-        if let Some(display) = gdk4::Display::default() {
-            gtk4::style_context_add_provider_for_display(
-                &display,
-                &css,
-                gtk4::STYLE_PROVIDER_PRIORITY_APPLICATION,
-            );
-        }
+        // El CSS lo instala main a nivel de aplicación (véase APP_CSS).
 
         let dark = adw::StyleManager::default().is_dark();
         apply_scheme(&buffer, dark);
@@ -603,7 +611,6 @@ impl Editor {
             buffer,
             tags,
             on_changed: Rc::new(RefCell::new(None)),
-            css,
             last_line: Rc::new(Cell::new(-1)),
             generation: Rc::new(Cell::new(0)),
             decoration: Rc::new(Cell::new(Decoration::default())),
@@ -636,7 +643,11 @@ impl Editor {
         }
 
         // El StyleManager vive toda la aplicación: capturar los widgets en
-        // fuerte impediría liberar este editor al cerrar su ventana.
+        // fuerte impediría liberar este editor al cerrar su pestaña.
+        // R6 (aceptado): se registra un handler por editor y no se puede
+        // desconectar; como todas las capturas son débiles, los handlers de
+        // editores cerrados quedan inertes (un no-op por cambio de tema),
+        // no hay fuga de widgets.
         let tags = self.tags.downgrade();
         let buffer = self.buffer.downgrade();
         let view = self.view.downgrade();
@@ -859,10 +870,14 @@ impl Editor {
 
     pub fn set_font(&self, family: FontFamily, size: i32, line_spacing: f64) {
         let size = size.clamp(9, 40);
-        self.css.load_from_string(&format!(
-            "textview.scribe-editor {{ font-family: {}; font-size: {size}px; }}",
-            family.css_stack()
-        ));
+        APP_CSS.with(|slot| {
+            if let Some(css) = slot.borrow().as_ref() {
+                css.load_from_string(&format!(
+                    "textview.scribe-editor {{ font-family: {}; font-size: {size}px; }}",
+                    family.css_stack()
+                ));
+            }
+        });
         let extra = ((size as f64) * (line_spacing - 1.0)).round().max(0.0) as i32;
         self.view.set_pixels_above_lines(extra / 2);
         self.view.set_pixels_below_lines(extra / 2);
