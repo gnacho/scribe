@@ -1,9 +1,10 @@
-//! Captura visual del editor: renderiza un documento de muestra a PNG para
+//! Captura visual del editor: renderiza un documento a PNGs paginados para
 //! verificar la vista enriquecida (tablas, cajas de código, filetes de
 //! título, citas, listas, imágenes) sin abrir ventanas interactivas.
 //!
 //! Ejecutar: xvfb-run -a cargo test --test render_shot -- --ignored --nocapture
-//! Salida:   /mnt/agents/work/shots/*.png
+//! Entrada:  MD_PATH (por defecto, documento de muestra integrado)
+//! Salida:   /mnt/agents/work/shots/pagina-NN.png
 
 // Los módulos de la app se incluyen vía #[path] y el harness solo ejercita
 // parte de su API: el resto aparece como código muerto aunque la app sí lo
@@ -26,30 +27,10 @@ use std::time::{Duration, Instant};
 const DOC: &str = "\
 # Título principal
 
-## Sección con *énfasis* y `código`
-
-Texto normal con **negrita** y un [enlace](https://ejemplo.com).
-
 | Command    | Description                      | Precio |
 | ---------- | -------------------------------- | -----: |
 | git status | List all **new** or modified     |    $12 |
 | git diff   | Show file `differences`          |  $1600 |
-
-> Una cita con **marcado**
-> y dos líneas.
-
-- [x] Tarea hecha
-- [ ] Tarea pendiente
-- Elemento normal
-
----
-
-```python
-def f():
-    return 1  # comentario
-```
-
-![gatito](test.png)
 ";
 
 /// PNG de 64x48 generado con un codificador real (bicolor rojo/azul), para
@@ -72,9 +53,9 @@ fn pump(ctx: &gtk4::glib::MainContext, ms: u64) {
     }
 }
 
-/// Renderiza el contenido de un widget a un PNG usando el renderer de la
-/// ventana ya realizada.
-fn shot(win: &gtk4::Window, path: &str) {
+/// Renderiza el contenido visible de la ventana a un PNG usando el renderer
+/// de la superficie ya realizada.
+fn shot(win: &gtk4::Window, path: &std::path::Path) {
     let w = win.width() as f64;
     let h = win.height() as f64;
     let paintable = gtk4::WidgetPaintable::new(Some(win));
@@ -102,6 +83,12 @@ fn captura_vista_enriquecida() {
     std::fs::create_dir_all(&out).expect("crear dir de salida");
     std::fs::write(out.join("test.png"), TEST_PNG).expect("escribir imagen de prueba");
 
+    // Documento: el indicado por MD_PATH o la muestra integrada.
+    let doc = std::env::var("MD_PATH")
+        .ok()
+        .and_then(|p| std::fs::read_to_string(p).ok())
+        .unwrap_or_else(|| DOC.to_string());
+
     let editor = Editor::new();
     editor.set_base_dir(Some(out.to_path_buf()));
     let win = gtk4::Window::builder()
@@ -112,9 +99,21 @@ fn captura_vista_enriquecida() {
     win.present();
 
     let ctx = gtk4::glib::MainContext::default();
-    editor.set_text(DOC);
-    pump(&ctx, 600); // drena el debounce de decoración y el layout
+    editor.set_text(&doc);
+    pump(&ctx, 800); // drena el debounce de decoración y el layout
 
-    shot(&win, &out.join("vista.png").display().to_string());
-    eprintln!("captura escrita en {}", out.join("vista.png").display());
+    let total = editor.line_count().max(1);
+    // Filas de texto por página (~1000 px de ventana): paginar con solape de
+    // una línea para no cortar cajas ni tablas a la mitad sin contexto.
+    let per_page = 38usize;
+    let mut first = 0usize;
+    let mut page = 0usize;
+    while first < total as usize {
+        editor.scroll_to_line(first as i32);
+        pump(&ctx, 350);
+        shot(&win, &out.join(format!("pagina-{page:02}.png")));
+        page += 1;
+        first += per_page;
+    }
+    eprintln!("{page} paginas escritas en {}", out.display());
 }
