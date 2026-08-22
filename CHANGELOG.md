@@ -5,6 +5,60 @@ All notable changes to Scribe will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.2] - 2026-08-22
+
+### Fixed
+
+- **Crash «byte index off the end of the line» (SIGABRT) eliminado por
+  construccion**: GTK aborta (GNOME/gtk#8346, `gtktextbtree.c:4012`) cuando el
+  buffer tiene texto `invisible=true` y una conversion pixel-iter consulta
+  geometria con el layout obsoleto. El editor ya no genera texto invisible en
+  ningun camino; las marcas se atenuan o encogen (`syn_shrink`). Cuando GTK
+  publique el fix, la puerta `gtk_hides_invisible_safely()` reactivara el
+  ocultado real sin tocar mas nada. El canario `gtk_invisible_canary` detecta si
+  el GTK del sistema sigue siendo vulnerable.
+- **Perdida de datos al alinear tablas** (`format_tables`): absorbia lineas
+  ajenas con `\|` y descartaba celdas de filas mas anchas que la cabecera. Ahora
+  el cuerpo lo delimita pulldown-cmark y las columnas cubren la fila mas ancha.
+  Conserva los finales CRLF por linea.
+- **Fugas de memoria**: ciclos `Rc` en StyleManager, senales del buffer y
+  acciones de ventana impedian que ninguna ventana ni editor se liberara. Todo a
+  `downgrade()`/`upgrade()`.
+- **Errores tragados en silencio**: el autoguardado y las preferencias ahora
+  avisan cuando falla una escritura (toast una vez por racha).
+- **Guardar sin extension** ahora anade `.md`.
+- **Indexacion defensiva** del mapa byte-char (acceso a rango).
+- **Manifest Flatpak** (issue #5): runtime GNOME 50, `cargo-sources.json` en el
+  formato oficial de flatpak-cargo-generator, `Cargo.lock` commiteado, metainfo
+  AppStream 1.0 conforme, CI endurecido (MSRV 1.83, `--locked`, appstreamcli).
+
+### Added — vista de edicion enriquecida estilo GitHub
+
+- **Bloques de codigo con caja de fondo** y el contenido en monoespaciada.
+- **Tablas como tabla visual**: caja, cabecera en negrita, fila de guiones
+  reducida a un filete y separadores de columna pintados.
+- **Titulos**: jerarquia por escala/peso + filete inferior en H1/H2; las
+  almohadillas se encogen en modo WYSIWYG.
+- **Citas con barra lateral** dibujada y **listas** con vinetas y casillas en el
+  canalon.
+- **Imagenes locales en bloque**: si `![alt](ruta)` esta sola en su linea y el
+  fichero existe (relativo al documento), se pinta escalada (max 144 px, limite
+  20 MB, cache de 64). Remotas o ausentes, placeholder discreto. El documento no
+  se contamina: nunca se insertan widgets ni caracteres.
+- **Preferencias con sentido real**: «Atenuar» = vista cruda atenuada con
+  adornos de ambiente; «Ocultar»/«Al enfocar» = WYSIWYG con marcas encogidas
+  (etiquetado como «encoge las marcas; GTK aun no permite ocultarlas»).
+
+### Changed
+
+- El marcado sustituido por un adorno se **encoge** (escala 0.05 + alpha 0) en
+  vez de ocultarse: sigue en la maquetacion de GTK, asi que el camino del aborto
+  es inalcanzable por construccion.
+- El cursor solo re-aplica el atenuado del modo foco (antes re-analizaba todo).
+- Una sola copia del buffer para los contadores, en el timeout debounced.
+- README reescrito: EN principal + `README.es.md`, con las features de la vista
+  enriquecida.
+
 ## [0.3.1] - 2026-08-08
 
 ### Fixed
@@ -71,6 +125,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   dentro de una senal podia dejar el tag `codeblock` cubriendo texto posterior
   al cierre de la valla, con lo que el documento entero pasaba a verse como
   codigo despues de editar.
+
+## [0.2.0] - 2026-08-07
 
 ## [0.2.0] - 2026-08-07
 

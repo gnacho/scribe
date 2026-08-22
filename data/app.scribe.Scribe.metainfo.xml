@@ -25,6 +25,18 @@
   </developer>
   <content_rating type="oars-1.1" />
   <releases>
+    <release version="0.3.2" date="2026-08-22">
+      <description>
+        <p>Corrige de raiz el aborto «byte index off the end of the line»: el
+        editor ya no oculta texto invisible, la precondicion del bug de GTK
+        (GNOME/gtk#8346), y recupera la vista enriquecida encogiendo las marcas
+        (syn_shrink) en vez de ocultarlas: cajas de codigo, tablas visuales con
+        cabecera en negrita, filetes en H1/H2, barras de cita, vinetas dibujadas
+        e imagenes locales en bloque. Cierra tambien el manifest Flatpak (runtime
+        50, cargo-sources.json en formato oficial) y endurece CI, packaging y
+        metainfo AppStream.</p>
+      </description>
+    </release>
     <release version="0.3.1" type="development" date="2026-08-08">
       <description>
         <p>Corrige que una valla de codigo seguida de un tabulador no cerrara el
