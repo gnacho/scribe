@@ -1,6 +1,13 @@
 use gtk4::prelude::*;
 use std::path::PathBuf;
 
+/// ¿Es la cancelación del usuario? El diálogo la entrega como un `gio::Error`
+/// `G_IO_ERROR_CANCELLED`; hay que distinguirla de un fallo real para no
+/// mostrar un toast de error cada vez que se cierra el diálogo sin elegir.
+fn is_cancelled(e: &glib::Error) -> bool {
+    e.kind::<gio::IOErrorEnum>() == Some(gio::IOErrorEnum::Cancelled)
+}
+
 pub enum Outcome {
     Ok(PathBuf),
     Cancelled,
@@ -11,6 +18,24 @@ pub enum OpenOutcome {
     Ok((PathBuf, String)),
     Cancelled,
     Error(String),
+}
+
+/// Añade el sufijo `.md` si el nombre elegido no lleva una extensión
+/// Markdown: el diálogo no lo pone solo y el documento acabaría sin
+/// extensión reconocible.
+fn with_md_suffix(path: PathBuf) -> PathBuf {
+    let has_markdown_suffix = path
+        .extension()
+        .and_then(|e| e.to_str())
+        .map(|e| matches!(e.to_ascii_lowercase().as_str(), "md" | "markdown"))
+        .unwrap_or(false);
+    if has_markdown_suffix {
+        path
+    } else {
+        let mut name = path.into_os_string();
+        name.push(".md");
+        PathBuf::from(name)
+    }
 }
 
 pub struct FileManager;
@@ -42,6 +67,7 @@ impl FileManager {
                     },
                     None => OpenOutcome::Cancelled,
                 },
+                Err(e) if is_cancelled(&e) => OpenOutcome::Cancelled,
                 Err(e) => OpenOutcome::Error(e.to_string()),
             };
             callback(outcome);
@@ -75,22 +101,20 @@ impl FileManager {
         filters.append(&filter);
         dialog.set_filters(Some(&filters));
 
-        if let Some(path) = current {
-            if let Some(parent_dir) = path.parent() {
-                dialog.set_initial_folder(Some(&gio::File::for_path(parent_dir)));
-            }
-        }
-
         let content = content.to_string();
         dialog.save(Some(parent), gio::Cancellable::NONE, move |result| {
             let outcome = match result {
                 Ok(file) => match file.path() {
-                    Some(path) => match std::fs::write(&path, &content) {
-                        Ok(()) => Outcome::Ok(path),
-                        Err(e) => Outcome::Error(e.to_string()),
-                    },
+                    Some(path) => {
+                        let path = with_md_suffix(path);
+                        match std::fs::write(&path, &content) {
+                            Ok(()) => Outcome::Ok(path),
+                            Err(e) => Outcome::Error(e.to_string()),
+                        }
+                    }
                     None => Outcome::Cancelled,
                 },
+                Err(e) if is_cancelled(&e) => Outcome::Cancelled,
                 Err(e) => Outcome::Error(e.to_string()),
             };
             callback(outcome);

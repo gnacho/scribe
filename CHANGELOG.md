@@ -5,6 +5,129 @@ All notable changes to Scribe will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.2] - 2026-08-22
+
+### Fixed
+
+- **Crash «byte index off the end of the line» (SIGABRT) eliminado por
+  construccion**: GTK aborta (GNOME/gtk#8346, `gtktextbtree.c:4012`) cuando el
+  buffer tiene texto `invisible=true` y una conversion pixel-iter consulta
+  geometria con el layout obsoleto. El editor ya no genera texto invisible en
+  ningun camino; las marcas se atenuan o encogen (`syn_shrink`). Cuando GTK
+  publique el fix, la puerta `gtk_hides_invisible_safely()` reactivara el
+  ocultado real sin tocar mas nada. El canario `gtk_invisible_canary` detecta si
+  el GTK del sistema sigue siendo vulnerable.
+- **Perdida de datos al alinear tablas** (`format_tables`): absorbia lineas
+  ajenas con `\|` y descartaba celdas de filas mas anchas que la cabecera. Ahora
+  el cuerpo lo delimita pulldown-cmark y las columnas cubren la fila mas ancha.
+  Conserva los finales CRLF por linea.
+- **Fugas de memoria**: ciclos `Rc` en StyleManager, senales del buffer y
+  acciones de ventana impedian que ninguna ventana ni editor se liberara. Todo a
+  `downgrade()`/`upgrade()`.
+- **Errores tragados en silencio**: el autoguardado y las preferencias ahora
+  avisan cuando falla una escritura (toast una vez por racha).
+- **Guardar sin extension** ahora anade `.md`.
+- **Indexacion defensiva** del mapa byte-char (acceso a rango).
+- **Manifest Flatpak** (issue #5): runtime GNOME 50, `cargo-sources.json` en el
+  formato oficial de flatpak-cargo-generator, `Cargo.lock` commiteado, metainfo
+  AppStream 1.0 conforme, CI endurecido (MSRV 1.83, `--locked`, appstreamcli).
+
+### Added — vista de edicion enriquecida estilo GitHub
+
+- **Bloques de codigo con caja de fondo** y el contenido en monoespaciada.
+- **Tablas como tabla visual**: caja, cabecera en negrita, fila de guiones
+  reducida a un filete y separadores de columna pintados.
+- **Titulos**: jerarquia por escala/peso + filete inferior en H1/H2; las
+  almohadillas se encogen en modo WYSIWYG.
+- **Citas con barra lateral** dibujada y **listas** con vinetas y casillas en el
+  canalon.
+- **Imagenes locales en bloque**: si `![alt](ruta)` esta sola en su linea y el
+  fichero existe (relativo al documento), se pinta escalada (max 144 px, limite
+  20 MB, cache de 64). Remotas o ausentes, placeholder discreto. El documento no
+  se contamina: nunca se insertan widgets ni caracteres.
+- **Preferencias con sentido real**: «Atenuar» = vista cruda atenuada con
+  adornos de ambiente; «Ocultar»/«Al enfocar» = WYSIWYG con marcas encogidas
+  (etiquetado como «encoge las marcas; GTK aun no permite ocultarlas»).
+
+### Changed
+
+- El marcado sustituido por un adorno se **encoge** (escala 0.05 + alpha 0) en
+  vez de ocultarse: sigue en la maquetacion de GTK, asi que el camino del aborto
+  es inalcanzable por construccion.
+- El cursor solo re-aplica el atenuado del modo foco (antes re-analizaba todo).
+- Una sola copia del buffer para los contadores, en el timeout debounced.
+- README reescrito: EN principal + `README.es.md`, con las features de la vista
+  enriquecida.
+
+## [0.3.1] - 2026-08-08
+
+### Fixed
+
+- **Una valla de codigo seguida de un tabulador no cerraba el bloque**, con lo
+  que el resto del documento pasaba a verse como codigo. El spec de CommonMark
+  dice que la valla de cierre «puede ir seguida solo de espacios o tabuladores,
+  que se ignoran», pero pulldown-cmark no lo respeta: se reproduce con
+  `` ```\ncodigo\n```\t\n `` tanto en 0.12 como en 0.13, asi que no es cosa
+  nuestra ni esta arreglado aguas arriba. Como apano, `normalize_fences()`
+  sustituye por espacios los tabuladores que van detras de una valla antes de
+  parsear. Solo toca lineas de valla, y como espacio y tabulador ocupan un byte
+  cada uno, todos los desplazamientos siguen valiendo sobre el texto original:
+  los tabuladores de dentro del bloque no se tocan.
+- Tres tests nuevos, incluido el de que la normalizacion conserva las
+  posiciones (33 en total).
+
+## [0.3.0] - 2026-08-08
+
+### Added — tablas
+
+- **Las tablas se renderizan como tablas**: la fila de guiones del fuente se
+  oculta y en su hueco se dibuja la línea que separa la cabecera; el bloque
+  lleva su propia caja redondeada, distinta de la de los bloques de código; y
+  los pipes quedan atenuados, haciendo de separador de columna sin competir con
+  el contenido.
+- **Alinear tablas** (Ctrl+Alt+T, y en el menú principal): reformatea todas las
+  tablas del documento para que sus columnas cuadren en el fuente. Como el
+  bloque va en monoespaciada, alinear el fuente es lo que hace que la tabla se
+  vea alineada en pantalla. Respeta los `:` de alineación, los pipes escapados
+  (`\|`) y las tablas de ejemplo dentro de bloques de código, que no se tocan.
+  Es una sola acción de usuario: se deshace de golpe con Ctrl+Z.
+- Siete tests nuevos para el formateador y los adornos de tabla (29 en total).
+
+### Changed
+
+- El tag `tabledelim` desaparece: la fila de guiones ya no se atenúa, se oculta.
+
+## [0.2.1] - 2026-08-08
+
+### Fixed
+
+- **Crash al editar** (`gtk_text_iter_set_visible_line_index`, «byte index off
+  the end of the line»). Tres causas encadenadas, las tres arregladas:
+  - `decorate()` se llamaba de forma sincrona desde
+    `notify::cursor-position`, que es una senal del buffer. Aplicar tags de
+    invisibilidad mientras GTK esta procesando una edicion descuadra su
+    maquetacion. Ahora toda la decoracion pasa por `schedule_decoration()` y se
+    difiere al bucle principal; no se toca el buffer desde ninguna senal suya.
+  - Al dibujar, un bloque de codigo que abarcaba mucho mas que la pantalla hacia
+    que se pidiera geometria de lineas muy lejanas, obligando a GTK a validar
+    miles de lineas en mitad del `snapshot`. La geometria se limita ahora a la
+    franja visible y la caja se alarga fuera de pantalla, para que las esquinas
+    redondeadas no aparezcan cortadas a mitad del bloque.
+  - Los adornos van por numero de linea; si el buffer cambiaba entre el calculo
+    y el dibujado, apuntaban a sitios equivocados. `set_ornaments` guarda ahora
+    el numero de lineas para el que se calcularon y el dibujado se salta el
+    fotograma si ya no coincide.
+- **La version en `Cargo.toml` seguia en 1.0.0** desde la pre-alpha, asi que la
+  ventana «Acerca de» mentia. Ahora sale de `CARGO_PKG_VERSION` y coincide con
+  el CHANGELOG. De paso: licencia como `AGPL-3.0-or-later`, `rust-version`
+  declarada y fuera `serde`/`serde_json`, que no los usa nadie.
+- **Tags de bloque que se extendian de mas**: el mismo problema de decorar
+  dentro de una senal podia dejar el tag `codeblock` cubriendo texto posterior
+  al cierre de la valla, con lo que el documento entero pasaba a verse como
+  codigo despues de editar.
+
+## [0.2.0] - 2026-08-07
+
 ## [0.2.0] - 2026-08-07
 
 ### Added — adornos dibujados

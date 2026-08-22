@@ -6,9 +6,10 @@ use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 use std::time::Duration;
 
-use crate::markdown_render::{analyze, SpanKind, MAX_LIVE_BYTES};
+use crate::markdown_render::{analyze, ornaments_for, Ornament, SpanKind, MAX_LIVE_BYTES};
 use crate::markdown_view::{MarkdownView, OrnamentPalette};
-use crate::settings::{FontFamily, MarkupVisibility};
+use crate::settings::{gtk_hides_invisible_safely, FontFamily, MarkupVisibility};
+use std::path::PathBuf;
 
 type ChangedCallback = Rc<RefCell<Option<Box<dyn Fn(&str)>>>>;
 
@@ -54,6 +55,9 @@ pub struct Editor {
     column_width: Rc<Cell<i32>>,
     continue_lists: Rc<Cell<bool>>,
     typewriter: Rc<Cell<bool>>,
+    /// Directorio del documento abierto, contra el que se resuelven las
+    /// rutas relativas de las imágenes. `None` = no resolver (placeholder).
+    base_dir: Rc<RefCell<Option<PathBuf>>>,
 }
 
 fn build_tags() -> gtk4::TextTagTable {
@@ -69,7 +73,11 @@ fn build_tags() -> gtk4::TextTagTable {
         let builder = gtk4::TextTag::builder().name(name);
         let tag = match name {
             "quote" => builder.style(pango::Style::Italic).build(),
-            "codeblock" | "table" => builder.family("monospace").scale(0.9).build(),
+            // `table` no es monoespaciada: deja que el inline (strong, em,
+            // code, links) que genera `analyze` se interprete dentro de las
+            // celdas. El padding del fuente (véase `format_tables`) queda como
+            // separación natural; los pipes son marcas sustituidas.
+            "codeblock" => builder.family("monospace").scale(0.9).build(),
             // Sin sangría francesa: la viñeta se dibuja en el canalón, así que
             // todas las líneas del elemento arrancan en el mismo sitio.
             _ => builder.build(),
@@ -77,10 +85,19 @@ fn build_tags() -> gtk4::TextTagTable {
         add(tag);
     }
 
+    // La fila de guiones va oculta: se encoge para que el hueco donde se pinta
+    // la línea de cabecera no ocupe un renglón entero.
     add(gtk4::TextTag::builder()
-        .name("tabledelim")
-        .family("monospace")
-        .scale(0.9)
+        .name("tablerule")
+        .scale(0.4)
+        .pixels_above_lines(0)
+        .pixels_below_lines(0)
+        .build());
+    // Texto de la fila de cabecera de una tabla: negrita, sin fondo (la caja
+    // del bloque ya lo da).
+    add(gtk4::TextTag::builder()
+        .name("tablehead")
+        .weight(700)
         .build());
     add(gtk4::TextTag::builder()
         .name("fence")
@@ -91,6 +108,12 @@ fn build_tags() -> gtk4::TextTagTable {
         .name("html")
         .family("monospace")
         .scale(0.85)
+        .build());
+    // Hueco bajo la línea de una imagen en bloque: ahí se pinta la textura
+    // (o el placeholder) desde MarkdownView.
+    add(gtk4::TextTag::builder()
+        .name("imagegap")
+        .pixels_below_lines(crate::markdown_render::IMAGE_GAP_HEIGHT)
         .build());
 
     // Nota: GtkTextTag:letter-spacing no admite valores negativos, así que el
@@ -144,15 +167,33 @@ fn build_tags() -> gtk4::TextTagTable {
         .weight(700)
         .build());
 
+    // Registrado pero NUNCA aplicado mientras
+    // `settings::gtk_hides_invisible_safely()` sea falso: GTK aborta en
+    // `gtk_text_iter_set_visible_line_index` cuando el buffer contiene texto
+    // invisible (GNOME/gtk#8346; el fix, MR !10228, sigue sin publicarse).
+    // Se conserva para reactivar el modo «ocultar» con un GTK sano.
     add(gtk4::TextTag::builder()
         .name("syn_hidden")
         .invisible(true)
         .build());
     add(gtk4::TextTag::builder().name("syn_shown").build());
 
-    // El modo foco atenúa todo salvo el párrafo actual: va el último para pisar
-    // el color de cualquier otro tag.
+    // El modo foco atenúa todo salvo el párrafo actual. Va DESPUÉS de todos
+    // los tags de estilo para pisar su color, pero ANTES de `syn_shrink`: si
+    // no, su foreground opaco haría visibles las marcas encogidas (motas de
+    // ~1px) en los párrafos atenuados.
     add(gtk4::TextTag::builder().name("unfocused").build());
+
+    // Encoger en vez de ocultar (mitigación de GNOME/gtk#8346): la marca
+    // sustituida sigue en la maquetación con escala mínima y totalmente
+    // transparente, así que el texto nunca queda excluido del layout y el
+    // camino del aborto es inalcanzable por construcción. El color se fija
+    // aquí y no en el tema: debe ser transparente con cualquier paleta.
+    add(gtk4::TextTag::builder()
+        .name("syn_shrink")
+        .scale(0.05)
+        .foreground_rgba(&rgba(0x000000, 0.0))
+        .build());
 
     table
 }
@@ -195,8 +236,8 @@ fn apply_theme(tags: &gtk4::TextTagTable, view: &MarkdownView, dark: bool) {
     if dark {
         set("code", Some("#f0a868"), None);
         set("codeblock", Some("#e4e4e4"), None);
-        set("table", Some("#e0e0e0"), Some("#2c2c2c"));
-        set("tabledelim", Some("#7c7c7c"), Some("#2c2c2c"));
+        set("table", Some("#e0e0e0"), None);
+        set("tablehead", Some("#e0e0e0"), None);
         set("fence", Some("#8a8a8a"), None);
         set("quote", Some("#c2c2c2"), None);
         set("link", Some("#82b8f0"), None);
@@ -210,14 +251,15 @@ fn apply_theme(tags: &gtk4::TextTagTable, view: &MarkdownView, dark: bool) {
             accent: rgba(0x82b8f0, 1.0),
             muted: rgba(0x6f6f6f, 1.0),
             block: rgba(0xffffff, 0.07),
+            table: rgba(0xffffff, 0.05),
             quote: rgba(0x6f6f6f, 1.0),
             on_accent: rgba(0x1b1b1b, 1.0),
         });
     } else {
         set("code", Some("#a34a00"), None);
         set("codeblock", Some("#1f1f1f"), None);
-        set("table", Some("#1f1f1f"), Some("#f7f6f5"));
-        set("tabledelim", Some("#a9a8a5"), Some("#f7f6f5"));
+        set("table", Some("#1f1f1f"), None);
+        set("tablehead", Some("#1f1f1f"), None);
         set("fence", Some("#8b8a88"), None);
         set("quote", Some("#54535a"), None);
         set("link", Some("#1a6ed8"), None);
@@ -231,6 +273,7 @@ fn apply_theme(tags: &gtk4::TextTagTable, view: &MarkdownView, dark: bool) {
             accent: rgba(0x1a6ed8, 1.0),
             muted: rgba(0xc0bfbc, 1.0),
             block: rgba(0x000000, 0.05),
+            table: rgba(0x000000, 0.035),
             quote: rgba(0xc0bfbc, 1.0),
             on_accent: rgba(0xffffff, 1.0),
         });
@@ -244,7 +287,7 @@ fn set_column_margins(tags: &gtk4::TextTagTable, base: i32) {
             tag.set_right_margin(base + right);
         }
     }
-    for name in ["fence", "tabledelim"] {
+    for name in ["fence"] {
         if let Some(tag) = tags.lookup(name) {
             tag.set_left_margin(base + 24);
             tag.set_right_margin(base + 24);
@@ -278,14 +321,68 @@ fn paragraph_bounds(buffer: &gtksourceview5::Buffer, line: i32) -> (i32, i32) {
     (first, last)
 }
 
-fn decorate(view: &MarkdownView, buffer: &gtksourceview5::Buffer, config: Decoration) {
+/// Toda la decoracion pasa por aqui.
+///
+/// Nunca se aplican tags desde dentro de una senal del buffer: GTK no espera
+/// que la invisibilidad de su texto cambie mientras esta procesando una
+/// edicion, y hacerlo descuadra la maquetacion. El sintoma es un aborto en
+/// `gtk_text_iter_set_visible_line_index` («byte index off the end of the
+/// line») y, antes de llegar ahi, tags de bloque que se extienden mas alla de
+/// su rango. Se difiere siempre al bucle principal.
+fn schedule_decoration(
+    view: &MarkdownView,
+    buffer: &gtksourceview5::Buffer,
+    decoration: &Rc<Cell<Decoration>>,
+    generation: &Rc<Cell<u64>>,
+    base_dir: &Rc<RefCell<Option<PathBuf>>>,
+    delay: Duration,
+) {
+    let current = generation.get().wrapping_add(1);
+    generation.set(current);
+
+    let view = view.clone();
+    let buffer = buffer.clone();
+    let decoration = decoration.clone();
+    let generation = generation.clone();
+    let base_dir = base_dir.clone();
+    glib::timeout_add_local_once(delay, move || {
+        // Si ha llegado otra peticion mientras esperabamos, esta sobra.
+        if generation.get() != current {
+            return;
+        }
+        decorate(&view, &buffer, decoration.get(), &base_dir);
+    });
+}
+
+/// Resuelve el destino de una imagen contra el directorio del documento.
+/// Las URLs y las rutas absolutas se devuelven tal cual; sin directorio base,
+/// la relativa se devuelve sin resolver (el widget pintará el placeholder).
+/// `~` no se expande.
+fn resolve_image_dest(dest: &str, base_dir: &Option<PathBuf>) -> String {
+    let is_url = dest.starts_with("http://") || dest.starts_with("https://");
+    if is_url || std::path::Path::new(dest).is_absolute() {
+        return dest.to_string();
+    }
+    match base_dir {
+        Some(dir) => dir.join(dest).to_string_lossy().into_owned(),
+        None => dest.to_string(),
+    }
+}
+
+fn decorate(
+    view: &MarkdownView,
+    buffer: &gtksourceview5::Buffer,
+    config: Decoration,
+    base_dir: &Rc<RefCell<Option<PathBuf>>>,
+) {
     let start = buffer.start_iter();
     let end = buffer.end_iter();
     buffer.remove_all_tags(&start, &end);
 
+    let line_count = end.line() + 1;
     let text = buffer.text(&start, &end, true).to_string();
     if text.is_empty() || text.len() > MAX_LIVE_BYTES {
-        view.set_ornaments(Vec::new());
+        view.set_ornaments(Vec::new(), line_count);
         return;
     }
 
@@ -304,10 +401,33 @@ fn decorate(view: &MarkdownView, buffer: &gtksourceview5::Buffer, config: Decora
 
     let analysis = analyze(&text);
     let cursor_line = buffer.iter_at_offset(buffer.cursor_position()).line();
+    // Árbol de decisión de visibilidad. La preferencia persistida
+    // (`config.markup`) decide el look; la puerta
+    // `gtk_hides_invisible_safely()` (GNOME/gtk#8346) solo decide si las
+    // marcas sustituidas se encogen (`syn_shrink`, hoy siempre) o se ocultan
+    // de verdad (`syn_hidden`, futuro GTK sano):
+    //
+    // - «Atenuar» (Dim): marcas y sustituidas → `syn_shown`; solo se pintan
+    //   los adornos ambientales y aditivos, porque un sustituto taparía su
+    //   marca visible.
+    // - «Ocultar»/«Al enfocar» sin puerta: marcas → `syn_shown`; sustituidas
+    //   → `syn_shrink` (encogidas, no ocultas: véase build_tags); se pintan
+    //   todos los adornos. «Al enfocar» equivale a «Ocultar»: ya no hay
+    //   revelado por línea (véase preferences.rs).
+    // - «Ocultar»/«Al enfocar» con puerta: comportamiento clásico —
+    //   `syn_hidden` y todos los adornos.
+    let gate = gtk_hides_invisible_safely();
     let dim = config.markup == MarkupVisibility::Dim;
 
     for span in &analysis.spans {
-        let (from, to) = (byte_to_char[span.start], byte_to_char[span.end]);
+        // Los rangos del parser deberían estar siempre dentro del texto, pero
+        // un cambio en pulldown-cmark o en analyze no debe convertirse en un
+        // panic en producción.
+        debug_assert!(span.end <= text.len(), "span fuera de rango: {span:?}");
+        let (from, to) = match (byte_to_char.get(span.start), byte_to_char.get(span.end)) {
+            (Some(&from), Some(&to)) => (from, to),
+            _ => continue,
+        };
         if from >= to {
             continue;
         }
@@ -315,44 +435,73 @@ fn decorate(view: &MarkdownView, buffer: &gtksourceview5::Buffer, config: Decora
         let end_iter = buffer.iter_at_offset(to);
         let name = match span.kind {
             SpanKind::Style => span.tag,
-            // Las marcas sustituidas por un adorno no se revelan al pasar el
-            // cursor: hacerlo movería el texto de sitio en cada línea.
-            SpanKind::Replaced => {
-                if dim {
+            SpanKind::Marker => {
+                // Las marcas normales solo se ocultan con un GTK sano; sin la
+                // puerta se atenúan en todos los modos.
+                if dim || !gate {
                     "syn_shown"
                 } else {
                     "syn_hidden"
                 }
             }
-            SpanKind::Marker => match config.markup {
-                MarkupVisibility::Hidden => "syn_hidden",
-                MarkupVisibility::Dim => "syn_shown",
-                MarkupVisibility::Focus => {
-                    if start_iter.line() <= cursor_line && end_iter.line() >= cursor_line {
-                        "syn_shown"
-                    } else {
-                        "syn_hidden"
-                    }
+            SpanKind::Replaced => {
+                // Las marcas sustituidas por un adorno se encogen (nunca se
+                // ocultan sin la puerta): encoger no excluye texto del layout
+                // y por eso es seguro donde `invisible` no lo es.
+                if dim {
+                    "syn_shown"
+                } else if gate {
+                    "syn_hidden"
+                } else {
+                    "syn_shrink"
                 }
-            },
+            }
         };
         buffer.apply_tag_by_name(name, &start_iter, &end_iter);
     }
 
-    // En modo «atenuar» las marcas están a la vista, así que dibujar encima
-    // duplicaría la información.
-    view.set_ornaments(if dim { Vec::new() } else { analysis.ornaments });
+    // Los adornos se filtran por familia según la preferencia (véase
+    // `ornaments_for`): en «Atenuar» solo ambientales y aditivos; en los
+    // modos WYSIWYG todos, con las marcas sustituidas encogidas u ocultas.
+    let mut ornaments = ornaments_for(&analysis.ornaments, config.markup);
+    // Los adornos van por número de línea salvo `Break` y `CellSeparator`, que
+    // guardan byte offsets: el widget indexa por caracteres, así que convertimos.
+    for o in &mut ornaments {
+        let cap = byte_to_char.len().saturating_sub(1);
+        match o {
+            Ornament::Break { offset } | Ornament::CellSeparator { offset } => {
+                let at = (*offset).min(cap);
+                *offset = byte_to_char[at] as usize;
+            }
+            // Las rutas relativas se resuelven contra el directorio del
+            // documento: el painter solo trabaja con rutas absolutas (o con
+            // URLs, que no carga: pinta el placeholder).
+            Ornament::Image { dest, .. } => {
+                *dest = resolve_image_dest(dest, &base_dir.borrow());
+            }
+            _ => {}
+        }
+    }
+    view.set_ornaments(ornaments, line_count);
 
     if config.focus_mode {
-        let (first, last) = paragraph_bounds(buffer, cursor_line);
-        if let Some(para_start) = buffer.iter_at_line(first) {
-            buffer.apply_tag_by_name("unfocused", &buffer.start_iter(), &para_start);
-        }
-        let after = buffer
-            .iter_at_line(last + 1)
-            .unwrap_or_else(|| buffer.end_iter());
-        buffer.apply_tag_by_name("unfocused", &after, &buffer.end_iter());
+        apply_focus_shade(buffer, cursor_line);
     }
+}
+
+/// Atenúa todo salvo el párrafo del cursor (modo foco). Es barato — solo
+/// mueve un tag, sin re-analizar el documento — y por eso puede llamarse en
+/// cada cambio de línea del cursor.
+fn apply_focus_shade(buffer: &gtksourceview5::Buffer, cursor_line: i32) {
+    buffer.remove_tag_by_name("unfocused", &buffer.start_iter(), &buffer.end_iter());
+    let (first, last) = paragraph_bounds(buffer, cursor_line);
+    if let Some(para_start) = buffer.iter_at_line(first) {
+        buffer.apply_tag_by_name("unfocused", &buffer.start_iter(), &para_start);
+    }
+    let after = buffer
+        .iter_at_line(last + 1)
+        .unwrap_or_else(|| buffer.end_iter());
+    buffer.apply_tag_by_name("unfocused", &after, &buffer.end_iter());
 }
 
 /// Marcador que continúa una lista, o `None` si la línea no es un elemento.
@@ -460,6 +609,7 @@ impl Editor {
             column_width: Rc::new(Cell::new(720)),
             continue_lists: Rc::new(Cell::new(true)),
             typewriter: Rc::new(Cell::new(false)),
+            base_dir: Rc::new(RefCell::new(None)),
         };
         editor.connect_signals();
         editor
@@ -484,65 +634,87 @@ impl Editor {
             });
         }
 
-        let tags = self.tags.clone();
-        let buffer = self.buffer.clone();
-        let view = self.view.clone();
-        let decoration = self.decoration.clone();
+        // El StyleManager vive toda la aplicación: capturar los widgets en
+        // fuerte impediría liberar este editor al cerrar su ventana.
+        let tags = self.tags.downgrade();
+        let buffer = self.buffer.downgrade();
+        let view = self.view.downgrade();
+        let decoration = Rc::downgrade(&self.decoration);
+        let generation = Rc::downgrade(&self.generation);
+        let base_dir = Rc::downgrade(&self.base_dir);
         adw::StyleManager::default().connect_dark_notify(move |sm| {
+            let (tags, buffer, view, decoration, generation, base_dir) = match (
+                tags.upgrade(),
+                buffer.upgrade(),
+                view.upgrade(),
+                decoration.upgrade(),
+                generation.upgrade(),
+                base_dir.upgrade(),
+            ) {
+                (Some(t), Some(b), Some(v), Some(d), Some(g), Some(dir)) => (t, b, v, d, g, dir),
+                _ => return,
+            };
             apply_scheme(&buffer, sm.is_dark());
             apply_theme(&tags, &view, sm.is_dark());
-            decorate(&view, &buffer, decoration.get());
+            schedule_decoration(
+                &view,
+                &buffer,
+                &decoration,
+                &generation,
+                &base_dir,
+                Duration::ZERO,
+            );
         });
 
+        // Las señales del buffer viven tanto como el buffer, y la vista posee
+        // el buffer: capturar la vista en débil rompe el ciclo.
         let on_changed = self.on_changed.clone();
         let generation = self.generation.clone();
         let last_line = self.last_line.clone();
         let decoration = self.decoration.clone();
-        let view = self.view.clone();
+        let base_dir = self.base_dir.clone();
+        let view = self.view.downgrade();
         self.buffer.connect_changed(move |buf| {
             let text = buf.text(&buf.start_iter(), &buf.end_iter(), true);
             if let Some(cb) = on_changed.borrow().as_ref() {
                 cb(&text);
             }
-
-            let current = generation.get().wrapping_add(1);
-            generation.set(current);
-            let generation = generation.clone();
-            let last_line = last_line.clone();
-            let decoration = decoration.clone();
-            let view = view.clone();
-            let buf = buf.clone();
-            glib::timeout_add_local_once(Duration::from_millis(45), move || {
-                if generation.get() != current {
-                    return;
-                }
-                last_line.set(buf.iter_at_offset(buf.cursor_position()).line());
-                decorate(&view, &buf, decoration.get());
-            });
+            last_line.set(buf.iter_at_offset(buf.cursor_position()).line());
+            if let Some(view) = view.upgrade() {
+                schedule_decoration(
+                    &view,
+                    buf,
+                    &decoration,
+                    &generation,
+                    &base_dir,
+                    Duration::from_millis(45),
+                );
+            }
         });
 
         let last_line = self.last_line.clone();
         let decoration = self.decoration.clone();
         let typewriter = self.typewriter.clone();
-        let view = self.view.clone();
+        let view = self.view.downgrade();
         self.buffer.connect_cursor_position_notify(move |buf| {
             if typewriter.get() {
-                let view = view.clone();
-                let mark = buf.get_insert();
-                glib::idle_add_local_once(move || {
-                    view.scroll_to_mark(&mark, 0.0, true, 0.0, 0.5);
-                });
+                if let Some(view) = view.upgrade() {
+                    let mark = buf.get_insert();
+                    glib::idle_add_local_once(move || {
+                        view.scroll_to_mark(&mark, 0.0, true, 0.0, 0.5);
+                    });
+                }
             }
             let line = buf.iter_at_offset(buf.cursor_position()).line();
             if last_line.get() == line {
                 return;
             }
             last_line.set(line);
-            let config = decoration.get();
-            // En «ocultar» y «atenuar» el marcado no depende del cursor; solo
-            // hay que repintar si algo lo sigue.
-            if config.markup == MarkupVisibility::Focus || config.focus_mode {
-                decorate(&view, buf, config);
+            // La visibilidad del marcado ya no depende del cursor: lo único
+            // que lo sigue es el atenuado del modo foco, que se re-aplica en
+            // el acto (barato) en vez de programar un decorate() O(n) entero.
+            if decoration.get().focus_mode {
+                apply_focus_shade(buf, line);
             }
         });
 
@@ -610,7 +782,22 @@ impl Editor {
     }
 
     pub fn refresh(&self) {
-        decorate(&self.view, &self.buffer, self.decoration.get());
+        schedule_decoration(
+            &self.view,
+            &self.buffer,
+            &self.decoration,
+            &self.generation,
+            &self.base_dir,
+            Duration::ZERO,
+        );
+    }
+
+    /// Directorio del documento, contra el que se resuelven las rutas
+    /// relativas de las imágenes. `None` = documento sin fichero: no se
+    /// resuelven y se pinta el placeholder. Programa una redecoración.
+    pub fn set_base_dir(&self, dir: Option<PathBuf>) {
+        *self.base_dir.borrow_mut() = dir;
+        self.refresh();
     }
 
     pub fn connect_changed<F: Fn(&str) + 'static>(&self, callback: F) {
@@ -716,6 +903,27 @@ impl Editor {
 
     pub fn set_continue_lists(&self, enabled: bool) {
         self.continue_lists.set(enabled);
+    }
+
+    /// Realinea todas las tablas del documento en el fuente. Es una sola
+    /// accion de usuario, asi que se deshace de golpe con Ctrl+Z.
+    pub fn format_tables(&self) -> bool {
+        let text = self.text();
+        let Some(formatted) = crate::markdown_render::format_tables(&text) else {
+            return false;
+        };
+        let offset = self.buffer.cursor_position();
+        self.buffer.begin_user_action();
+        let (mut start, mut end) = (self.buffer.start_iter(), self.buffer.end_iter());
+        self.buffer.delete(&mut start, &mut end);
+        let mut at = self.buffer.start_iter();
+        self.buffer.insert(&mut at, &formatted);
+        self.buffer.end_user_action();
+        let restored = self
+            .buffer
+            .iter_at_offset(offset.min(self.buffer.end_iter().offset()));
+        self.buffer.place_cursor(&restored);
+        true
     }
 
     pub fn set_tab_width(&self, width: i32) {

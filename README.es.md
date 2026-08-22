@@ -19,93 +19,119 @@
 </p>
 
 Scribe es un editor Markdown nativo para GNOME, escrito en Rust con GTK4 y
-libadwaita. El Markdown se renderiza en vivo sobre el propio buffer de
-edición: las cabeceras se ven con su tamaño, la negrita en negrita y las
-marcas de sintaxis se ocultan, sin cambiar a una previsualización aparte ni
+libadwaita. El Markdown se renderiza en vivo sobre el propio buffer de edición:
+las cabeceras se ven con su tamaño, la negrita en negrita y las marcas de
+sintaxis se atenúan o encogen, sin cambiar a una previsualización aparte ni
 usar un motor de navegador.
 
-## Por que existe esto
+## Por qué existe esto
 
 Quería un editor Markdown que se sintiera parte de GNOME, no un porte de una
-aplicación web. Los que probé o bien metían un motor de navegador
-(ProseMirror, Milkdown dentro de WebKit) y consumían cientos de megabytes, o
-mostraban el código fuente a un lado y la previsualización al otro. Acababa
-con los dos paneles abiertos, yendo y viniendo entre ellos en vez de
-escribir.
+aplicación web. Los que probé o bien metían un motor de navegador (ProseMirror,
+Milkdown dentro de WebKit) y consumían cientos de megabytes, o mostraban el
+código fuente a un lado y la previsualización al otro. Acababa con los dos
+paneles abiertos, yendo y viniendo entre ellos en vez de escribir.
 
 La idea es un editor donde el texto fuente ES la previsualización: el buffer
 sigue siendo Markdown sin más, pero el renderizado se pinta encima con
 `GtkTextTag`. Así no hay nada que sincronizar, no hay HTML por debajo ni que
-empaquetar un motor de navegador. Empezó como maquetas para explorar el
-diseño con GTK4 y ha terminado siendo algo que uso de verdad para borradores
-y notas.
+empaquetar un motor de navegador. Empezó como maquetas para explorar el diseño
+con GTK4 y ha terminado siendo algo que uso de verdad para borradores y notas.
 
-## Por que este stack
+## Por qué este stack
 
-- **Rust + GTK4 + libadwaita** &mdash; toolkit nativo, sin Electron. El
-  binario ocupa unos 8 MB y en reposo consume unas docenas de megabytes de
-  RAM. Un editor basado en WebKit pesaría diez veces eso antes de abrir un
-  archivo.
-- **GtkSourceView 5** para el buffer de texto y **pulldown-cmark** para
-  parsear Markdown. Luego se aplican tramos con `GtkTextTag` para el render.
-  Sin HTML ni CSS en la previsualización. El editor es un único
-  `GtkTextView` con decoraciones sobre el buffer.
+- **Rust + GTK4 + libadwaita** &mdash; toolkit nativo, sin Electron. El binario
+  ocupa unos 8 MB y en reposo consume unas docenas de megabytes de RAM. Un
+  editor basado en WebKit pesaría diez veces eso antes de abrir un archivo.
+- **GtkSourceView 5** para el buffer de texto y **pulldown-cmark** para parsear
+  Markdown. Luego se aplican tramos con `GtkTextTag` para el render. Sin HTML
+  ni CSS en la previsualización. El editor es un único `GtkTextView` con
+  decoraciones sobre el buffer.
 - **Sin base de datos, sin servidor, sin JavaScript.** Es una aplicación de
   escritorio que abre, edita y guarda archivos. Las preferencias van por
-  GSettings, no en un archivo de configuración ni en una interfaz web.
+  GSettings.
 
 ## Características
 
 - **Render WYSIWYG en vivo** sobre el buffer de edición: cabeceras a escala
-  real, negrita/cursiva/tachado, código en línea y en bloque, citas, listas
-  anidadas con sangría colgante, tareas, enlaces, imágenes, notas al pie,
-  reglas, tablas en monoespaciada y bloques HTML atenuados
-- **Visibilidad del marcado configurable**: ocultar las marcas (`**`, `#`,
-  backticks) siempre, revelarlas en la línea del cursor o mantenerlas
-  atenuadas en todo momento
-- **Modo foco** (Ctrl+Shift+F) atenúa todo salvo el párrafo actual
+  real, negrita/cursiva/tachado, código en línea y en bloque, citas, listas,
+  enlaces, imágenes, notas al pie, tablas y bloques HTML vía tramos de
+  `GtkTextTag`.
+- **Vista enriquecida** pintada sobre el buffer (`snapshot_layer`): bloques de
+  código con caja redondeada, tablas como rejilla visual (cabecera en negrita,
+  separadores de columna pintados y un filete donde estaba la fila de guiones),
+  filete bajo H1/H2, barra lateral de citas, viñetas dibujadas por nivel,
+  casillas de tarea marcables y reglas horizontales. La marca que sustituye un
+  adorno se **encoge** en vez de ocultarse.
+- **Imágenes locales en bloque**: cuando un `![alt](ruta)` está solo en su
+  línea y el fichero existe (relativo al documento), se pinta escalado bajo la
+  marca (máx. 144 px, límite de 20 MB, caché de 64). URLs remotas y ficheros
+  ausentes muestran un placeholder discreto. El buffer nunca se modifica: no se
+  insertan widgets ni caracteres.
+- **Visibilidad del marcado configurable**: atenuar las marcas de sintaxis
+  (`**`, `#`, backticks) siempre, ocultarlas o revelarlas en la línea del
+  cursor. Por un bug de GTK
+  ([gtk#8346](https://gitlab.gnome.org/GNOME/gtk/-/issues/8346)), "ocultar"
+  actualmente *encoge* las marcas (escala ~0) en vez de quitarlas; cuando GTK
+  publique el fix, el ocultado real vuelve solo.
+- **Modo foco** (Ctrl+Shift+F) atenúa todo salvo el párrafo actual.
 - **Máquina de escribir** (Ctrl+Shift+T) mantiene el cursor centrado
-  verticalmente
+  verticalmente.
 - **Plantillas**: archivos `.md` en `~/.local/share/scribe/templates` con
-  marcadores `{{title}}`, `{{date}}`, `{{time}}`, `{{datetime}}` y
-  `{{year}}`. Cuatro ejemplos se crean la primera vez
+  marcadores `{{title}}`, `{{date}}`, `{{time}}`, `{{datetime}}` y `{{year}}`.
+  Cuatro ejemplos se crean la primera vez.
 - **Vista dividida** (Ctrl+Shift+P) con render completo en un panel lateral
-  usando el mismo motor de `GtkTextTag`. Útil para tablas e imágenes
-- **Ctrl+B/I/K** envuelve la selección en `**`, `*` o backticks
+  usando el mismo motor de `GtkTextTag`.
+- **Ctrl+B/I/K** envuelve la selección en `**`, `*` o backticks.
+- **Alinear tablas** (Ctrl+Alt+T) reformatea todas las tablas del documento
+  para que las columnas cuadren en el fuente.
 - **Continuación de listas**: al pulsar Intro se crea el siguiente elemento y
-  se renumeran las listas ordenadas. Dejar un elemento vacío cierra la lista
-- **Zoom** (Ctrl +/&minus;/0) con controles en el menú principal
-- **Ir a la línea** desde la barra de estado
-- **Cabecera** al estilo de GNOME Text Editor: botón de abrir con
-  desplegable de recientes, botón de documento nuevo, título centrado y menú
-  principal con fila de zoom a la derecha
-- **Preferencias** en tres páginas: Apariencia, Editor y Plantillas
+  se renumeran las listas ordenadas. Dejar un elemento vacío cierra la lista.
+- **Zoom** (Ctrl +/&minus;/0) con controles en el menú principal.
+- **Ir a la línea** desde la barra de estado.
+- **Cabecera** al estilo de GNOME Text Editor: botón de abrir con desplegable
+  de recientes, botón de documento nuevo, título centrado y menú principal con
+  fila de zoom.
+- **Preferencias** en tres páginas: Apariencia, Editor y Plantillas.
 - **Archivos**: abrir, guardar y guardar como con `GtkFileDialog`, escritura
-  atómica (temporal + rename), aviso de cambios sin guardar y autoguardado
-  configurable
+  atómica, aviso de cambios sin guardar y autoguardado configurable.
 - **Barra lateral** (F9) con documentos recientes filtrables e índice del
-  documento navegable
-- **Tema claro y oscuro** que sigue el style scheme de GtkSourceView
-- **Integración**: `scribe fichero.md` y "Abrir con" del gestor de archivos
+  documento navegable.
+- **Tema claro y oscuro** que sigue el style scheme de GtkSourceView.
+- **Integración**: `scribe fichero.md` y "Abrir con" del gestor de archivos.
 
-## Límites conocidos del render en vivo
+## Cómo funciona el render
 
-`GtkTextTag` cambia cómo se ve el texto pero no puede sustituirlo ni dibujar
-encima, así que algunas cosas se ven como texto estilizado en vez de widgets
-reales:
+Dos módulos, ninguno con tipos de la aplicación dentro:
 
-- Las viñetas se quedan como `-` o `*`, coloreadas y con sangría colgante,
-  en vez de `&bull;`
-- Las tareas muestran `[x]` y `[ ]` estilizados, no checkboxes
-- Las reglas (`---`) se atenúan y centran, no son una línea dibujada
-- Las tablas se renderizan en monoespaciada para que las columnas cuadren al
-  alinear los pipes en el fuente; no son una rejilla real
-- Las imágenes no se incrustan
+- **`src/markdown_render.rs`** analiza el Markdown con pulldown-cmark y
+  devuelve dos listas: *tramos* (rangos en bytes con el nombre del
+  `GtkTextTag`) y *adornos* (elementos referidos a número de línea que hay que
+  pintar). No depende de GTK y se prueba sin display.
+- **`src/markdown_view.rs`** es un `GtkSourceView` subclaseado que implementa
+  `snapshot_layer`, el vfunc que GTK expone para pintar debajo o encima del
+  texto. Trabaja en coordenadas de buffer (GTK resuelve el desplazamiento) y
+  dibuja con `gsk::PathBuilder`.
 
-Dibujar con `snapshot()` propio o empotrar widgets con anclas en el buffer
-alteraría el texto fuente. Queda fuera de esta fase.
+Las marcas que sustituye un adorno (viñetas, `[x]`, `---`, `>`, vallas, pipes)
+se encogen en vez de ocultarse: el glifo diminuto sigue en la maquetación de
+GTK, así que el camino del aborto por texto invisible de GNOME/gtk#8346 queda
+inalcanzable por construcción.
+
+## Límites conocidos
+
+- Sin pestañas / varios documentos (`AdwTabView`), buscar y reemplazar, exportar
+  a HTML/PDF, corrección ortográfica ni traducción de la interfaz al inglés.
+- Las imágenes se incrustan solo cuando están solas en su línea; las inline
+  siguen mostrando el placeholder.
+- La caché de texturas de imagen no mira el mtime: un fichero editado en disco
+  no se refresca hasta reabrir el documento.
+- En el modo «ocultar / revelar en la línea del cursor» las marcas se encogen,
+  no se quitan (ver arriba).
 
 ## Capturas
+
+La interfaz está actualmente en español.
 
 **Ventana principal con render Markdown en vivo**
 
@@ -133,17 +159,9 @@ alteraría el texto fuente. Queda fuera de esta fase.
   <img alt="Modo foco en el editor con el documento atenuado y el párrafo actual resaltado" src="assets/screenshot-focus-es-light.png" width="800">
 </p>
 
-## Qué falta
-
-- Pestañas / varios documentos (`AdwTabView`)
-- Buscar y reemplazar
-- Exportar a HTML o PDF
-- Corrección ortográfica
-- Traducción de la interfaz al inglés y otros idiomas
-
 ## Requisitos de compilación
 
-- Rust 1.80 o superior
+- Rust 1.83 o superior
 - GTK4 (&ge; 4.14), libadwaita (&ge; 1.5), GtkSourceView 5 y GLib con sus
   ficheros de desarrollo
 
@@ -172,24 +190,23 @@ cargo build --release
 cargo run
 ```
 
-Para que las preferencias funcionen hace falta instalar el esquema
-GSettings. En desarrollo:
+Para que las preferencias funcionen hace falta instalar el esquema GSettings.
+En desarrollo:
 
 ```sh
 glib-compile-schemas data/
 GSETTINGS_SCHEMA_DIR=$PWD/data cargo run
 ```
 
-Si el esquema no está disponible, la aplicación arranca igual con los
-valores por defecto y avisa por stderr.
+Si el esquema no está disponible, la aplicación arranca igual con los valores
+por defecto y avisa por stderr.
 
 ## Flatpak
 
-Hay un manifiesto en [build-aux/flatpak](build-aux/flatpak). En progreso. El
-módulo compila con `cargo --offline`, así que primero hay que generar
-`cargo-sources.json` con
+Hay un manifiesto en [build-aux/flatpak](build-aux/flatpak) dirigido al runtime
+GNOME 50. `cargo-sources.json` se genera con
 [flatpak-cargo-generator](https://github.com/flatpak/flatpak-builder-tools/tree/master/cargo)
-y tener `Cargo.lock` en el repositorio:
+y `Cargo.lock` está commiteado:
 
 ```sh
 cargo generate-lockfile
@@ -210,4 +227,4 @@ cargo run
 
 ## Licencia
 
-AGPL-3.0. Ver [LICENSE](LICENSE).
+AGPL-3.0-or-later. Ver [LICENSE](LICENSE).

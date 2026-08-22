@@ -18,24 +18,24 @@
   </picture>
 </p>
 
-Scribe is a native GNOME Markdown editor built with Rust, GTK4 and
-libadwaita. It renders Markdown live on the editing buffer so headings look
-like headings and bold text looks bold, without switching to a separate
-preview or browser engine.
+Scribe is a native GNOME Markdown editor built with Rust, GTK4 and libadwaita.
+It renders Markdown live on the editing buffer so headings look like headings
+and bold text looks bold, without switching to a separate preview or a browser
+engine.
 
 ## Why does this exist?
 
 I wanted a Markdown editor that felt like part of GNOME, not a port of a web
 app. The ones I tried either wrapped a browser engine (ProseMirror, Milkdown
-inside WebKit) and consumed hundreds of megabytes, or they showed a plain
-source buffer next to a rendered preview. I kept both panes open, going back
-and forth between them instead of just writing.
+inside WebKit) and consumed hundreds of megabytes, or showed a plain source
+buffer next to a rendered preview. I kept both panes open, going back and forth
+between them instead of just writing.
 
 The idea is an editor where the source text IS the preview: the buffer stays
-plain Markdown, but the rendering happens on top with `GtkTextTag`. That way
-there is nothing to sync, no HTML under the hood, no browser engine to
-bundle. It started as mockups for a GTK4 design exploration and evolved into
-something I actually use to draft notes and docs.
+plain Markdown, but the rendering happens on top with `GtkTextTag`. There is
+nothing to sync, no HTML under the hood, no browser engine to bundle. It
+started as mockups for a GTK4 design exploration and evolved into something I
+actually use to draft notes and docs.
 
 ## Why this stack?
 
@@ -43,77 +43,86 @@ something I actually use to draft notes and docs.
   is around 8 MB and idles at a few dozen megabytes of RAM. A WebKit-based
   editor would be ten times that before opening a file.
 - **GtkSourceView 5** for the text buffer and **pulldown-cmark** for Markdown
-  parsing, then custom `GtkTextTag` spans for rendering. No HTML or CSS
-  involved in the preview. The editor is a single `GtkTextView` with
-  decorations applied to the buffer.
+  parsing, then custom `GtkTextTag` spans for rendering. No HTML or CSS in the
+  preview. The editor is a single `GtkTextView` with decorations applied to the
+  buffer.
 - **No database, no server, no JavaScript.** It is a desktop application that
-  opens, edits and saves files. Preferences go through GSettings, not a
-  config file or a web UI.
+  opens, edits and saves files. Preferences go through GSettings.
 
 ## Features
 
 - **Live WYSIWYG rendering** on the editing buffer: headings at real scale,
   bold/italic/strikethrough, inline and fenced code, quotes, links, images,
-  footnotes and HTML blocks via `GtkTextTag`. **Drawn ornaments** via
-  `snapshot_layer`: bullet markers for each nesting level, checkable task
-  boxes, horizontal rules, vertical quote bars, and rounded code-block boxes
-- **Configurable markup visibility**: hide syntax markers like `**`, `#` and
-  backticks entirely, reveal them on the cursor line, or show them dimmed
-  everywhere (which disables drawn ornaments to avoid duplicating information)
-- **Focus mode** (Ctrl+Shift+F) dims everything except the current paragraph
-- **Typewriter mode** (Ctrl+Shift+T) keeps the cursor vertically centered
+  footnotes, tables and HTML blocks via `GtkTextTag` spans.
+- **Rich rendered view** on top of the buffer (`snapshot_layer`): rounded code
+  blocks, tables as a visual grid (bold header, painted column separators and a
+  rule where the delimiter row was), a rule under H1/H2, vertical quote bars,
+  drawn bullets per nesting level, checkable task boxes and horizontal rules.
+  The mark a decoration replaces is **shrunk** instead of hidden.
+- **Local images in block**: when an `![alt](path)` is alone on its line and
+  the file exists (relative to the document), it is painted scaled below the
+  mark (max 144 px, 20 MB limit, cache of 64). Remote URLs and missing files
+  show a discreet placeholder. The buffer is never modified: no widgets, no
+  characters inserted.
+- **Configurable markup visibility**: dim the syntax markers (`**`, `#`,
+  backticks) everywhere, hide them, or reveal them on the cursor line. Because
+  of a GTK bug ([gtk#8346](https://gitlab.gnome.org/GNOME/gtk/-/issues/8346)),
+  "hide" currently *shrinks* the marks (scale ~0) instead of removing them;
+  when GTK ships the fix, real hiding returns on its own.
+- **Focus mode** (Ctrl+Shift+F) dims everything except the current paragraph.
+- **Typewriter mode** (Ctrl+Shift+T) keeps the cursor vertically centered.
 - **Templates**: Markdown files in `~/.local/share/scribe/templates` with
   `{{title}}`, `{{date}}`, `{{time}}`, `{{datetime}}` and `{{year}}` markers.
-  Four examples are seeded on first launch
+  Four examples are seeded on first launch.
 - **Split preview** (Ctrl+Shift+P) renders the full document in a side panel
-  using the same `GtkTextTag` engine. Useful for tables and images
-- **Ctrl+B/I/K** wraps the selection in `**`, `*` or backticks
+  using the same `GtkTextTag` engine.
+- **Ctrl+B/I/K** wraps the selection in `**`, `*` or backticks.
+- **Align tables** (Ctrl+Alt+T) reformats all tables in the document so their
+  columns line up in the source.
 - **List continuation**: pressing Enter starts the next item and re-numbers
-  ordered lists. Leaving an item empty closes the list
-- **Zoom** (Ctrl +/&minus;/0) with controls in the main menu
-- **Go to line** from the status bar
+  ordered lists. Leaving an item empty closes the list.
+- **Zoom** (Ctrl +/&minus;/0) with controls in the main menu.
+- **Go to line** from the status bar.
 - **Header bar** follows GNOME Text Editor: open button with recent files
-  dropdown, new document button, centered title, main menu with zoom row on
-  the right
-- **Preferences** window with three pages: Appearance, Editor and Templates
-- **Files**: open, save and save-as with `GtkFileDialog`, atomic writes
-  (temp + rename), unsaved-changes warning, configurable autosave
-- **Sidebar** (F9) with filterable recent files and a navigable document
-  outline
-- **Light and dark theme** follows the GtkSourceView style scheme
-- **Integration**: `scribe file.md` and "Open with" from the file manager
+  dropdown, new document button, centered title, main menu with zoom row.
+- **Preferences** window with three pages: Appearance, Editor and Templates.
+- **Files**: open, save and save-as with `GtkFileDialog`, atomic writes,
+  unsaved-changes warning, configurable autosave.
+- **Sidebar** (F9) with filterable recent files and a navigable outline.
+- **Light and dark theme** follows the GtkSourceView style scheme.
+- **Integration**: `scribe file.md` and "Open with" from the file manager.
 
-## How it works
+## How the rendering works
 
-Two modules, neither depends on the application types:
+Two modules, neither depending on application types:
 
 - **`src/markdown_render.rs`** parses Markdown with pulldown-cmark and returns
   two lists: *spans* (byte ranges with a `GtkTextTag` name) and *ornaments*
-  (elements keyed by line number to be painted). GTK-independent, testable
-  without a display: 22 unit tests.
+  (elements keyed by line number to be painted). GTK-independent, unit-tested
+  without a display.
 - **`src/markdown_view.rs`** is a `GtkSourceView` subclass that implements
   `snapshot_layer`, the vfunc GTK exposes for drawing below or above text. It
   works in buffer coordinates (GTK handles scrolling) and draws with
   `gsk::PathBuilder`.
 
-Markers replaced by an ornament (`- `, `[x] `, `---`, `>`, code-block fences)
-are hidden **always**, regardless of cursor line — revealing them would shift
-text around as the cursor moves.
+Markers replaced by an ornament (bullets, `[x]`, `---`, `>`, fences, pipes) are
+shrunk rather than hidden: the tiny glyph stays in GTK's layout, so the
+invisible-text abort path of GNOME/gtk#8346 is unreachable by construction.
 
 ## Known limits
 
-- **Images are not embedded**: the alt text is shown. `snapshot_layer` can
-  paint but cannot reserve line height; real embedding needs
-  `insert_paintable`, which inserts a character into the buffer and dirties
-  the source.
-- **Tables align only when the source is lined up**: the block is monospaced
-  so pipes line up, but there is no auto-formatting.
-- In "show dimmed everywhere" mode, ornaments are deliberately disabled to
-  avoid duplicating information already visible through the markup characters.
+- No tabs / multiple documents (`AdwTabView`), find & replace, export to
+  HTML/PDF, spell checking, or English UI translation yet.
+- Images are embedded only when alone on their line; inline images still show
+  the placeholder.
+- The image texture cache does not track file mtime: a picture edited on disk
+  is not refreshed until the document is reopened.
+- In "hide/reveal on cursor line" mode the marks are shrunk, not removed (see
+  above).
 
 ## Screenshots
 
-The interface is in Spanish. English localization is not done yet.
+The interface is currently in Spanish.
 
 **Main window with live Markdown rendering**
 
@@ -141,17 +150,9 @@ The interface is in Spanish. English localization is not done yet.
   <img alt="Focus mode in the editor showing a dimmed document with the current paragraph highlighted" src="assets/screenshot-focus-es-light.png" width="800">
 </p>
 
-## What's missing
-
-- Tabs / multiple documents (`AdwTabView`)
-- Find and replace
-- Export to HTML or PDF
-- Spell checking
-- English and other UI translations
-
 ## Build requirements
 
-- Rust 1.80 or later
+- Rust 1.83 or later
 - GTK4 (&ge; 4.14), libadwaita (&ge; 1.5), GtkSourceView 5 and GLib
   development files
 
@@ -193,11 +194,10 @@ warning to stderr.
 
 ## Flatpak
 
-A Flatpak manifest is at [build-aux/flatpak](build-aux/flatpak). Work in
-progress. The module builds with `cargo --offline`, so generate
-`cargo-sources.json` first with
+A Flatpak manifest is at [build-aux/flatpak](build-aux/flatpak) targeting the
+GNOME 50 runtime. `cargo-sources.json` is generated with
 [flatpak-cargo-generator](https://github.com/flatpak/flatpak-builder-tools/tree/master/cargo)
-and keep `Cargo.lock` in the repository:
+and `Cargo.lock` is committed:
 
 ```sh
 cargo generate-lockfile
@@ -218,4 +218,4 @@ cargo run
 
 ## License
 
-AGPL-3.0. See [LICENSE](LICENSE).
+AGPL-3.0-or-later. See [LICENSE](LICENSE).

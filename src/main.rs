@@ -57,6 +57,7 @@ fn main() -> glib::ExitCode {
             ("win.bold", &["<Ctrl>b"]),
             ("win.italic", &["<Ctrl>i"]),
             ("win.code", &["<Ctrl>k"]),
+            ("win.format-tables", &["<Ctrl><Alt>t"]),
             ("win.toggle-sidebar", &["F9"]),
             ("win.toggle-preview", &["<Ctrl><Shift>p"]),
             ("win.focus-mode", &["<Ctrl><Shift>f"]),

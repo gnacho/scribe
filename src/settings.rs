@@ -3,12 +3,32 @@ use gio::prelude::*;
 /// Cuándo se muestran las marcas de Markdown (`**`, `#`, backticks, URLs).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MarkupVisibility {
-    /// Siempre ocultas.
+    /// Siempre ocultas. Mientras la puerta [`gtk_hides_invisible_safely`] esté
+    /// cerrada, las marcas sustituidas se encogen (`syn_shrink`) en vez de
+    /// ocultarse, y las demás se atenúan.
     Hidden,
-    /// Ocultas salvo en la línea del cursor.
+    /// Ocultas salvo en la línea del cursor. Sin la puerta equivale a
+    /// [`Self::Hidden`]: ya no hay revelado por línea.
     Focus,
     /// Siempre visibles, pero atenuadas.
     Dim,
+}
+
+/// ¿Puede el GTK del sistema ocultar texto sin riesgo de aborto?
+///
+/// GTK aborta en `gtk_text_iter_set_visible_line_index` («byte index off the
+/// end of the line») cuando un buffer contiene texto invisible y su
+/// maquetación perezosa conserva índices calculados con otra visibilidad
+/// (GNOME/gtk#8346; el fix, MR !10228, aún no está publicado en ninguna
+/// versión). Mientras no exista una versión con el parche — verificable con
+/// el test canario `tests/gtk_invisible_canary.rs` — esto devuelve `false`
+/// y nada en el editor se oculta.
+///
+/// Al publicarse el fix en GTK, hay que comparar aquí
+/// `gtk4::major_version()`/`minor_version()`/`micro_version()` contra la
+/// primera versión que lo incluya.
+pub fn gtk_hides_invisible_safely() -> bool {
+    false
 }
 
 impl MarkupVisibility {
@@ -93,6 +113,15 @@ pub struct AppSettings {
     settings: Option<gio::Settings>,
 }
 
+/// Registra un fallo al escribir una clave (p. ej. bloqueada por dconf):
+/// sin esto, la preferencia parecería aplicarse y no se habría guardado.
+fn log_set_error(key: &str, e: glib::BoolError) {
+    glib::g_warning!(
+        "scribe",
+        "no se pudo guardar la clave «{key}» en GSettings: {e}"
+    );
+}
+
 macro_rules! prop {
     ($get:ident, $set:ident, $key:literal, i32, $default:expr) => {
         pub fn $get(&self) -> i32 {
@@ -100,7 +129,9 @@ macro_rules! prop {
         }
         pub fn $set(&self, v: i32) {
             self.set(|s| {
-                let _ = s.set_int($key, v);
+                if let Err(e) = s.set_int($key, v) {
+                    log_set_error($key, e);
+                }
             });
         }
     };
@@ -110,7 +141,9 @@ macro_rules! prop {
         }
         pub fn $set(&self, v: f64) {
             self.set(|s| {
-                let _ = s.set_double($key, v);
+                if let Err(e) = s.set_double($key, v) {
+                    log_set_error($key, e);
+                }
             });
         }
     };
@@ -120,7 +153,9 @@ macro_rules! prop {
         }
         pub fn $set(&self, v: bool) {
             self.set(|s| {
-                let _ = s.set_boolean($key, v);
+                if let Err(e) = s.set_boolean($key, v) {
+                    log_set_error($key, e);
+                }
             });
         }
     };
@@ -130,7 +165,9 @@ macro_rules! prop {
         }
         pub fn $set(&self, v: &str) {
             self.set(|s| {
-                let _ = s.set_string($key, v);
+                if let Err(e) = s.set_string($key, v) {
+                    log_set_error($key, e);
+                }
             });
         }
     };
@@ -215,7 +252,9 @@ impl AppSettings {
     }
     pub fn set_markup_visibility(&self, v: MarkupVisibility) {
         self.set(|s| {
-            let _ = s.set_string("markup-visibility", v.nick());
+            if let Err(e) = s.set_string("markup-visibility", v.nick()) {
+                log_set_error("markup-visibility", e);
+            }
         });
     }
 
@@ -226,7 +265,9 @@ impl AppSettings {
     }
     pub fn set_font_family(&self, v: FontFamily) {
         self.set(|s| {
-            let _ = s.set_string("font-family", v.nick());
+            if let Err(e) = s.set_string("font-family", v.nick()) {
+                log_set_error("font-family", e);
+            }
         });
     }
 
@@ -250,7 +291,9 @@ impl AppSettings {
             _ => "system",
         };
         self.set(|s| {
-            let _ = s.set_string("color-scheme", nick);
+            if let Err(e) = s.set_string("color-scheme", nick) {
+                log_set_error("color-scheme", e);
+            }
         });
     }
 
@@ -270,13 +313,17 @@ impl AppSettings {
         list.truncate(20);
         self.set(|s| {
             let refs: Vec<&str> = list.iter().map(|s| s.as_str()).collect();
-            let _ = s.set_strv("recent-files", refs);
+            if let Err(e) = s.set_strv("recent-files", refs) {
+                log_set_error("recent-files", e);
+            }
         });
     }
 
     pub fn clear_recent_files(&self) {
         self.set(|s| {
-            let _ = s.set_strv("recent-files", Vec::<&str>::new());
+            if let Err(e) = s.set_strv("recent-files", Vec::<&str>::new()) {
+                log_set_error("recent-files", e);
+            }
         });
     }
 }

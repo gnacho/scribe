@@ -68,6 +68,12 @@
                 <property name="accelerator">&lt;Control&gt;k</property>
               </object>
             </child>
+            <child>
+              <object class="GtkShortcutsShortcut">
+                <property name="title">Alinear tablas</property>
+                <property name="accelerator">&lt;Control&gt;&lt;Alt&gt;t</property>
+              </object>
+            </child>
           </object>
         </child>
         <child>
