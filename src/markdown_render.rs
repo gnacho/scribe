@@ -687,6 +687,12 @@ pub fn analyze(text: &str) -> Analysis {
                             spans.push(replaced(ls + i, ls + i + 1));
                             ornaments.push(Ornament::CellSeparator { offset: ls + i });
                         }
+                        // La `\` que escapa un pipe dentro de una celda es
+                        // marca, no contenido: se encoge para que la celda
+                        // muestre `|` a secas.
+                        if *b == b'\\' && bytes.get(i + 1) == Some(&b'|') {
+                            spans.push(replaced(ls + i, ls + i + 1));
+                        }
                     }
                     // Cabecera: el texto de las celdas en negrita (span
                     // `tablehead`); los pipes quedan fuera.

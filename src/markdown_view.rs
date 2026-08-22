@@ -171,6 +171,63 @@ mod imp {
             )
         }
 
+        /// `(x_inicio, x_fin)` del contenido real de una tabla: la X del
+        /// primer carácter de la fila menos sangrada y la X tras el último
+        /// carácter de la fila más ancha. Como los pipes están encogidos,
+        /// mide solo el texto de las celdas. Las tablas enormes se miden
+        /// solo en la ventana anclada a lo visible, por la misma razón que
+        /// el rect vertical: no pedir geometría de miles de líneas fuera de
+        /// pantalla en mitad del dibujado.
+        fn table_extent(
+            &self,
+            first: i32,
+            last: i32,
+            anchor_top: i32,
+            anchor_bottom: i32,
+        ) -> Option<(f32, f32)> {
+            let (from, to) = if last - first <= 200 {
+                (first, last)
+            } else {
+                (anchor_top, anchor_bottom)
+            };
+            let view = self.obj();
+            let buffer = view.buffer();
+            let mut start_x = f32::MAX;
+            let mut end_x = 0.0f32;
+            let mut any = false;
+            for line in from..=to {
+                let Some(mut iter) = buffer.iter_at_line(line) else {
+                    continue;
+                };
+                start_x = start_x.min(view.iter_location(&iter).x() as f32);
+                if !iter.ends_line() {
+                    iter.forward_to_line_end();
+                }
+                end_x = end_x.max(view.iter_location(&iter).x() as f32);
+                any = true;
+            }
+            any.then_some((start_x, end_x))
+        }
+
+        /// Caja horizontal de una tabla: su contenido más el margen de la
+        /// caja, sin salirse nunca de la columna de texto.
+        fn table_box(
+            &self,
+            first: i32,
+            last: i32,
+            anchor_top: i32,
+            anchor_bottom: i32,
+        ) -> (f32, f32) {
+            let (left, right) = self.column();
+            match self.table_extent(first, last, anchor_top, anchor_bottom) {
+                Some((s, e)) => (
+                    (s - BLOCK_PADDING).max(left),
+                    (e + BLOCK_PADDING).min(right),
+                ),
+                None => (left + BLOCK_PADDING, right - BLOCK_PADDING),
+            }
+        }
+
         /// Los adornos van por numero de linea. Si el buffer ha cambiado desde
         /// que se calcularon, dibujarlos pondria cajas y vinetas en sitios
         /// equivocados; se salta el fotograma y ya llegara la decoracion nueva.
@@ -235,15 +292,25 @@ mod imp {
 
                 match ornament {
                     Ornament::CodeBlock { .. } | Ornament::Table { .. } => {
-                        let fill = if matches!(ornament, Ornament::Table { .. }) {
+                        let is_table = matches!(ornament, Ornament::Table { .. });
+                        let fill = if is_table {
                             palette.table
                         } else {
                             palette.block
                         };
+                        // La caja de una tabla abraza el ancho real de sus
+                        // columnas (estilo GitHub): a ancho completo parecía
+                        // que sobrara una columna vacía a la derecha. La de
+                        // los bloques de código sigue a ancho completo.
+                        let (box_left, box_right) = if is_table {
+                            self.table_box(first, last, anchor_top, anchor_bottom)
+                        } else {
+                            (left + BLOCK_PADDING, right - BLOCK_PADDING)
+                        };
                         let rect = graphene::Rect::new(
-                            left + BLOCK_PADDING,
+                            box_left,
                             top,
-                            (right - left - BLOCK_PADDING * 2.0).max(0.0),
+                            (box_right - box_left).max(0.0),
                             (bottom - top).max(0.0),
                         );
                         let [tl, tr, br, bl] = corners(BLOCK_RADIUS);
@@ -371,12 +438,32 @@ mod imp {
                         snapshot.append_color(&palette.muted, &rect);
                     }
                     // La cabecera de la tabla: ocupa el hueco que deja la fila
-                    // de guiones, sangrada como el resto de la caja.
+                    // de guiones y abarca justo la caja de la tabla, no toda
+                    // la columna de texto (a ancho completo parecía que hubiera
+                    // una columna vacía extra a la derecha).
                     Ornament::TableRule { .. } => {
+                        let box_x = ornaments.iter().find_map(|o| match o {
+                            Ornament::Table { first, last }
+                                if (*first as i32) <= line && line <= (*last as i32) =>
+                            {
+                                let (f, l) = (*first as i32, *last as i32);
+                                let at = f.max(first_visible - 1).max(0);
+                                let ab = l.min(last_visible + 1);
+                                Some(self.table_box(f, l, at, ab))
+                            }
+                            _ => None,
+                        });
+                        let (rx, rw) = match box_x {
+                            Some((bl, br)) => (bl, br - bl),
+                            None => (
+                                left + BLOCK_PADDING * 2.0,
+                                right - left - BLOCK_PADDING * 4.0,
+                            ),
+                        };
                         let rect = graphene::Rect::new(
-                            left + BLOCK_PADDING * 2.0,
+                            rx,
                             (middle - RULE_THICKNESS / 2.0).round(),
-                            (right - left - BLOCK_PADDING * 4.0).max(0.0),
+                            rw.max(0.0),
                             RULE_THICKNESS,
                         );
                         snapshot.append_color(&palette.muted, &rect);
