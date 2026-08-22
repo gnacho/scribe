@@ -25,6 +25,15 @@
   </developer>
   <content_rating type="oars-1.1" />
   <releases>
+    <release version="0.3.4" date="2026-08-22">
+      <description>
+        <p>El contenido de las tablas vuelve a monoespaciada para que la rejilla
+        visual cuadre con el padding del fuente; el inline sigue aplicando y
+        «Formatear tablas» (Ctrl+Alt+T) alinea las que no cuadren. Añade un
+        test de render headless (render_shot) que verifica la vista enriquecida
+        a PNG bajo xvfb.</p>
+      </description>
+    </release>
     <release version="0.3.2" date="2026-08-22">
       <description>
         <p>Corrige de raiz el aborto «byte index off the end of the line»: el

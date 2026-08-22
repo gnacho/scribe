@@ -73,10 +73,11 @@ fn build_tags() -> gtk4::TextTagTable {
         let builder = gtk4::TextTag::builder().name(name);
         let tag = match name {
             "quote" => builder.style(pango::Style::Italic).build(),
-            // `table` no es monoespaciada: deja que el inline (strong, em,
-            // code, links) que genera `analyze` se interprete dentro de las
-            // celdas. El padding del fuente (véase `format_tables`) queda como
-            // separación natural; los pipes son marcas sustituidas.
+            // `table` vuelve a monoespaciada: la rejilla visual se apoya en el
+            // padding del fuente (véase `format_tables`) y eso exige ancho
+            // fijo. El inline (negrita, cursiva, color, código) son otros
+            // atributos y siguen aplicando encima sin problema.
+            "table" => builder.family("monospace").build(),
             "codeblock" => builder.family("monospace").scale(0.9).build(),
             // Sin sangría francesa: la viñeta se dibuja en el canalón, así que
             // todas las líneas del elemento arrancan en el mismo sitio.
