@@ -5,6 +5,22 @@ All notable changes to Scribe will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.4] - 2026-08-22
+
+### Fixed
+
+- **Contenido de tablas vuelve a monoespaciada** para que la rejilla visual
+  cuadre. La rejilla (cabecera en negrita, separadores pintados, filete) se
+  apoya en el padding del fuente que produce `format_tables`; con fuente
+  proporcional las columnas no alineaban. El inline (negrita, código, color)
+  sigue aplicando: son atributos independientes de la familia. Si una tabla no
+  cuadra, Ctrl+Alt+T («Formatear tablas») la deja alineada.
+- **Test de render headless**: `tests/render_shot.rs` renderiza el editor a PNG
+  bajo xvfb (`SCRIBE_SHOTS_DIR` o temp dir) para verificar visualmente la vista
+  enriquecida sin abrir ventanas. El camino de salida original apuntaba al
+  sandbox del agente (`/mnt/agents/work/shots`) y fallaba en máquinas reales;
+  ahora es configurable por variable de entorno.
+
 ## [0.3.2] - 2026-08-22
 
 ### Fixed
