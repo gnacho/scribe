@@ -25,6 +25,15 @@
   </developer>
   <content_rating type="oars-1.1" />
   <releases>
+    <release version="0.3.6" date="2026-08-22">
+      <description>
+        <p>Pestañas reales multi-documento (AdwTabView/AdwTabBar): cada
+        documento tiene editor, undo y estado propios, con dedupe por ruta,
+        diálogos Guardar/Descartar/Cancelar y autoguardado por documento.
+        También se corrige la caja de fondo que desaparecía a mitad de los
+        bloques de código largos.</p>
+      </description>
+    </release>
     <release version="0.3.4" date="2026-08-22">
       <description>
         <p>El contenido de las tablas vuelve a monoespaciada para que la rejilla
