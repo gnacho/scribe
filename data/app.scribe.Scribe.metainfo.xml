@@ -25,6 +25,17 @@
   </developer>
   <content_rating type="oars-1.1" />
   <releases>
+    <release version="0.3.10" date="2026-09-19">
+      <description>
+        <p>Interfaz traducida con gettext: cadenas fuente en inglés y catálogo
+        completo en español, con Scribe en el idioma del sistema. Las
+        plantillas integradas se crean en el idioma actual y la ventana de
+        atajos se traduce.</p>
+        <p>Detección y cierre de vallas de código sin cerrar: aviso en la barra
+        de estado («Valla abierta (línea N)») y acción (Ctrl+Alt+F) que las
+        cierra con heurística, deshacible con Ctrl+Z.</p>
+      </description>
+    </release>
     <release version="0.3.8" date="2026-08-22">
       <description>
         <p>La caja de las tablas y la regla de cabecera abrazan ahora el

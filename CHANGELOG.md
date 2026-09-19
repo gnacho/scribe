@@ -5,6 +5,22 @@ All notable changes to Scribe will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.10] - 2026-09-19
+
+### Added
+
+- **Interfaz traducida (gettext)**: las cadenas de la interfaz pasan a inglés
+  como idioma fuente, con catálogo completo en español (`po/es.po`), de modo
+  que cada usuario ve Scribe en el idioma de su sistema. Nuevas traducciones en
+  `po/` (ver `po/update-pot.sh`). Las plantillas integradas se crean en el
+  idioma actual en el primer arranque y los atajos de teclado se traducen.
+- **Detección y cierre de vallas de código sin cerrar** (#11): cuando una valla
+  fenced no se cierra, la barra de estado avisa («Valla abierta (línea N)») y
+  una acción (menú, Ctrl+Alt+F o pulsando el aviso) la cierra con una
+  heurística best-effort (antes de la siguiente cabecera o regla, de la
+  siguiente valla de apertura o al final del documento). Deshacer (Ctrl+Z)
+  restaura el texto original.
+
 ## [0.3.8] - 2026-08-22
 
 ### Fixed
