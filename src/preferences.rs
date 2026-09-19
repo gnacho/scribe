@@ -1,6 +1,7 @@
 //! Ventana de preferencias (AdwPreferencesWindow), organizada por páginas
 //! según las HIG de GNOME: apariencia, editor y plantillas.
 
+use gettextrs::gettext;
 use gtk4::prelude::*;
 use libadwaita as adw;
 use libadwaita::prelude::*;
@@ -18,11 +19,12 @@ fn spin(title: &str, subtitle: &str, adj: &gtk4::Adjustment, digits: u32) -> adw
         .build()
 }
 
-fn combo(title: &str, subtitle: &str, options: &[&str], selected: u32) -> adw::ComboRow {
+fn combo_i18n(title: &str, subtitle: &str, options: &[String], selected: u32) -> adw::ComboRow {
+    let refs: Vec<&str> = options.iter().map(String::as_str).collect();
     adw::ComboRow::builder()
         .title(title)
         .subtitle(subtitle)
-        .model(&gtk4::StringList::new(options))
+        .model(&gtk4::StringList::new(&refs))
         .selected(selected)
         .build()
 }
@@ -43,46 +45,52 @@ pub fn present(parent: &adw::ApplicationWindow, settings: &Rc<AppSettings>, appl
 
 fn appearance_page(settings: &Rc<AppSettings>, apply: &Rc<dyn Fn()>) -> adw::PreferencesPage {
     let page = adw::PreferencesPage::builder()
-        .title("Apariencia")
+        .title(gettext("Appearance"))
         .icon_name("preferences-desktop-appearance-symbolic")
         .build();
 
-    let theme_group = adw::PreferencesGroup::builder().title("Tema").build();
-    let theme = combo(
-        "Esquema de color",
-        "Sigue al sistema salvo que fuerces uno",
-        &["Sistema", "Claro", "Oscuro"],
+    let theme_group = adw::PreferencesGroup::builder()
+        .title(gettext("Theme"))
+        .build();
+    let theme = combo_i18n(
+        &gettext("Color scheme"),
+        &gettext("Follows the system unless you force one"),
+        &[gettext("System"), gettext("Light"), gettext("Dark")],
         settings.color_scheme_index(),
     );
     theme_group.add(&theme);
     page.add(&theme_group);
 
     let text_group = adw::PreferencesGroup::builder()
-        .title("Texto")
-        .description("El código y las tablas usan siempre monoespaciada")
+        .title(gettext("Text"))
+        .description(gettext("Code and tables always use a monospaced font"))
         .build();
 
-    let family = combo(
-        "Familia tipográfica",
-        "Cuerpo del documento",
-        &["Sans (Cantarell)", "Serif", "Monoespaciada"],
+    let family = combo_i18n(
+        &gettext("Font family"),
+        &gettext("Document body"),
+        &[
+            gettext("Sans (Cantarell)"),
+            gettext("Serif"),
+            gettext("Monospace"),
+        ],
         settings.font_family().index(),
     );
     let size = spin(
-        "Tamaño",
-        "Píxeles",
+        &gettext("Size"),
+        &gettext("Pixels"),
         &gtk4::Adjustment::new(settings.font_size() as f64, 9.0, 40.0, 1.0, 2.0, 0.0),
         0,
     );
     let spacing = spin(
-        "Interlineado",
-        "Multiplicador sobre el tamaño de fuente",
+        &gettext("Line spacing"),
+        &gettext("Multiplier on the font size"),
         &gtk4::Adjustment::new(settings.line_spacing(), 1.0, 3.0, 0.1, 0.1, 0.0),
         1,
     );
     let column = spin(
-        "Ancho de la columna",
-        "Ancho máximo del texto, en píxeles",
+        &gettext("Column width"),
+        &gettext("Maximum text width, in pixels"),
         &gtk4::Adjustment::new(
             settings.column_width() as f64,
             480.0,
@@ -145,62 +153,70 @@ fn appearance_page(settings: &Rc<AppSettings>, apply: &Rc<dyn Fn()>) -> adw::Pre
 
 fn editor_page(settings: &Rc<AppSettings>, apply: &Rc<dyn Fn()>) -> adw::PreferencesPage {
     let page = adw::PreferencesPage::builder()
-        .title("Editor")
+        .title(gettext("Editor"))
         .icon_name("document-edit-symbolic")
         .build();
 
     let markup_group = adw::PreferencesGroup::builder()
-        .title("Marcado")
-        .description("Qué hacer con los asteriscos, almohadillas y URLs mientras escribes")
+        .title(gettext("Markup"))
+        .description(gettext(
+            "What to do with asterisks, hash marks and URLs while you write",
+        ))
         .build();
     // Mientras `gtk_hides_invisible_safely()` sea falso (mitigación de
     // GNOME/gtk#8346), «Ocultar» y «Al enfocar» no ocultan de verdad: las
     // marcas sustituidas se encogen (tag `syn_shrink`) y las demás se
     // atenúan, y «Al enfocar» equivale a «Ocultar» porque ya no hay revelado
     // por línea. Con un GTK sano, sin sufijo y ocultado real.
-    let (subtitle, options): (&str, &[&str]) = if gtk_hides_invisible_safely() {
-        (
-            "«Al enfocar» las revela solo en la línea del cursor",
-            &["Ocultar siempre", "Mostrar al enfocar", "Atenuar siempre"],
+    let markup = if gtk_hides_invisible_safely() {
+        combo_i18n(
+            &gettext("Markdown marks"),
+            &gettext("“On focus” reveals them only on the cursor line"),
+            &[
+                gettext("Always hide"),
+                gettext("Show on focus"),
+                gettext("Always dim"),
+            ],
+            settings.markup_visibility().index(),
         )
     } else {
-        (
-            "Ocultar texto aún aborta con este GTK: las marcas se encogen en su lugar",
+        combo_i18n(
+            &gettext("Markdown marks"),
+            &gettext("Hiding text still crashes this GTK: the marks shrink instead"),
             &[
-                "Ocultar siempre (encoge las marcas; GTK aún no permite ocultarlas)",
-                "Mostrar al enfocar (encoge las marcas; GTK aún no permite ocultarlas)",
-                "Atenuar siempre",
+                gettext("Always hide (shrinks the marks; GTK cannot hide them yet)"),
+                gettext("Show on focus (shrinks the marks; GTK cannot hide them yet)"),
+                gettext("Always dim"),
             ],
+            settings.markup_visibility().index(),
         )
     };
-    let markup = combo(
-        "Marcas de Markdown",
-        subtitle,
-        options,
-        settings.markup_visibility().index(),
-    );
     markup_group.add(&markup);
     page.add(&markup_group);
 
-    let writing_group = adw::PreferencesGroup::builder().title("Escritura").build();
+    let writing_group = adw::PreferencesGroup::builder()
+        .title(gettext("Writing"))
+        .build();
     let lists = adw::SwitchRow::builder()
-        .title("Continuar listas")
-        .subtitle("Intro repite el guion o el número; en un elemento vacío, cierra la lista")
+        .title(gettext("Continue lists"))
+        .subtitle(gettext(
+            "Enter repeats the dash or number; on an empty item, it closes the list",
+        ))
         .active(settings.continue_lists())
         .build();
     let focus = adw::SwitchRow::builder()
-        .title("Modo foco")
-        .subtitle("Atenúa todo salvo el párrafo actual")
+        .title(gettext("Focus mode"))
+        .subtitle(gettext("Dims everything except the current paragraph"))
         .active(settings.focus_mode())
         .build();
     let typewriter = adw::SwitchRow::builder()
-        .title("Máquina de escribir")
-        .subtitle("Mantiene la línea del cursor centrada verticalmente")
+        .title(gettext("Typewriter mode"))
+        .subtitle(gettext("Keeps the cursor line vertically centered"))
         .active(settings.typewriter_mode())
         .build();
     let tabs = spin(
-        "Ancho de tabulación",
-        "Espacios por nivel de sangría",
+        &gettext("Tab width"),
+        &gettext("Spaces per indent level"),
         &gtk4::Adjustment::new(settings.tab_width() as f64, 2.0, 8.0, 1.0, 1.0, 0.0),
         0,
     );
@@ -210,15 +226,17 @@ fn editor_page(settings: &Rc<AppSettings>, apply: &Rc<dyn Fn()>) -> adw::Prefere
     writing_group.add(&tabs);
     page.add(&writing_group);
 
-    let save_group = adw::PreferencesGroup::builder().title("Guardado").build();
+    let save_group = adw::PreferencesGroup::builder()
+        .title(gettext("Saving"))
+        .build();
     let autosave = adw::SwitchRow::builder()
-        .title("Guardado automático")
-        .subtitle("Solo si el documento ya tiene un fichero asociado")
+        .title(gettext("Autosave"))
+        .subtitle(gettext("Only when the document already has a file"))
         .active(settings.autosave())
         .build();
     let interval = spin(
-        "Intervalo",
-        "Segundos entre guardados",
+        &gettext("Interval"),
+        &gettext("Seconds between saves"),
         &gtk4::Adjustment::new(
             settings.autosave_interval() as f64,
             5.0,
@@ -300,13 +318,13 @@ fn templates_page(
     apply: &Rc<dyn Fn()>,
 ) -> adw::PreferencesPage {
     let page = adw::PreferencesPage::builder()
-        .title("Plantillas")
+        .title(gettext("Templates"))
         .icon_name("document-new-symbolic")
         .build();
 
     let list = templates::list();
-    let mut names: Vec<&str> = vec!["Documento en blanco"];
-    names.extend(list.iter().map(|t| t.name.as_str()));
+    let mut names: Vec<String> = vec![gettext("Blank document")];
+    names.extend(list.iter().map(|t| t.name.clone()));
     let current = settings.default_template();
     let selected = list
         .iter()
@@ -315,16 +333,16 @@ fn templates_page(
         .unwrap_or(0);
 
     let group = adw::PreferencesGroup::builder()
-        .title("Documentos nuevos")
-        .description(
-            "Las plantillas son ficheros .md en tu carpeta de datos. \
-             Admiten {{title}}, {{date}}, {{time}}, {{datetime}} y {{year}}.",
-        )
+        .title(gettext("New documents"))
+        .description(gettext(
+            "Templates are .md files in your data folder. \
+             They support {{title}}, {{date}}, {{time}}, {{datetime}} and {{year}}.",
+        ))
         .build();
 
-    let default_row = combo(
-        "Plantilla por defecto",
-        "Se usa al crear un documento nuevo",
+    let default_row = combo_i18n(
+        &gettext("Default template"),
+        &gettext("Used when creating a new document"),
         &names,
         selected,
     );
@@ -334,10 +352,10 @@ fn templates_page(
         .icon_name("folder-open-symbolic")
         .valign(gtk4::Align::Center)
         .css_classes(vec!["flat".to_string()])
-        .tooltip_text("Abrir la carpeta")
+        .tooltip_text(gettext("Open folder"))
         .build();
     let folder_row = adw::ActionRow::builder()
-        .title("Carpeta de plantillas")
+        .title(gettext("Templates folder"))
         .subtitle(templates::dir().to_string_lossy().as_ref())
         .activatable_widget(&open_button)
         .build();
@@ -345,15 +363,17 @@ fn templates_page(
     group.add(&folder_row);
     page.add(&group);
 
-    let recents_group = adw::PreferencesGroup::builder().title("Historial").build();
+    let recents_group = adw::PreferencesGroup::builder()
+        .title(gettext("History"))
+        .build();
     let clear_button = gtk4::Button::builder()
-        .label("Vaciar")
+        .label(gettext("Clear"))
         .valign(gtk4::Align::Center)
         .css_classes(vec!["destructive-action".to_string()])
         .build();
     let clear_row = adw::ActionRow::builder()
-        .title("Documentos recientes")
-        .subtitle("Borra la lista que aparece en la barra lateral")
+        .title(gettext("Recent documents"))
+        .subtitle(gettext("Clears the list shown in the sidebar"))
         .activatable_widget(&clear_button)
         .build();
     clear_row.add_suffix(&clear_button);

@@ -99,6 +99,8 @@ con GTK4 y ha terminado siendo algo que uso de verdad para borradores y notas.
   documento navegable.
 - **Tema claro y oscuro** que sigue el style scheme de GtkSourceView.
 - **Integración**: `scribe fichero.md` y "Abrir con" del gestor de archivos.
+- **Interfaz traducida** (gettext): inglés y español. Nuevas traducciones en
+  `po/` (ver `po/update-pot.sh`).
 
 ## Cómo funciona el render
 

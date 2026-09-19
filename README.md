@@ -91,6 +91,8 @@ actually use to draft notes and docs.
 - **Sidebar** (F9) with filterable recent files and a navigable outline.
 - **Light and dark theme** follows the GtkSourceView style scheme.
 - **Integration**: `scribe file.md` and "Open with" from the file manager.
+- **Translated UI** (gettext): English and Spanish. New translations go in
+  `po/` (see `po/update-pot.sh`).
 
 ## How the rendering works
 

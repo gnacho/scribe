@@ -32,6 +32,7 @@
                 "install -Dm644 data/app.scribe.Scribe.gschema.xml /app/share/glib-2.0/schemas/app.scribe.Scribe.gschema.xml",
                 "install -Dm644 data/app.scribe.Scribe.metainfo.xml /app/share/metainfo/app.scribe.Scribe.metainfo.xml",
                 "install -Dm644 data/icons/hicolor/scalable/apps/app.scribe.Scribe.svg /app/share/icons/hicolor/scalable/apps/app.scribe.Scribe.svg",
+                "for lang in $(cat po/LINGUAS); do msgfmt po/$lang.po --output-file=$lang.mo && install -Dm644 $lang.mo /app/share/locale/$lang/LC_MESSAGES/scribe.mo; done",
                 "glib-compile-schemas /app/share/glib-2.0/schemas"
             ],
             "sources": [

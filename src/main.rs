@@ -17,6 +17,25 @@ use settings::AppSettings;
 use window::ScribeWindow;
 
 const APP_ID: &str = "app.scribe.Scribe";
+const GETTEXT_DOMAIN: &str = "scribe";
+
+/// Locale dir relative to the binary: <prefix>/bin/scribe -> <prefix>/share/locale.
+/// Works for /usr, /usr/local, ~/.local and Flatpak (/app) installs alike.
+fn init_gettext() {
+    use gettextrs::{
+        bind_textdomain_codeset, bindtextdomain, setlocale, textdomain, LocaleCategory,
+    };
+    // SAFETY: gettext-rs marks setlocale unsafe because locale is global
+    // state; main() runs before any thread spawns, so this is safe.
+    unsafe { setlocale(LocaleCategory::LcAll, "") };
+    let locale_dir = std::env::current_exe()
+        .ok()
+        .and_then(|exe| exe.parent().map(|dir| dir.join("../share/locale")))
+        .unwrap_or_else(|| std::path::PathBuf::from("/usr/local/share/locale"));
+    let _ = bindtextdomain(GETTEXT_DOMAIN, locale_dir);
+    let _ = textdomain(GETTEXT_DOMAIN);
+    let _ = bind_textdomain_codeset(GETTEXT_DOMAIN, "UTF-8");
+}
 
 // Registro de ventanas vivas: ScribeWindow es la ancla fuerte de sus
 // documentos (los closures de la ventana los capturan en Weak), así que hay
@@ -28,6 +47,7 @@ thread_local! {
 }
 
 fn main() -> glib::ExitCode {
+    init_gettext();
     let app = adw::Application::builder()
         .application_id(APP_ID)
         // Necesario para que `scribe fichero.md` y «Abrir con» funcionen.

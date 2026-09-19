@@ -1,3 +1,4 @@
+use gettextrs::gettext;
 use gtk4::prelude::*;
 use std::path::PathBuf;
 
@@ -46,13 +47,15 @@ impl FileManager {
     }
 
     pub fn open<F: Fn(OpenOutcome) + 'static>(&self, parent: &impl IsA<gtk4::Window>, callback: F) {
-        let dialog = gtk4::FileDialog::builder().title("Abrir documento").build();
+        let dialog = gtk4::FileDialog::builder()
+            .title(gettext("Open Document"))
+            .build();
 
         let filter = gtk4::FileFilter::new();
         filter.add_suffix("md");
         filter.add_suffix("markdown");
         filter.add_suffix("txt");
-        filter.set_name(Some("Documentos Markdown"));
+        filter.set_name(Some(&gettext("Markdown Documents")));
 
         let filters = gio::ListStore::new::<gtk4::FileFilter>();
         filters.append(&filter);
@@ -90,7 +93,7 @@ impl FileManager {
         }
 
         let dialog = gtk4::FileDialog::builder()
-            .title("Guardar documento")
+            .title(gettext("Save Document"))
             .build();
 
         let filter = gtk4::FileFilter::new();

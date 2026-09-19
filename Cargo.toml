@@ -15,3 +15,4 @@ glib = "0.20"
 gio = "0.20"
 gdk4 = "0.9"
 pulldown-cmark = "0.12"
+gettext-rs = { version = "0.8", features = ["gettext-system"] }

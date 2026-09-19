@@ -1,10 +1,12 @@
 [Desktop Entry]
 Name=Scribe
-Comment=Editor Markdown nativo para GNOME
+Comment=A native Markdown editor for GNOME
+Comment[es]=Un editor Markdown nativo para GNOME
 Exec=scribe %F
 Icon=app.scribe.Scribe
 Type=Application
 Categories=GNOME;GTK;Office;WordProcessor;
 MimeType=text/markdown;text/x-markdown;text/plain;
 Keywords=markdown;editor;notes;
+Keywords[es]=markdown;editor;notas;
 StartupNotify=true

@@ -1,3 +1,4 @@
+use gettextrs::gettext;
 use gtk4::prelude::*;
 use libadwaita as adw;
 use libadwaita::prelude::*;
@@ -82,8 +83,8 @@ fn canonical(path: &Path) -> PathBuf {
 fn file_name_of(path: &Path) -> String {
     path.file_name()
         .and_then(|s| s.to_str())
-        .unwrap_or("Sin título")
-        .to_string()
+        .map(str::to_string)
+        .unwrap_or_else(|| gettext("Untitled"))
 }
 
 /// La geometría solo se persiste cuando el cierre de la ventana prospera
@@ -128,14 +129,14 @@ fn refresh_doc_tab(
         // que es lo que el usuario tiene en la cabeza. El texto solo se lee
         // para la pestaña activa; el resto usa el nombre cacheado.
         None if is_active => (
-            templates::title_from(&doc.editor.text()).unwrap_or_else(|| "Sin título".to_string()),
-            "Borrador".to_string(),
+            templates::title_from(&doc.editor.text()).unwrap_or_else(|| gettext("Untitled")),
+            gettext("Draft"),
         ),
-        None => (doc.display_name.borrow().clone(), "Borrador".to_string()),
+        None => (doc.display_name.borrow().clone(), gettext("Draft")),
     };
     let tooltip = match file.as_ref() {
         Some(p) => p.to_string_lossy().to_string(),
-        None => "Borrador sin guardar".to_string(),
+        None => gettext("Unsaved draft"),
     };
     drop(file);
     if is_active {
@@ -149,7 +150,7 @@ fn refresh_doc_tab(
     if is_active {
         title_widget.set_title(&format!("{dot}{name}"));
         title_widget.set_subtitle(&subtitle);
-        window.set_title(Some(&format!("{dot}{name} — Scribe")));
+        window.set_title(Some(&format!("{dot}{name} - Scribe")));
     }
 }
 
@@ -225,12 +226,14 @@ fn ask_save_step(
     let name = doc.display_name.borrow().clone();
     let dialog = adw::MessageDialog::new(
         Some(&win),
-        Some(&format!("¿Guardar los cambios en «{name}»?")),
-        Some("Si cierras sin guardar, perderás lo que hayas escrito."),
+        Some(&gettext("Save changes to “{name}”?").replace("{name}", &name)),
+        Some(&gettext(
+            "If you close without saving, you will lose what you have written.",
+        )),
     );
-    dialog.add_response("cancel", "Cancelar");
-    dialog.add_response("discard", "Descartar");
-    dialog.add_response("save", "Guardar");
+    dialog.add_response("cancel", &gettext("_Cancel"));
+    dialog.add_response("discard", &gettext("_Discard"));
+    dialog.add_response("save", &gettext("_Save"));
     dialog.set_response_appearance("discard", adw::ResponseAppearance::Destructive);
     dialog.set_response_appearance("save", adw::ResponseAppearance::Suggested);
     dialog.set_default_response(Some("save"));
@@ -258,7 +261,7 @@ fn ask_save_step(
                             );
                         }
                         Err(e) => {
-                            toast(&format!("No se pudo guardar: {e}"));
+                            toast(&gettext("Could not save: {e}").replace("{e}", &e.to_string()));
                             on_abort();
                         }
                     },
@@ -290,7 +293,10 @@ fn ask_save_step(
                                     );
                                 }
                                 Outcome::Error(e) => {
-                                    toast2(&format!("No se pudo guardar: {e}"));
+                                    toast2(
+                                        &gettext("Could not save: {e}")
+                                            .replace("{e}", &e.to_string()),
+                                    );
                                     on_abort2();
                                 }
                                 // Cancelar el «Guardar como» aborta toda la
@@ -336,13 +342,13 @@ impl ScribeWindow {
 
         // ============================ BARRA LATERAL ============================
         let sidebar_header = adw::HeaderBar::builder()
-            .title_widget(&adw::WindowTitle::new("Documentos", ""))
+            .title_widget(&adw::WindowTitle::new(&gettext("Documents"), ""))
             .show_end_title_buttons(false)
             .css_classes(vec!["flat".to_string()])
             .build();
 
         let search_entry = gtk4::SearchEntry::builder()
-            .placeholder_text("Filtrar recientes…")
+            .placeholder_text(gettext("Filter recents…"))
             .margin_top(6)
             .margin_bottom(6)
             .margin_start(12)
@@ -371,9 +377,9 @@ impl ScribeWindow {
 
         let sidebar_content = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
         sidebar_content.append(&search_entry);
-        sidebar_content.append(&section("Recientes"));
+        sidebar_content.append(&section(&gettext("Recents")));
         sidebar_content.append(&recents_list);
-        sidebar_content.append(&section("Contenido"));
+        sidebar_content.append(&section(&gettext("Contents")));
         sidebar_content.append(&toc_list);
 
         let sidebar_box = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
@@ -422,8 +428,8 @@ impl ScribeWindow {
 
         let recents_menu = gio::Menu::new();
         let open_button = adw::SplitButton::builder()
-            .label("Abrir")
-            .tooltip_text("Abrir un documento (Ctrl+O)")
+            .label(gettext("_Open"))
+            .tooltip_text(gettext("Open a document (Ctrl+O)"))
             .menu_model(&recents_menu)
             .build();
         open_button.set_action_name(Some("win.open"));
@@ -432,18 +438,18 @@ impl ScribeWindow {
         let templates_menu = gio::Menu::new();
         let new_button = gtk4::MenuButton::builder()
             .icon_name("document-new-symbolic")
-            .tooltip_text("Documento nuevo (Ctrl+N)")
+            .tooltip_text(gettext("New document (Ctrl+N)"))
             .menu_model(&templates_menu)
             .build();
         header.pack_start(&new_button);
 
-        let title_widget = adw::WindowTitle::new("Sin título", "");
+        let title_widget = adw::WindowTitle::new(&gettext("Untitled"), "");
         header.set_title_widget(Some(&title_widget));
 
         let menu_button = gtk4::MenuButton::builder()
             .icon_name("open-menu-symbolic")
             .primary(true)
-            .tooltip_text("Menú principal")
+            .tooltip_text(gettext("Main menu"))
             .build();
         header.pack_end(&menu_button);
 
@@ -457,29 +463,38 @@ impl ScribeWindow {
         menu.append_section(None, &zoom_section);
 
         let file_section = gio::Menu::new();
-        file_section.append(Some("Nueva ventana"), Some("app.new-window"));
-        file_section.append(Some("Abrir…"), Some("win.open"));
-        file_section.append(Some("Guardar"), Some("win.save"));
-        file_section.append(Some("Guardar como…"), Some("win.save-as"));
-        file_section.append(Some("Cerrar pestaña"), Some("win.close-tab"));
+        file_section.append(Some(&gettext("New Window")), Some("app.new-window"));
+        file_section.append(Some(&gettext("_Open…")), Some("win.open"));
+        file_section.append(Some(&gettext("_Save")), Some("win.save"));
+        file_section.append(Some(&gettext("Save _As…")), Some("win.save-as"));
+        file_section.append(Some(&gettext("_Close Tab")), Some("win.close-tab"));
         menu.append_section(None, &file_section);
 
         let edit_section = gio::Menu::new();
-        edit_section.append(Some("Alinear tablas"), Some("win.format-tables"));
-        edit_section.append(Some("Cerrar vallas abiertas"), Some("win.close-fences"));
+        edit_section.append(Some(&gettext("Align Tables")), Some("win.format-tables"));
+        edit_section.append(
+            Some(&gettext("Close Unclosed Code Fences")),
+            Some("win.close-fences"),
+        );
         menu.append_section(None, &edit_section);
 
         let view_section = gio::Menu::new();
-        view_section.append(Some("Barra lateral"), Some("win.toggle-sidebar"));
-        view_section.append(Some("Vista dividida"), Some("win.toggle-preview"));
-        view_section.append(Some("Modo foco"), Some("win.focus-mode"));
-        view_section.append(Some("Máquina de escribir"), Some("win.typewriter-mode"));
+        view_section.append(Some(&gettext("Sidebar")), Some("win.toggle-sidebar"));
+        view_section.append(Some(&gettext("Split View")), Some("win.toggle-preview"));
+        view_section.append(Some(&gettext("Focus Mode")), Some("win.focus-mode"));
+        view_section.append(
+            Some(&gettext("Typewriter Mode")),
+            Some("win.typewriter-mode"),
+        );
         menu.append_section(None, &view_section);
 
         let app_section = gio::Menu::new();
-        app_section.append(Some("Preferencias"), Some("win.preferences"));
-        app_section.append(Some("Atajos de teclado"), Some("win.show-help-overlay"));
-        app_section.append(Some("Acerca de Scribe"), Some("win.about"));
+        app_section.append(Some(&gettext("_Preferences")), Some("win.preferences"));
+        app_section.append(
+            Some(&gettext("_Keyboard Shortcuts")),
+            Some("win.show-help-overlay"),
+        );
+        app_section.append(Some(&gettext("_About Scribe")), Some("win.about"));
         menu.append_section(None, &app_section);
 
         let zoom_box = gtk4::Box::builder()
@@ -493,17 +508,17 @@ impl ScribeWindow {
         let zoom_out = gtk4::Button::builder()
             .icon_name("zoom-out-symbolic")
             .action_name("win.zoom-out")
-            .tooltip_text("Reducir")
+            .tooltip_text(gettext("Zoom Out"))
             .build();
         let zoom_label = gtk4::Button::builder()
             .action_name("win.zoom-reset")
             .hexpand(true)
-            .tooltip_text("Restablecer")
+            .tooltip_text(gettext("Zoom Reset"))
             .build();
         let zoom_in = gtk4::Button::builder()
             .icon_name("zoom-in-symbolic")
             .action_name("win.zoom-in")
-            .tooltip_text("Ampliar")
+            .tooltip_text(gettext("Zoom In"))
             .build();
         zoom_box.append(&zoom_out);
         zoom_box.append(&zoom_label);
@@ -528,12 +543,12 @@ impl ScribeWindow {
             ])
             .action_name("win.close-fences")
             .visible(false)
-            .tooltip_text("Cerrar las vallas de código abiertas")
+            .tooltip_text(gettext("Close the unterminated code fences"))
             .build();
         let goto_spin = gtk4::SpinButton::with_range(1.0, 1.0, 1.0);
         goto_spin.set_numeric(true);
         let goto_button = gtk4::Button::builder()
-            .label("Ir")
+            .label(gettext("_Go"))
             .css_classes(vec!["suggested-action".to_string()])
             .build();
         let goto_box = gtk4::Box::builder()
@@ -544,14 +559,14 @@ impl ScribeWindow {
             .margin_start(10)
             .margin_end(10)
             .build();
-        goto_box.append(&gtk4::Label::new(Some("Línea")));
+        goto_box.append(&gtk4::Label::new(Some(&gettext("Line"))));
         goto_box.append(&goto_spin);
         goto_box.append(&goto_button);
         let goto_popover = gtk4::Popover::builder().child(&goto_box).build();
 
         let position_button = gtk4::MenuButton::builder()
             .label("Ln 1, Col 1")
-            .tooltip_text("Ir a la línea")
+            .tooltip_text(gettext("Go to line"))
             .css_classes(vec!["flat".to_string()])
             .popover(&goto_popover)
             .build();
@@ -565,7 +580,7 @@ impl ScribeWindow {
             .build();
         let props_button = gtk4::MenuButton::builder()
             .label("Markdown")
-            .tooltip_text("Propiedades del documento")
+            .tooltip_text(gettext("Document properties"))
             .css_classes(vec!["flat".to_string()])
             .popover(&gtk4::Popover::builder().child(&props_label).build())
             .build();
@@ -604,6 +619,7 @@ impl ScribeWindow {
         window.set_content(Some(&split_view));
 
         let builder = gtk4::Builder::from_string(SHORTCUTS_UI);
+        builder.set_translation_domain(Some("scribe"));
         if let Some(help) = builder.object::<gtk4::ShortcutsWindow>("help_overlay") {
             window.set_help_overlay(Some(&help));
         }
@@ -675,11 +691,16 @@ impl ScribeWindow {
                 let words = text.split_whitespace().count();
                 let chars = text.chars().count();
                 let lines = doc.editor.line_count();
-                words_label.set_label(&format!("{words} palabras"));
+                words_label
+                    .set_label(&gettext("{words} words").replace("{words}", &words.to_string()));
                 let minutes = (words as f64 / 200.0).ceil().max(1.0) as usize;
-                props_label.set_label(&format!(
-                    "Palabras: {words}\nCaracteres: {chars}\nLíneas: {lines}\nLectura: ~{minutes} min"
-                ));
+                props_label.set_label(
+                    &gettext("Words: {words}\nCharacters: {chars}\nLines: {lines}\nReading time: ~{minutes} min")
+                        .replace("{words}", &words.to_string())
+                        .replace("{chars}", &chars.to_string())
+                        .replace("{lines}", &lines.to_string())
+                        .replace("{minutes}", &minutes.to_string()),
+                );
             })
         };
 
@@ -708,7 +729,11 @@ impl ScribeWindow {
                     } else {
                         String::new()
                     };
-                    fence_warning.set_label(&format!("Valla abierta (línea {first}){extra}"));
+                    fence_warning.set_label(
+                        &gettext("Unclosed fence (line {first}){extra}")
+                            .replace("{first}", &first.to_string())
+                            .replace("{extra}", &extra),
+                    );
                     fence_warning.set_visible(true);
                 }
                 // Con el popover «Ir a la línea» abierto el spin es del
@@ -750,7 +775,7 @@ impl ScribeWindow {
                     row.set_action_name(Some("win.open-recent"));
                     row.set_action_target_value(Some(&entry.to_variant()));
                     if !path.exists() {
-                        row.set_subtitle("No encontrado");
+                        row.set_subtitle(&gettext("Not found"));
                         row.set_sensitive(false);
                     }
                     recents_list.append(&row);
@@ -768,9 +793,9 @@ impl ScribeWindow {
                 if shown == 0 {
                     let row = adw::ActionRow::builder()
                         .title(if needle.is_empty() {
-                            "Sin documentos recientes"
+                            gettext("No recent documents")
                         } else {
-                            "Ningún resultado"
+                            gettext("No results")
                         })
                         .build();
                     row.set_sensitive(false);
@@ -785,7 +810,7 @@ impl ScribeWindow {
             Rc::new(move || {
                 templates_menu.remove_all();
                 let blank = gio::Menu::new();
-                blank.append(Some("Documento en blanco"), Some("win.new-document"));
+                blank.append(Some(&gettext("Blank Document")), Some("win.new-document"));
                 templates_menu.append_section(None, &blank);
 
                 let list = templates::list();
@@ -799,7 +824,7 @@ impl ScribeWindow {
                         );
                         section.append_item(&item);
                     }
-                    templates_menu.append_section(Some("Plantillas"), &section);
+                    templates_menu.append_section(Some(&gettext("Templates")), &section);
                 }
             })
         };
@@ -873,9 +898,7 @@ impl ScribeWindow {
                 let page = tab_view.append(&editor.widget);
                 let display_name = match &file {
                     Some(p) => file_name_of(p),
-                    None => {
-                        templates::title_from(&body).unwrap_or_else(|| "Sin título".to_string())
-                    }
+                    None => templates::title_from(&body).unwrap_or_else(|| gettext("Untitled")),
                 };
                 let doc = Rc::new(Document {
                     editor,
@@ -1043,7 +1066,7 @@ impl ScribeWindow {
             let toast = toast.clone();
             Rc::new(move |path: &Path| match std::fs::read_to_string(path) {
                 Ok(content) => open_loaded(path.to_path_buf(), content),
-                Err(e) => toast(&format!("No se pudo abrir: {e}")),
+                Err(e) => toast(&gettext("Could not open: {e}").replace("{e}", &e.to_string())),
             })
         };
 
@@ -1053,7 +1076,7 @@ impl ScribeWindow {
                 let body = template_name
                     .and_then(templates::find)
                     .and_then(|t| t.body())
-                    .map(|b| templates::render(&b, "Sin título"))
+                    .map(|b| templates::render(&b, &gettext("Untitled")))
                     .unwrap_or_default();
                 create_document(body, None);
             })
@@ -1195,9 +1218,9 @@ impl ScribeWindow {
                     return;
                 };
                 if doc.editor.close_unclosed_fences() {
-                    toast("Vallas de código cerradas");
+                    toast(&gettext("Code fences closed"));
                 } else {
-                    toast("No hay vallas abiertas");
+                    toast(&gettext("No unclosed fences"));
                 }
             });
         }
@@ -1389,7 +1412,7 @@ impl ScribeWindow {
                                     // estado persistente de dos buffers para
                                     // un mismo fichero.
                                     tv.set_selected_page(&otro.page);
-                                    toast("Ese fichero ya está abierto en otra pestaña");
+                                    toast(&gettext("That file is already open in another tab"));
                                     return;
                                 }
                             }
@@ -1568,12 +1591,14 @@ impl ScribeWindow {
                 let name = doc.display_name.borrow().clone();
                 let dialog = adw::MessageDialog::new(
                     Some(&win),
-                    Some(&format!("¿Guardar los cambios en «{name}»?")),
-                    Some("Si cierras sin guardar, perderás lo que hayas escrito."),
+                    Some(&gettext("Save changes to “{name}”?").replace("{name}", &name)),
+                    Some(&gettext(
+                        "If you close without saving, you will lose what you have written.",
+                    )),
                 );
-                dialog.add_response("cancel", "Cancelar");
-                dialog.add_response("discard", "Descartar");
-                dialog.add_response("save", "Guardar");
+                dialog.add_response("cancel", &gettext("_Cancel"));
+                dialog.add_response("discard", &gettext("_Discard"));
+                dialog.add_response("save", &gettext("_Save"));
                 dialog.set_response_appearance("discard", adw::ResponseAppearance::Destructive);
                 dialog.set_response_appearance("save", adw::ResponseAppearance::Suggested);
                 dialog.set_default_response(Some("save"));
@@ -1601,7 +1626,10 @@ impl ScribeWindow {
                                     // Un guardado fallido aborta el cierre:
                                     // el usuario decide qué hacer después.
                                     Err(e) => {
-                                        toast(&format!("No se pudo guardar: {e}"));
+                                        toast(
+                                            &gettext("Could not save: {e}")
+                                                .replace("{e}", &e.to_string()),
+                                        );
                                         // Aborto: liberar la guarda de
                                         // cierre de esta pestaña.
                                         doc.closing.set(false);
@@ -1625,7 +1653,10 @@ impl ScribeWindow {
                                                 finish_close(&page, true);
                                             }
                                             Outcome::Error(e) => {
-                                                toast(&format!("No se pudo guardar: {e}"));
+                                                toast(
+                                                    &gettext("Could not save: {e}")
+                                                        .replace("{e}", &e.to_string()),
+                                                );
                                                 doc.closing.set(false);
                                                 finish_close(&page, false);
                                             }
@@ -1722,7 +1753,10 @@ impl ScribeWindow {
                         // automática que no existe.
                         Err(e) => {
                             if !doc.autosave_failed.replace(true) {
-                                toast(&format!("No se pudo autoguardar: {e}"));
+                                toast(
+                                    &gettext("Could not autosave: {e}")
+                                        .replace("{e}", &e.to_string()),
+                                );
                             }
                         }
                     }
