@@ -1,0 +1,633 @@
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C) YEAR THE PACKAGE'S COPYRIGHT HOLDER
+# This file is distributed under the same license as the PACKAGE package.
+# FIRST AUTHOR <EMAIL@ADDRESS>, YEAR.
+#
+#, fuzzy
+msgid ""
+msgstr ""
+"Project-Id-Version: PACKAGE VERSION\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-09-19 20:13+0200\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language-Team: LANGUAGE <LL@li.org>\n"
+"Language: \n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+
+#: src/window.rs:87 src/window.rs:132 src/window.rs:446 src/window.rs:901
+#: src/window.rs:1079
+msgid "Untitled"
+msgstr ""
+
+#: src/window.rs:133 src/window.rs:135
+msgid "Draft"
+msgstr ""
+
+#: src/window.rs:139
+msgid "Unsaved draft"
+msgstr ""
+
+#: src/window.rs:229 src/window.rs:1594
+#, rust-format
+msgid "Save changes to “{name}”?"
+msgstr ""
+
+#: src/window.rs:231 src/window.rs:1596
+msgid "If you close without saving, you will lose what you have written."
+msgstr ""
+
+#: src/window.rs:234 src/window.rs:1599
+msgid "_Cancel"
+msgstr ""
+
+#: src/window.rs:235 src/window.rs:1600
+msgid "_Discard"
+msgstr ""
+
+#: src/window.rs:236 src/window.rs:468 src/window.rs:1601
+msgid "_Save"
+msgstr ""
+
+#: src/window.rs:264 src/window.rs:297 src/window.rs:1630 src/window.rs:1657
+#, rust-format
+msgid "Could not save: {e}"
+msgstr ""
+
+#: src/window.rs:345
+msgid "Documents"
+msgstr ""
+
+#: src/window.rs:351
+msgid "Filter recents…"
+msgstr ""
+
+#: src/window.rs:380
+msgid "Recents"
+msgstr ""
+
+#: src/window.rs:382
+msgid "Contents"
+msgstr ""
+
+#: src/window.rs:431
+msgid "_Open"
+msgstr ""
+
+#: src/window.rs:432
+msgid "Open a document (Ctrl+O)"
+msgstr ""
+
+#: src/window.rs:441
+msgid "New document (Ctrl+N)"
+msgstr ""
+
+#: src/window.rs:452
+msgid "Main menu"
+msgstr ""
+
+#: src/window.rs:466 src/shortcuts.ui:38
+msgid "New Window"
+msgstr ""
+
+#: src/window.rs:467
+msgid "_Open…"
+msgstr ""
+
+#: src/window.rs:469
+msgid "Save _As…"
+msgstr ""
+
+#: src/window.rs:470
+msgid "_Close Tab"
+msgstr ""
+
+#: src/window.rs:474 src/shortcuts.ui:102
+msgid "Align Tables"
+msgstr ""
+
+#: src/window.rs:476
+msgid "Close Unclosed Code Fences"
+msgstr ""
+
+#: src/window.rs:482 src/shortcuts.ui:119
+msgid "Sidebar"
+msgstr ""
+
+#: src/window.rs:483 src/shortcuts.ui:125
+msgid "Split View"
+msgstr ""
+
+#: src/window.rs:484 src/shortcuts.ui:131
+msgid "Focus Mode"
+msgstr ""
+
+#: src/window.rs:486 src/shortcuts.ui:137
+msgid "Typewriter Mode"
+msgstr ""
+
+#: src/window.rs:492
+msgid "_Preferences"
+msgstr ""
+
+#: src/window.rs:494
+msgid "_Keyboard Shortcuts"
+msgstr ""
+
+#: src/window.rs:497
+msgid "_About Scribe"
+msgstr ""
+
+#: src/window.rs:511
+msgid "Zoom Out"
+msgstr ""
+
+#: src/window.rs:516
+msgid "Zoom Reset"
+msgstr ""
+
+#: src/window.rs:521
+msgid "Zoom In"
+msgstr ""
+
+#: src/window.rs:546
+msgid "Close the unterminated code fences"
+msgstr ""
+
+#: src/window.rs:551
+msgid "_Go"
+msgstr ""
+
+#: src/window.rs:562
+msgid "Line"
+msgstr ""
+
+#: src/window.rs:569
+msgid "Go to line"
+msgstr ""
+
+#: src/window.rs:583
+msgid "Document properties"
+msgstr ""
+
+#: src/window.rs:695
+#, rust-format
+msgid "{words} words"
+msgstr ""
+
+#: src/window.rs:698
+#, rust-format
+msgid ""
+"Words: {words}\n"
+"Characters: {chars}\n"
+"Lines: {lines}\n"
+"Reading time: ~{minutes} min"
+msgstr ""
+
+#: src/window.rs:733
+#, rust-format
+msgid "Unclosed fence (line {first}){extra}"
+msgstr ""
+
+#: src/window.rs:778
+msgid "Not found"
+msgstr ""
+
+#: src/window.rs:796
+msgid "No recent documents"
+msgstr ""
+
+#: src/window.rs:798
+msgid "No results"
+msgstr ""
+
+#: src/window.rs:813
+msgid "Blank Document"
+msgstr ""
+
+#: src/window.rs:827 src/preferences.rs:321
+msgid "Templates"
+msgstr ""
+
+#: src/window.rs:1069
+#, rust-format
+msgid "Could not open: {e}"
+msgstr ""
+
+#: src/window.rs:1221
+msgid "Code fences closed"
+msgstr ""
+
+#: src/window.rs:1223
+msgid "No unclosed fences"
+msgstr ""
+
+#: src/window.rs:1415
+msgid "That file is already open in another tab"
+msgstr ""
+
+#: src/window.rs:1757
+#, rust-format
+msgid "Could not autosave: {e}"
+msgstr ""
+
+#: src/preferences.rs:48
+msgid "Appearance"
+msgstr ""
+
+#: src/preferences.rs:53
+msgid "Theme"
+msgstr ""
+
+#: src/preferences.rs:56
+msgid "Color scheme"
+msgstr ""
+
+#: src/preferences.rs:57
+msgid "Follows the system unless you force one"
+msgstr ""
+
+#: src/preferences.rs:58
+msgid "System"
+msgstr ""
+
+#: src/preferences.rs:58
+msgid "Light"
+msgstr ""
+
+#: src/preferences.rs:58
+msgid "Dark"
+msgstr ""
+
+#: src/preferences.rs:65
+msgid "Text"
+msgstr ""
+
+#: src/preferences.rs:66
+msgid "Code and tables always use a monospaced font"
+msgstr ""
+
+#: src/preferences.rs:70
+msgid "Font family"
+msgstr ""
+
+#: src/preferences.rs:71
+msgid "Document body"
+msgstr ""
+
+#: src/preferences.rs:73
+msgid "Sans (Cantarell)"
+msgstr ""
+
+#: src/preferences.rs:74
+msgid "Serif"
+msgstr ""
+
+#: src/preferences.rs:75
+msgid "Monospace"
+msgstr ""
+
+#: src/preferences.rs:80
+msgid "Size"
+msgstr ""
+
+#: src/preferences.rs:81
+msgid "Pixels"
+msgstr ""
+
+#: src/preferences.rs:86
+msgid "Line spacing"
+msgstr ""
+
+#: src/preferences.rs:87
+msgid "Multiplier on the font size"
+msgstr ""
+
+#: src/preferences.rs:92
+msgid "Column width"
+msgstr ""
+
+#: src/preferences.rs:93
+msgid "Maximum text width, in pixels"
+msgstr ""
+
+#: src/preferences.rs:156
+msgid "Editor"
+msgstr ""
+
+#: src/preferences.rs:161
+msgid "Markup"
+msgstr ""
+
+#: src/preferences.rs:163
+msgid "What to do with asterisks, hash marks and URLs while you write"
+msgstr ""
+
+#: src/preferences.rs:173 src/preferences.rs:184
+msgid "Markdown marks"
+msgstr ""
+
+#: src/preferences.rs:174
+msgid "“On focus” reveals them only on the cursor line"
+msgstr ""
+
+#: src/preferences.rs:176
+msgid "Always hide"
+msgstr ""
+
+#: src/preferences.rs:177
+msgid "Show on focus"
+msgstr ""
+
+#: src/preferences.rs:178 src/preferences.rs:189
+msgid "Always dim"
+msgstr ""
+
+#: src/preferences.rs:185
+msgid "Hiding text still crashes this GTK: the marks shrink instead"
+msgstr ""
+
+#: src/preferences.rs:187
+msgid "Always hide (shrinks the marks; GTK cannot hide them yet)"
+msgstr ""
+
+#: src/preferences.rs:188
+msgid "Show on focus (shrinks the marks; GTK cannot hide them yet)"
+msgstr ""
+
+#: src/preferences.rs:198
+msgid "Writing"
+msgstr ""
+
+#: src/preferences.rs:201
+msgid "Continue lists"
+msgstr ""
+
+#: src/preferences.rs:203
+msgid "Enter repeats the dash or number; on an empty item, it closes the list"
+msgstr ""
+
+#: src/preferences.rs:208
+msgid "Focus mode"
+msgstr ""
+
+#: src/preferences.rs:209
+msgid "Dims everything except the current paragraph"
+msgstr ""
+
+#: src/preferences.rs:213
+msgid "Typewriter mode"
+msgstr ""
+
+#: src/preferences.rs:214
+msgid "Keeps the cursor line vertically centered"
+msgstr ""
+
+#: src/preferences.rs:218
+msgid "Tab width"
+msgstr ""
+
+#: src/preferences.rs:219
+msgid "Spaces per indent level"
+msgstr ""
+
+#: src/preferences.rs:230
+msgid "Saving"
+msgstr ""
+
+#: src/preferences.rs:233
+msgid "Autosave"
+msgstr ""
+
+#: src/preferences.rs:234
+msgid "Only when the document already has a file"
+msgstr ""
+
+#: src/preferences.rs:238
+msgid "Interval"
+msgstr ""
+
+#: src/preferences.rs:239
+msgid "Seconds between saves"
+msgstr ""
+
+#: src/preferences.rs:326
+msgid "Blank document"
+msgstr ""
+
+#: src/preferences.rs:336
+msgid "New documents"
+msgstr ""
+
+#: src/preferences.rs:338
+msgid ""
+"Templates are .md files in your data folder. They support {{title}}, "
+"{{date}}, {{time}}, {{datetime}} and {{year}}."
+msgstr ""
+
+#: src/preferences.rs:344
+msgid "Default template"
+msgstr ""
+
+#: src/preferences.rs:345
+msgid "Used when creating a new document"
+msgstr ""
+
+#: src/preferences.rs:355
+msgid "Open folder"
+msgstr ""
+
+#: src/preferences.rs:358
+msgid "Templates folder"
+msgstr ""
+
+#: src/preferences.rs:367
+msgid "History"
+msgstr ""
+
+#: src/preferences.rs:370
+msgid "Clear"
+msgstr ""
+
+#: src/preferences.rs:375
+msgid "Recent documents"
+msgstr ""
+
+#: src/preferences.rs:376
+msgid "Clears the list shown in the sidebar"
+msgstr ""
+
+#: src/templates.rs:30
+msgid "Note"
+msgstr ""
+
+#: src/templates.rs:30
+msgid ""
+"# {{title}}\n"
+"\n"
+"*{{date}}*\n"
+"\n"
+"\n"
+msgstr ""
+
+#: src/templates.rs:32
+msgid "Journal"
+msgstr ""
+
+#: src/templates.rs:33
+msgid ""
+"# {{date}}\n"
+"\n"
+"## What happened\n"
+"\n"
+"\n"
+"\n"
+"## What I learned\n"
+"\n"
+"\n"
+"\n"
+"## Tomorrow\n"
+"\n"
+"- \n"
+msgstr ""
+
+#: src/templates.rs:36
+msgid "Meeting notes"
+msgstr ""
+
+#: src/templates.rs:37
+msgid ""
+"# {{title}}\n"
+"\n"
+"- **Date:** {{datetime}}\n"
+"- **Attendees:** \n"
+"\n"
+"## Topics\n"
+"\n"
+"1. \n"
+"\n"
+"## Agreements\n"
+"\n"
+"- \n"
+"\n"
+"## Tasks\n"
+"\n"
+"- [ ] \n"
+msgstr ""
+
+#: src/templates.rs:40
+msgid "Article"
+msgstr ""
+
+#: src/templates.rs:41
+msgid ""
+"---\n"
+"title: {{title}}\n"
+"date: {{date}}\n"
+"draft: true\n"
+"---\n"
+"\n"
+"# {{title}}\n"
+"\n"
+"## Introduction\n"
+"\n"
+"\n"
+"\n"
+"## Development\n"
+"\n"
+"\n"
+"\n"
+"## Conclusion\n"
+"\n"
+"\n"
+msgstr ""
+
+#: src/file_manager.rs:51
+msgid "Open Document"
+msgstr ""
+
+#: src/file_manager.rs:58
+msgid "Markdown Documents"
+msgstr ""
+
+#: src/file_manager.rs:96
+msgid "Save Document"
+msgstr ""
+
+#: src/shortcuts.ui:11
+msgid "File"
+msgstr ""
+
+#: src/shortcuts.ui:14
+msgid "New Document"
+msgstr ""
+
+#: src/shortcuts.ui:20
+msgid "Open"
+msgstr ""
+
+#: src/shortcuts.ui:26
+msgid "Save"
+msgstr ""
+
+#: src/shortcuts.ui:32
+msgid "Save As"
+msgstr ""
+
+#: src/shortcuts.ui:44
+msgid "Quit"
+msgstr ""
+
+#: src/shortcuts.ui:52
+msgid "Tabs"
+msgstr ""
+
+#: src/shortcuts.ui:55
+msgid "Close Tab"
+msgstr ""
+
+#: src/shortcuts.ui:61
+msgid "Next Tab"
+msgstr ""
+
+#: src/shortcuts.ui:67
+msgid "Previous Tab"
+msgstr ""
+
+#: src/shortcuts.ui:73
+msgid "Switch Tabs"
+msgstr ""
+
+#: src/shortcuts.ui:81
+msgid "Format"
+msgstr ""
+
+#: src/shortcuts.ui:84
+msgid "Bold"
+msgstr ""
+
+#: src/shortcuts.ui:90
+msgid "Italic"
+msgstr ""
+
+#: src/shortcuts.ui:96
+msgid "Code"
+msgstr ""
+
+#: src/shortcuts.ui:108
+msgid "Close Unclosed Fences"
+msgstr ""
+
+#: src/shortcuts.ui:116
+msgid "View"
+msgstr ""
+
+#: src/shortcuts.ui:143
+msgid "Zoom In or Out"
+msgstr ""
+
+#: src/shortcuts.ui:149
+msgid "Preferences"
+msgstr ""

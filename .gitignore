@@ -3,3 +3,4 @@ files*.zip
 core
 core.*
 *.core
+*.po~

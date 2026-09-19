@@ -1,0 +1,5 @@
+src/main.rs
+src/window.rs
+src/preferences.rs
+src/templates.rs
+src/file_manager.rs

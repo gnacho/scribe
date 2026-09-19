@@ -4,6 +4,7 @@
 //! usuario puede añadir, editar o borrar las suyas sin tocar la aplicación.
 //! Admiten un puñado de marcadores que se sustituyen al crear el documento.
 
+use gettextrs::gettext;
 use std::path::PathBuf;
 
 pub struct Template {
@@ -21,25 +22,26 @@ pub fn dir() -> PathBuf {
     glib::user_data_dir().join("scribe").join("templates")
 }
 
-/// Plantillas que se escriben la primera vez, para que la carpeta no esté vacía.
-const BUILT_IN: [(&str, &str); 4] = [
-    (
-        "Nota",
-        "# {{title}}\n\n*{{date}}*\n\n\n",
-    ),
-    (
-        "Diario",
-        "# {{date}}\n\n## Qué ha pasado\n\n\n\n## Qué he aprendido\n\n\n\n## Mañana\n\n- \n",
-    ),
-    (
-        "Acta de reunión",
-        "# {{title}}\n\n- **Fecha:** {{datetime}}\n- **Asistentes:** \n\n## Temas\n\n1. \n\n## Acuerdos\n\n- \n\n## Tareas\n\n- [ ] \n",
-    ),
-    (
-        "Artículo",
-        "---\ntitle: {{title}}\ndate: {{date}}\ndraft: true\n---\n\n# {{title}}\n\n## Introducción\n\n\n\n## Desarrollo\n\n\n\n## Conclusión\n\n\n",
-    ),
-];
+/// Built-in template names and bodies, localized at first run. Existing
+/// template files on disk are never overwritten, so upgrading keeps whatever
+/// language they were created with.
+fn built_in() -> [(String, String); 4] {
+    [
+        (gettext("Note"), gettext("# {{title}}\n\n*{{date}}*\n\n\n")),
+        (
+            gettext("Journal"),
+            gettext("# {{date}}\n\n## What happened\n\n\n\n## What I learned\n\n\n\n## Tomorrow\n\n- \n"),
+        ),
+        (
+            gettext("Meeting notes"),
+            gettext("# {{title}}\n\n- **Date:** {{datetime}}\n- **Attendees:** \n\n## Topics\n\n1. \n\n## Agreements\n\n- \n\n## Tasks\n\n- [ ] \n"),
+        ),
+        (
+            gettext("Article"),
+            gettext("---\ntitle: {{title}}\ndate: {{date}}\ndraft: true\n---\n\n# {{title}}\n\n## Introduction\n\n\n\n## Development\n\n\n\n## Conclusion\n\n\n"),
+        ),
+    ]
+}
 
 /// Crea la carpeta y escribe las plantillas de ejemplo si aún no existen.
 pub fn ensure_defaults() {
@@ -47,7 +49,7 @@ pub fn ensure_defaults() {
     if std::fs::create_dir_all(&dir).is_err() {
         return;
     }
-    for (name, body) in BUILT_IN {
+    for (name, body) in built_in() {
         let path = dir.join(format!("{name}.md"));
         if !path.exists() {
             let _ = std::fs::write(&path, body);
