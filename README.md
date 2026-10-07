@@ -193,6 +193,23 @@ Fedora:
 sudo dnf install gtk4-devel libadwaita-devel gtksourceview5-devel glib2-devel
 ```
 
+## Install
+
+Install to `~/.local` (no root) with:
+
+```sh
+make install
+```
+
+This builds the release binary and installs the binary to `~/.local/bin`, the
+GSettings schema to `~/.local/share/glib-2.0/schemas` (recompiled with
+`glib-compile-schemas`), the desktop entry and the icons. `make build` compiles
+in release mode and `make check` runs fmt, clippy and the tests.
+
+The GSettings schema is mandatory, not optional: when a release adds a new
+preference, the app aborts if the installed schema is stale (it no longer
+contains the new key). `make install` recompiles it so that does not happen.
+
 ## Build and run
 
 ```sh
@@ -200,16 +217,15 @@ cargo build --release
 cargo run
 ```
 
-GSettings schema needs to be installed for preferences to work. During
-development:
+For development you can point at the local schema instead of installing it:
 
 ```sh
 glib-compile-schemas data/
 GSETTINGS_SCHEMA_DIR=$PWD/data cargo run
 ```
 
-The application starts with defaults if the schema is not found, logging a
-warning to stderr.
+If the schema is not found at all, the app starts with defaults (preferences
+are not saved) and logs a warning to stderr.
 
 ## Flatpak
 

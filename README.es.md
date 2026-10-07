@@ -206,6 +206,24 @@ Fedora:
 sudo dnf install gtk4-devel libadwaita-devel gtksourceview5-devel glib2-devel
 ```
 
+## Instalar
+
+Instala en `~/.local` (sin root) con:
+
+```sh
+make install
+```
+
+Esto compila el binario en modo release e instala el binario en `~/.local/bin`,
+el esquema GSettings en `~/.local/share/glib-2.0/schemas` (recompilado con
+`glib-compile-schemas`), el fichero .desktop y los iconos. `make build` compila
+en modo release y `make check` ejecuta fmt, clippy y los tests.
+
+El esquema GSettings es obligatorio, no opcional: cuando una versión añade una
+preferencia nueva, la aplicación aborta si el esquema instalado está
+desactualizado (ya no contiene la clave nueva). `make install` lo recompila
+para que eso no ocurra.
+
 ## Compilar y ejecutar
 
 ```sh
@@ -213,8 +231,7 @@ cargo build --release
 cargo run
 ```
 
-Para que las preferencias funcionen hace falta instalar el esquema GSettings.
-En desarrollo:
+En desarrollo puedes apuntar al esquema local en vez de instalarlo:
 
 ```sh
 glib-compile-schemas data/
@@ -222,7 +239,7 @@ GSETTINGS_SCHEMA_DIR=$PWD/data cargo run
 ```
 
 Si el esquema no está disponible, la aplicación arranca igual con los valores
-por defecto y avisa por stderr.
+por defecto (no guarda preferencias) y avisa por stderr.
 
 ## Flatpak
 
