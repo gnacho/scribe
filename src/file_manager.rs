@@ -1,3 +1,4 @@
+use crate::guardado::bytes_a_escribir;
 use gettextrs::gettext;
 use gtk4::prelude::*;
 use std::path::PathBuf;
@@ -85,7 +86,7 @@ impl FileManager {
         callback: F,
     ) {
         if let Some(path) = current {
-            match std::fs::write(path, content) {
+            match std::fs::write(path, bytes_a_escribir(content)) {
                 Ok(()) => callback(Outcome::Ok(path.clone())),
                 Err(e) => callback(Outcome::Error(e.to_string())),
             }
@@ -110,7 +111,7 @@ impl FileManager {
                 Ok(file) => match file.path() {
                     Some(path) => {
                         let path = with_md_suffix(path);
-                        match std::fs::write(&path, &content) {
+                        match std::fs::write(&path, bytes_a_escribir(&content)) {
                             Ok(()) => Outcome::Ok(path),
                             Err(e) => Outcome::Error(e.to_string()),
                         }
