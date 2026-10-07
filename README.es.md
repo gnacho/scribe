@@ -120,16 +120,31 @@ se encogen en vez de ocultarse: el glifo diminuto sigue en la maquetación de
 GTK, así que el camino del aborto por texto invisible de GNOME/gtk#8346 queda
 inalcanzable por construcción.
 
-## Límites conocidos
+## Limitaciones
 
-- Sin pestañas / varios documentos (`AdwTabView`), buscar y reemplazar, exportar
-  a HTML/PDF, corrección ortográfica ni traducción de la interfaz al inglés.
-- Las imágenes se incrustan solo cuando están solas en su línea; las inline
-  siguen mostrando el placeholder.
-- La caché de texturas de imagen no mira el mtime: un fichero editado en disco
-  no se refresca hasta reabrir el documento.
+- **Solo UTF-8.** Los ficheros se leen como UTF-8 y se escriben de vuelta byte
+  a byte. Un fichero en otra codificación (Latin-1, UTF-16, etc.) no se abre.
+- **El fuente es la previsualización.** El render es un conjunto de tramos
+  `GtkTextTag` y adornos pintados sobre el buffer, no un motor de maquetación.
+  El HTML del fuente no se interpreta: queda como texto atenuado en el editor y
+  se descarta en la vista dividida. El resultado es una aproximación del
+  Markdown, no una copia del render de un navegador.
+- **Sin buscar y reemplazar, sin exportar a HTML o PDF y sin corrección
+  ortográfica.**
+- **Las imágenes son solo locales.** Las URLs remotas no se descargan (no hay
+  código de red enlazado) y muestran un placeholder. Solo se pintan ficheros
+  regulares de hasta 20 MB, como máximo 144 px de alto. Las imágenes inline (no
+  solas en su línea) también muestran el placeholder.
+- La caché de imágenes no mira el mtime: un fichero editado en disco no se
+  refresca hasta reabrir el documento.
 - En el modo «ocultar / revelar en la línea del cursor» las marcas se encogen,
   no se quitan (ver arriba).
+
+## Privacidad
+
+Scribe no hace peticiones de red y no recopila nada. Los documentos, las
+preferencias y las plantillas se quedan en tu equipo. Ver
+[PRIVACY.md](PRIVACY.md).
 
 ## Capturas
 

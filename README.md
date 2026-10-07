@@ -111,16 +111,29 @@ Markers replaced by an ornament (bullets, `[x]`, `---`, `>`, fences, pipes) are
 shrunk rather than hidden: the tiny glyph stays in GTK's layout, so the
 invisible-text abort path of GNOME/gtk#8346 is unreachable by construction.
 
-## Known limits
+## Limitations
 
-- No tabs / multiple documents (`AdwTabView`), find & replace, export to
-  HTML/PDF, spell checking, or English UI translation yet.
-- Images are embedded only when alone on their line; inline images still show
-  the placeholder.
-- The image texture cache does not track file mtime: a picture edited on disk
-  is not refreshed until the document is reopened.
+- **UTF-8 only.** Files are read as UTF-8 and written back byte for byte. A
+  file in another encoding (Latin-1, UTF-16, and so on) does not open.
+- **The source is the preview.** Rendering is a set of `GtkTextTag` spans and
+  painted ornaments over the buffer, not a layout engine. HTML in the source is
+  not interpreted: it stays as dimmed text in the editor and is dropped in the
+  split preview. The result is an approximation of the Markdown, not a copy of
+  a browser rendering.
+- **No find & replace, no export to HTML or PDF, and no spell checking.**
+- **Images are local only.** Remote URLs are never fetched (no network code is
+  linked) and show a placeholder. Only regular files up to 20 MB are painted,
+  at most 144 px tall. Inline images (not alone on their line) show the
+  placeholder too.
+- The image cache does not track file mtime: a picture edited on disk is not
+  refreshed until the document is reopened.
 - In "hide/reveal on cursor line" mode the marks are shrunk, not removed (see
   above).
+
+## Privacy
+
+Scribe makes no network requests and collects nothing. Documents, preferences
+and templates stay on your machine. See [PRIVACY.md](PRIVACY.md).
 
 ## Screenshots
 
