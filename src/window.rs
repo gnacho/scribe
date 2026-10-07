@@ -1100,6 +1100,7 @@ impl ScribeWindow {
             let refresh_tabs = refresh_tabs.clone();
             let update_status = update_status.clone();
             let update_counts = update_counts.clone();
+            let toast = toast.clone();
             Rc::new(move |body: String, file: Option<PathBuf>| {
                 // Solo puede fallar con la ventana destruyendose, cuando
                 // nadie deberia crear documentos.
@@ -1115,6 +1116,12 @@ impl ScribeWindow {
                     file.as_ref()
                         .and_then(|p| p.parent().map(Path::to_path_buf)),
                 );
+                // Avisos transitorios del editor (p. ej. «guarda antes de pegar
+                // imágenes») hacia el ToastOverlay de la ventana.
+                {
+                    let toast = toast.clone();
+                    editor.connect_toast(move |msg| toast(msg));
+                }
 
                 let page = tab_view.append(&editor.widget);
                 let display_name = match &file {
