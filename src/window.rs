@@ -609,12 +609,14 @@ impl ScribeWindow {
         header.set_title_widget(Some(&title_widget));
 
         // Botón «nueva pestaña» (issue #28): icono plano que crea un
-        // documento en blanco, como en gnome-text-editor.
+        // documento en blanco. Va a la IZQUIERDA, junto al de Abrir, como
+        // estaba siempre (el usuario lo validó así).
         let new_tab_button = gtk4::Button::builder()
             .icon_name("tab-new-symbolic")
             .tooltip_text(gettext("New Tab (Ctrl+N)"))
             .action_name("win.new-document")
             .build();
+        header.pack_start(&new_tab_button);
 
         let menu_button = gtk4::MenuButton::builder()
             .icon_name("open-menu-symbolic")
@@ -622,7 +624,6 @@ impl ScribeWindow {
             .tooltip_text(gettext("Main menu"))
             .build();
         header.pack_end(&menu_button);
-        header.pack_end(&new_tab_button);
 
         // ---- menú principal, con la fila de zoom como en las apps de GNOME ----
         let menu = gio::Menu::new();
