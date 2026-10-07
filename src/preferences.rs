@@ -7,7 +7,10 @@ use libadwaita as adw;
 use libadwaita::prelude::*;
 use std::rc::Rc;
 
-use crate::settings::{gtk_hides_invisible_safely, AppSettings, FontFamily, MarkupVisibility};
+use crate::settings::{
+    gtk_hides_invisible_safely, AppSettings, ExportColorScheme, ExportMonoFont, ExportOrientation,
+    ExportPageSize, FontFamily, MarkupVisibility,
+};
 use crate::templates;
 
 fn spin(title: &str, subtitle: &str, adj: &gtk4::Adjustment, digits: u32) -> adw::SpinRow {
@@ -39,6 +42,7 @@ pub fn present(parent: &adw::ApplicationWindow, settings: &Rc<AppSettings>, appl
 
     window.add(&appearance_page(settings, &apply));
     window.add(&editor_page(settings, &apply));
+    window.add(&export_page(settings, &apply));
     window.add(&templates_page(parent, settings, &apply));
     window.present();
 }
@@ -305,6 +309,127 @@ fn editor_page(settings: &Rc<AppSettings>, apply: &Rc<dyn Fn()>) -> adw::Prefere
         let apply = apply.clone();
         interval.connect_value_notify(move |row| {
             settings.set_autosave_interval(row.value() as i32);
+            apply();
+        });
+    }
+
+    page
+}
+
+fn export_page(settings: &Rc<AppSettings>, apply: &Rc<dyn Fn()>) -> adw::PreferencesPage {
+    let page = adw::PreferencesPage::builder()
+        .title(gettext("Export"))
+        .icon_name("document-print-symbolic")
+        .build();
+
+    let group = adw::PreferencesGroup::builder()
+        .title(gettext("PDF"))
+        .description(gettext(
+            "These settings apply to PDF export only, not to the editor view",
+        ))
+        .build();
+
+    let scheme = combo_i18n(
+        &gettext("Color scheme"),
+        &gettext("Monochrome prints everything in black on white"),
+        &[
+            gettext("System"),
+            gettext("Light"),
+            gettext("Dark"),
+            gettext("Monochrome"),
+        ],
+        settings.export_color_scheme().index(),
+    );
+    let family = combo_i18n(
+        &gettext("Font family"),
+        &gettext("Document body"),
+        &[
+            gettext("Sans (Cantarell)"),
+            gettext("Serif"),
+            gettext("Monospace"),
+        ],
+        settings.export_font_family().index(),
+    );
+    let size = spin(
+        &gettext("Font size"),
+        &gettext("Points"),
+        &gtk4::Adjustment::new(settings.export_font_size() as f64, 8.0, 24.0, 1.0, 2.0, 0.0),
+        0,
+    );
+    let mono = combo_i18n(
+        &gettext("Monospace font"),
+        &gettext("Used for code blocks and tables"),
+        &[
+            "Adwaita Mono".to_string(),
+            "Source Code Pro".to_string(),
+            "Fira Mono".to_string(),
+        ],
+        settings.export_mono_font().index(),
+    );
+    let page_size = combo_i18n(
+        &gettext("Page size"),
+        &gettext("Paper"),
+        &["A4".to_string(), "Letter".to_string()],
+        settings.export_page_size().index(),
+    );
+    let orientation = combo_i18n(
+        &gettext("Orientation"),
+        &gettext("Paper orientation"),
+        &[gettext("Portrait"), gettext("Landscape")],
+        settings.export_orientation().index(),
+    );
+
+    for row in [&scheme, &family, &mono, &page_size, &orientation] {
+        group.add(row);
+    }
+    group.add(&size);
+    page.add(&group);
+
+    {
+        let settings = settings.clone();
+        let apply = apply.clone();
+        scheme.connect_selected_notify(move |row| {
+            settings.set_export_color_scheme(ExportColorScheme::from_index(row.selected()));
+            apply();
+        });
+    }
+    {
+        let settings = settings.clone();
+        let apply = apply.clone();
+        family.connect_selected_notify(move |row| {
+            settings.set_export_font_family(FontFamily::from_index(row.selected()));
+            apply();
+        });
+    }
+    {
+        let settings = settings.clone();
+        let apply = apply.clone();
+        size.connect_value_notify(move |row| {
+            settings.set_export_font_size(row.value() as i32);
+            apply();
+        });
+    }
+    {
+        let settings = settings.clone();
+        let apply = apply.clone();
+        mono.connect_selected_notify(move |row| {
+            settings.set_export_mono_font(ExportMonoFont::from_index(row.selected()));
+            apply();
+        });
+    }
+    {
+        let settings = settings.clone();
+        let apply = apply.clone();
+        page_size.connect_selected_notify(move |row| {
+            settings.set_export_page_size(ExportPageSize::from_index(row.selected()));
+            apply();
+        });
+    }
+    {
+        let settings = settings.clone();
+        let apply = apply.clone();
+        orientation.connect_selected_notify(move |row| {
+            settings.set_export_orientation(ExportOrientation::from_index(row.selected()));
             apply();
         });
     }

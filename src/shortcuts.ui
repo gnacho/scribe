@@ -41,6 +41,12 @@
             </child>
             <child>
               <object class="GtkShortcutsShortcut">
+                <property name="title" translatable="yes">Export to PDF</property>
+                <property name="accelerator">&lt;Control&gt;p</property>
+              </object>
+            </child>
+            <child>
+              <object class="GtkShortcutsShortcut">
                 <property name="title" translatable="yes">New Window</property>
                 <property name="accelerator">&lt;Control&gt;&lt;Shift&gt;n</property>
               </object>

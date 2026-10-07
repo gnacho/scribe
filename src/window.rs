@@ -8,6 +8,7 @@ use std::rc::Rc;
 use std::time::Duration;
 
 use crate::editor::Editor;
+use crate::export_pdf;
 use crate::file_manager::{FileManager, OpenOutcome, Outcome};
 use crate::preferences;
 use crate::preview::PreviewPanel;
@@ -627,6 +628,7 @@ impl ScribeWindow {
         file_section.append(Some(&gettext("Save _As…")), Some("win.save-as"));
         file_section.append(Some(&gettext("_Reload")), Some("win.reload"));
         file_section.append(Some(&gettext("_Close Tab")), Some("win.close-tab"));
+        file_section.append(Some(&gettext("Export to _PDF…")), Some("win.export-pdf"));
         menu.append_section(None, &file_section);
 
         let edit_section = gio::Menu::new();
@@ -1545,6 +1547,7 @@ impl ScribeWindow {
         let action_tab_next = gio::SimpleAction::new("tab-next", None);
         let action_tab_prev = gio::SimpleAction::new("tab-prev", None);
         let action_reload = gio::SimpleAction::new("reload", None);
+        let action_export_pdf = gio::SimpleAction::new("export-pdf", None);
 
         // Las alternancias son con estado, para que el menú muestre la marca.
         let action_sidebar = gio::SimpleAction::new_stateful(
@@ -1587,6 +1590,7 @@ impl ScribeWindow {
             &action_tab_next,
             &action_tab_prev,
             &action_reload,
+            &action_export_pdf,
         ] {
             window.add_action(a);
         }
@@ -1669,6 +1673,31 @@ impl ScribeWindow {
             let manual_reload = manual_reload.clone();
             action_reload.connect_activate(move |_, _| {
                 manual_reload();
+            });
+        }
+
+        // ---- exportar a PDF ----
+        {
+            let active_document = active_document.clone();
+            let window = window.downgrade();
+            let settings = settings.clone();
+            action_export_pdf.connect_activate(move |_, _| {
+                let Some(window) = window.upgrade() else {
+                    return;
+                };
+                let Some(doc) = active_document() else {
+                    return;
+                };
+                let config = export_pdf::ExportConfig::desde_settings(&settings);
+                let texto = doc.editor.text();
+                let titulo = doc.display_name.borrow().clone();
+                export_pdf::exportar(
+                    &window,
+                    &config,
+                    &texto,
+                    &titulo,
+                    adw::StyleManager::default().is_dark(),
+                );
             });
         }
 

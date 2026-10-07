@@ -11,6 +11,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 mod arranque;
 mod editor;
+mod export_pdf;
 mod file_manager;
 mod guardado;
 mod markdown_render;
@@ -121,6 +122,7 @@ fn main() -> glib::ExitCode {
             ("win.code", &["<Ctrl>k"]),
             ("win.format-tables", &["<Ctrl><Alt>t"]),
             ("win.close-fences", &["<Ctrl><Alt>f"]),
+            ("win.export-pdf", &["<Ctrl>p"]),
             ("win.toggle-sidebar", &["F9"]),
             ("win.toggle-preview", &["<Ctrl><Shift>p"]),
             ("win.focus-mode", &["<Ctrl><Shift>f"]),

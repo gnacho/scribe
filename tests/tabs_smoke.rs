@@ -13,6 +13,8 @@
 
 #[path = "../src/editor.rs"]
 mod editor;
+#[path = "../src/export_pdf.rs"]
+mod export_pdf;
 #[path = "../src/file_manager.rs"]
 mod file_manager;
 #[path = "../src/guardado.rs"]
