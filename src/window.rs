@@ -225,6 +225,17 @@ pub struct ScribeWindow {
     /// Igual que `documents`: ancla del TabView y superficie de los tests.
     #[allow(dead_code)]
     tab_view: adw::TabView,
+    /// Superficie del test de la barra de pestañas (issue #26).
+    #[allow(dead_code)]
+    tab_bar: adw::TabBar,
+}
+
+impl ScribeWindow {
+    /// Visibilidad actual de la barra de pestañas (superficie de tests, #26).
+    #[allow(dead_code)]
+    pub fn barra_pestanas_visible(&self) -> bool {
+        self.tab_bar.is_visible()
+    }
 }
 
 fn shorten_home(path: &Path) -> String {
@@ -565,13 +576,14 @@ impl ScribeWindow {
             .expand_tabs(true)
             .build();
         // Issue #26: la barra se oculta con un solo documento y se muestra
-        // a partir de dos; el número de pestañas cambia vía items-changed.
+        // a partir de dos. Se usa la notificación de la propiedad «n-pages»:
+        // conectar items-changed sobre pages() en línea dejaba el wrapper del
+        // modelo efímero y la señal moría con él (la barra no reaparecía).
         tab_bar.set_visible(barra_visible(tab_view.n_pages() as usize));
         {
             let tab_bar = tab_bar.clone();
-            let tab_view = tab_view.clone();
-            tab_view.pages().connect_items_changed(move |_, _, _, _| {
-                tab_bar.set_visible(barra_visible(tab_view.n_pages() as usize));
+            tab_view.connect_n_pages_notify(move |view| {
+                tab_bar.set_visible(barra_visible(view.n_pages() as usize));
             });
         }
 
@@ -2308,6 +2320,7 @@ impl ScribeWindow {
             open_recovered,
             documents,
             tab_view,
+            tab_bar,
         }
     }
 
