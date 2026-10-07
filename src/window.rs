@@ -48,9 +48,16 @@ struct Document {
 /// `finish_close` en `ScribeWindow::new`).
 type FinishCloseFn = Rc<dyn Fn(&adw::TabPage, bool)>;
 
+/// Abre un fichero y coloca el cursor en línea/columna (1-based).
+type OpenPathAt = Rc<dyn Fn(&Path, u32, u32)>;
+
 pub struct ScribeWindow {
     pub window: adw::ApplicationWindow,
     load_file: Rc<dyn Fn(&Path)>,
+    /// Abre un fichero y coloca el cursor en línea/columna (1-based).
+    open_path_at: OpenPathAt,
+    /// Abre texto como documento sin título, marcado sin guardar (stdin).
+    open_untitled: Rc<dyn Fn(String)>,
     /// Ancla fuerte de la lista de documentos: los closures registrados en
     /// objetos de la ventana la capturan en Weak (R3), así que alguien tiene
     /// que poseerla. La poseen este struct (que main retiene en su registro
@@ -1070,6 +1077,58 @@ impl ScribeWindow {
             })
         };
 
+        // Abre un fichero y coloca el cursor: `load_file` lee y abre de forma
+        // síncrona (set_text incluido), así que al volver el documento abierto
+        // es la pestaña activa y el cursor se puede posicionar ya.
+        let open_path_at: OpenPathAt = {
+            let load_file = load_file.clone();
+            let active_document = active_document.clone();
+            Rc::new(move |path: &Path, line: u32, column: u32| {
+                load_file(path);
+                if let Some(doc) = active_document() {
+                    doc.editor.place_cursor_at(line, column);
+                }
+            })
+        };
+
+        // Abre texto (stdin) como documento sin título, marcado sin guardar
+        // para que «Guardar» abra «Guardar como». Reutiliza la pestaña virgen
+        // si es la única, igual que `open_loaded`.
+        let open_untitled: Rc<dyn Fn(String)> = {
+            let documents = Rc::downgrade(&documents);
+            let tab_view = tab_view.clone();
+            let create_document = create_document.clone();
+            let refresh_tabs = refresh_tabs.clone();
+            let update_status = update_status.clone();
+            Rc::new(move |texto: String| {
+                let Some(docs) = documents.upgrade() else {
+                    return;
+                };
+                let pristine = {
+                    let list = docs.borrow();
+                    match list.as_slice() {
+                        [d] if d.current_file.borrow().is_none()
+                            && !d.is_modified.get()
+                            && d.editor.text().is_empty() =>
+                        {
+                            Some(d.clone())
+                        }
+                        _ => None,
+                    }
+                };
+                if let Some(doc) = pristine {
+                    doc.editor.set_text(&texto);
+                    doc.is_modified.set(true);
+                    tab_view.set_selected_page(&doc.page);
+                } else {
+                    let doc = create_document(texto, None);
+                    doc.is_modified.set(true);
+                }
+                refresh_tabs();
+                update_status();
+            })
+        };
+
         let new_document: NewDocument = {
             let create_document = create_document.clone();
             Rc::new(move |template_name: Option<&str>| {
@@ -1838,6 +1897,8 @@ impl ScribeWindow {
         Self {
             window,
             load_file,
+            open_path_at,
+            open_untitled,
             documents,
             tab_view,
         }
@@ -1845,6 +1906,14 @@ impl ScribeWindow {
 
     pub fn open_path(&self, path: &Path) {
         (self.load_file)(path);
+    }
+
+    pub fn open_path_at(&self, path: &Path, line: u32, column: u32) {
+        (self.open_path_at)(path, line, column);
+    }
+
+    pub fn open_untitled(&self, text: String) {
+        (self.open_untitled)(text);
     }
 
     pub fn present(&self) {

@@ -1,8 +1,12 @@
 use gtk4::prelude::*;
 use libadwaita as adw;
 use std::cell::RefCell;
+use std::ffi::OsStr;
+use std::io::{IsTerminal, Read};
+use std::path::PathBuf;
 use std::rc::Rc;
 
+mod arranque;
 mod editor;
 mod file_manager;
 mod guardado;
@@ -51,8 +55,9 @@ fn main() -> glib::ExitCode {
     init_gettext();
     let app = adw::Application::builder()
         .application_id(APP_ID)
-        // Necesario para que `scribe fichero.md` y «Abrir con» funcionen.
-        .flags(gio::ApplicationFlags::HANDLES_OPEN)
+        // HANDLES_OPEN para `scribe fichero.md` y «Abrir con»; HANDLES_COMMAND_LINE
+        // para leer los argumentos en crudo y poder separar `ruta:línea:columna`.
+        .flags(gio::ApplicationFlags::HANDLES_OPEN | gio::ApplicationFlags::HANDLES_COMMAND_LINE)
         .build();
 
     app.connect_startup(|app| {
@@ -139,6 +144,45 @@ fn main() -> glib::ExitCode {
         win.present();
     });
 
+    app.connect_command_line(|app, cmdline| {
+        // El primer argumento es el nombre del programa; las opciones
+        // (empiezan por '-') se ignoran. El resto son ficheros, cada uno
+        // resuelto a (ruta, posición de cursor opcional).
+        let mut aperturas: Vec<(PathBuf, Option<(u32, u32)>)> = Vec::new();
+        for arg in cmdline.arguments().iter().skip(1) {
+            if arg.to_string_lossy().starts_with('-') {
+                continue;
+            }
+            aperturas.push(resolver_argumento(arg));
+        }
+
+        match arranque::accion_arranque(!aperturas.is_empty(), std::io::stdin().is_terminal()) {
+            arranque::AccionArranque::LeerStdin => {
+                // stdin redirigido (p. ej. `git diff | scribe`): abrir el
+                // texto como documento sin título, marcado sin guardar.
+                let mut texto = String::new();
+                let _ = std::io::stdin().read_to_string(&mut texto);
+                let win = active_or_new_window(app);
+                win.open_untitled(texto);
+                win.present();
+            }
+            arranque::AccionArranque::AbrirFicheros => {
+                let win = active_or_new_window(app);
+                for (ruta, posicion) in aperturas {
+                    match posicion {
+                        Some((linea, columna)) => win.open_path_at(&ruta, linea, columna),
+                        None => win.open_path(&ruta),
+                    }
+                }
+                win.present();
+            }
+            arranque::AccionArranque::VentanaVacia => {
+                active_or_new_window(app).present();
+            }
+        }
+        0
+    });
+
     app.run()
 }
 
@@ -175,4 +219,15 @@ fn active_or_new_window(app: &adw::Application) -> Rc<ScribeWindow> {
         })
     });
     found.unwrap_or_else(|| build_window(app))
+}
+
+/// Resuelve un argumento de la línea de comandos a (ruta, posición opcional).
+/// Si el sufijo `:N:N` es numérico pero el fichero no existe, se trata el
+/// argumento completo como una ruta normal (no se inventan ficheros).
+fn resolver_argumento(arg: &OsStr) -> (PathBuf, Option<(u32, u32)>) {
+    let texto = arg.to_string_lossy();
+    match arranque::parsear_argumento(&texto) {
+        Ok((ruta, Some((linea, columna)))) if ruta.exists() => (ruta, Some((linea, columna))),
+        _ => (PathBuf::from(arg), None),
+    }
 }

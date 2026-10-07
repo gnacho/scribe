@@ -877,6 +877,32 @@ impl Editor {
         }
     }
 
+    /// Coloca el cursor en línea/columna (1-based) y lo lleva a la vista.
+    /// Si la posición excede el documento, se clampa al final de la línea o
+    /// del buffer. La usa el arranque con `fichero.md:42:7`.
+    pub fn place_cursor_at(&self, line: u32, column: u32) {
+        let line_index = line.saturating_sub(1) as i32;
+        let target = column.saturating_sub(1) as i32;
+        let mut iter = match self.buffer.iter_at_line(line_index) {
+            Some(it) => it,
+            None => self.buffer.end_iter(),
+        };
+        let mut line_end = iter;
+        if !line_end.ends_line() {
+            line_end.forward_to_line_end();
+        }
+        // Avanza dentro de la línea sin pasarse del final de la misma.
+        let disponibles = line_end.line_offset() - iter.line_offset();
+        if target < disponibles {
+            iter.forward_chars(target);
+        } else {
+            iter = line_end;
+        }
+        self.buffer.place_cursor(&iter);
+        self.view.scroll_to_iter(&mut iter, 0.0, true, 0.0, 0.3);
+        self.view.grab_focus();
+    }
+
     /// Envuelve la selección con un marcador (`**`, `*`, `` ` ``…).
     pub fn wrap_selection(&self, marker: &str) {
         let (mut start, mut end) = match self.buffer.selection_bounds() {
