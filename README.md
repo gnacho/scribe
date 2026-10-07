@@ -71,9 +71,6 @@ actually use to draft notes and docs.
   when GTK ships the fix, real hiding returns on its own.
 - **Focus mode** (Ctrl+Shift+F) dims everything except the current paragraph.
 - **Typewriter mode** (Ctrl+Shift+T) keeps the cursor vertically centered.
-- **Templates**: Markdown files in `~/.local/share/scribe/templates` with
-  `{{title}}`, `{{date}}`, `{{time}}`, `{{datetime}}` and `{{year}}` markers.
-  Four examples are seeded on first launch.
 - **Split preview** (Ctrl+Shift+P) renders the full document in a side panel
   using the same `GtkTextTag` engine.
 - **Ctrl+B/I/K** wraps the selection in `**`, `*` or backticks.
@@ -84,8 +81,8 @@ actually use to draft notes and docs.
 - **Zoom** (Ctrl +/&minus;/0) with controls in the main menu.
 - **Go to line** from the status bar.
 - **Header bar** follows GNOME Text Editor: open button with recent files
-  dropdown, new document button, centered title, main menu with zoom row.
-- **Preferences** window with three pages: Appearance, Editor and Templates.
+  dropdown, new tab button, centered title, main menu with zoom row.
+- **Preferences** window with three pages: Appearance, Editor and Export.
 - **Export to PDF** (Ctrl+P): print or export the document through the GTK
   print pipeline, reusing the same span/ornament analysis as the editor.
   Headings, code blocks, quotes and tables are themed, with separate export
@@ -139,8 +136,8 @@ invisible-text abort path of GNOME/gtk#8346 is unreachable by construction.
 
 ## Privacy
 
-Scribe makes no network requests and collects nothing. Documents, preferences
-and templates stay on your machine. See [PRIVACY.md](PRIVACY.md).
+Scribe makes no network requests and collects nothing. Documents and
+preferences stay on your machine. See [PRIVACY.md](PRIVACY.md).
 
 ## Screenshots
 
@@ -163,7 +160,7 @@ The interface is currently in Spanish.
 **Preferences window**
 
 <p align="center">
-  <img alt="Preferences window with Appearance, Editor and Templates pages" src="assets/screenshot-preferences-es-light.png" width="800">
+  <img alt="Preferences window with Appearance, Editor and Export pages" src="assets/screenshot-preferences-es-light.png" width="800">
 </p>
 
 **Focus mode (everything dimmed except the current paragraph)**

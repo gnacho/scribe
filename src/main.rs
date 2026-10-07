@@ -20,7 +20,6 @@ mod preferences;
 mod preview;
 mod recovery;
 mod settings;
-mod templates;
 mod window;
 
 use settings::AppSettings;
@@ -71,8 +70,6 @@ fn main() -> glib::ExitCode {
         .build();
 
     app.connect_startup(|app| {
-        templates::ensure_defaults();
-
         // CSS a nivel de aplicación (D9): antes cada Editor instalaba su
         // propio provider en el display y nunca lo retiraba; ahora hay uno
         // solo, registrado una vez, que Editor::set_font recarga.

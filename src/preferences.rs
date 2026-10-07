@@ -1,5 +1,5 @@
 //! Ventana de preferencias (AdwPreferencesWindow), organizada por páginas
-//! según las HIG de GNOME: apariencia, editor y plantillas.
+//! según las HIG de GNOME: apariencia, editor y exportación.
 
 use gettextrs::gettext;
 use gtk4::prelude::*;
@@ -11,7 +11,6 @@ use crate::settings::{
     gtk_hides_invisible_safely, AppSettings, ExportColorScheme, ExportMonoFont, ExportOrientation,
     ExportPageSize, FontFamily, MarkupVisibility,
 };
-use crate::templates;
 
 fn spin(title: &str, subtitle: &str, adj: &gtk4::Adjustment, digits: u32) -> adw::SpinRow {
     adw::SpinRow::builder()
@@ -43,7 +42,6 @@ pub fn present(parent: &adw::ApplicationWindow, settings: &Rc<AppSettings>, appl
     window.add(&appearance_page(settings, &apply));
     window.add(&editor_page(settings, &apply));
     window.add(&export_page(settings, &apply));
-    window.add(&templates_page(parent, settings, &apply));
     window.present();
 }
 
@@ -256,6 +254,33 @@ fn editor_page(settings: &Rc<AppSettings>, apply: &Rc<dyn Fn()>) -> adw::Prefere
     save_group.add(&interval);
     page.add(&save_group);
 
+    let history_group = adw::PreferencesGroup::builder()
+        .title(gettext("History"))
+        .build();
+    let clear_button = gtk4::Button::builder()
+        .label(gettext("Clear"))
+        .valign(gtk4::Align::Center)
+        .css_classes(vec!["destructive-action".to_string()])
+        .build();
+    let clear_row = adw::ActionRow::builder()
+        .title(gettext("Recent documents"))
+        .subtitle(gettext("Clears the list shown in the sidebar"))
+        .activatable_widget(&clear_button)
+        .build();
+    clear_row.add_suffix(&clear_button);
+    history_group.add(&clear_row);
+    page.add(&history_group);
+
+    {
+        let settings = settings.clone();
+        let apply = apply.clone();
+        clear_button.connect_clicked(move |button| {
+            settings.clear_recent_files();
+            button.set_sensitive(false);
+            apply();
+        });
+    }
+
     {
         let settings = settings.clone();
         let apply = apply.clone();
@@ -430,108 +455,6 @@ fn export_page(settings: &Rc<AppSettings>, apply: &Rc<dyn Fn()>) -> adw::Prefere
         let apply = apply.clone();
         orientation.connect_selected_notify(move |row| {
             settings.set_export_orientation(ExportOrientation::from_index(row.selected()));
-            apply();
-        });
-    }
-
-    page
-}
-
-fn templates_page(
-    parent: &adw::ApplicationWindow,
-    settings: &Rc<AppSettings>,
-    apply: &Rc<dyn Fn()>,
-) -> adw::PreferencesPage {
-    let page = adw::PreferencesPage::builder()
-        .title(gettext("Templates"))
-        .icon_name("document-new-symbolic")
-        .build();
-
-    let list = templates::list();
-    let mut names: Vec<String> = vec![gettext("Blank document")];
-    names.extend(list.iter().map(|t| t.name.clone()));
-    let current = settings.default_template();
-    let selected = list
-        .iter()
-        .position(|t| t.name == current)
-        .map(|i| i as u32 + 1)
-        .unwrap_or(0);
-
-    let group = adw::PreferencesGroup::builder()
-        .title(gettext("New documents"))
-        .description(gettext(
-            "Templates are .md files in your data folder. \
-             They support {{title}}, {{date}}, {{time}}, {{datetime}} and {{year}}.",
-        ))
-        .build();
-
-    let default_row = combo_i18n(
-        &gettext("Default template"),
-        &gettext("Used when creating a new document"),
-        &names,
-        selected,
-    );
-    group.add(&default_row);
-
-    let open_button = gtk4::Button::builder()
-        .icon_name("folder-open-symbolic")
-        .valign(gtk4::Align::Center)
-        .css_classes(vec!["flat".to_string()])
-        .tooltip_text(gettext("Open folder"))
-        .build();
-    let folder_row = adw::ActionRow::builder()
-        .title(gettext("Templates folder"))
-        .subtitle(templates::dir().to_string_lossy().as_ref())
-        .activatable_widget(&open_button)
-        .build();
-    folder_row.add_suffix(&open_button);
-    group.add(&folder_row);
-    page.add(&group);
-
-    let recents_group = adw::PreferencesGroup::builder()
-        .title(gettext("History"))
-        .build();
-    let clear_button = gtk4::Button::builder()
-        .label(gettext("Clear"))
-        .valign(gtk4::Align::Center)
-        .css_classes(vec!["destructive-action".to_string()])
-        .build();
-    let clear_row = adw::ActionRow::builder()
-        .title(gettext("Recent documents"))
-        .subtitle(gettext("Clears the list shown in the sidebar"))
-        .activatable_widget(&clear_button)
-        .build();
-    clear_row.add_suffix(&clear_button);
-    recents_group.add(&clear_row);
-    page.add(&recents_group);
-
-    {
-        let settings = settings.clone();
-        let apply = apply.clone();
-        default_row.connect_selected_notify(move |row| {
-            let index = row.selected() as usize;
-            let name = if index == 0 {
-                String::new()
-            } else {
-                templates::list()
-                    .get(index - 1)
-                    .map(|t| t.name.clone())
-                    .unwrap_or_default()
-            };
-            settings.set_default_template(&name);
-            apply();
-        });
-    }
-    {
-        let parent = parent.clone();
-        open_button.connect_clicked(move |_| templates::open_dir(&parent));
-    }
-    {
-        let settings = settings.clone();
-        let apply = apply.clone();
-        clear_button.connect_clicked(move |button| {
-            settings.clear_recent_files();
-            button.set_sensitive(false);
             apply();
         });
     }

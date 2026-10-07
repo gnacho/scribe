@@ -77,9 +77,6 @@ con GTK4 y ha terminado siendo algo que uso de verdad para borradores y notas.
 - **Modo foco** (Ctrl+Shift+F) atenúa todo salvo el párrafo actual.
 - **Máquina de escribir** (Ctrl+Shift+T) mantiene el cursor centrado
   verticalmente.
-- **Plantillas**: archivos `.md` en `~/.local/share/scribe/templates` con
-  marcadores `{{title}}`, `{{date}}`, `{{time}}`, `{{datetime}}` y `{{year}}`.
-  Cuatro ejemplos se crean la primera vez.
 - **Vista dividida** (Ctrl+Shift+P) con render completo en un panel lateral
   usando el mismo motor de `GtkTextTag`.
 - **Ctrl+B/I/K** envuelve la selección en `**`, `*` o backticks.
@@ -90,10 +87,9 @@ con GTK4 y ha terminado siendo algo que uso de verdad para borradores y notas.
 - **Zoom** (Ctrl +/&minus;/0) con controles en el menú principal.
 - **Ir a la línea** desde la barra de estado.
 - **Cabecera** al estilo de GNOME Text Editor: botón de abrir con desplegable
-  de recientes, botón de documento nuevo, título centrado y menú principal con
+  de recientes, botón de nueva pestaña, título centrado y menú principal con
   fila de zoom.
-- **Preferencias** en cuatro páginas: Apariencia, Editor, Exportación y
-  Plantillas.
+- **Preferencias** en tres páginas: Apariencia, Editor y Exportación.
 - **Exportar a PDF** (Ctrl+P): imprime o exporta el documento a través del
   pipeline de impresión de GTK, reutilizando el mismo análisis de tramos y
   adornos del editor. Las cabeceras, los bloques de código, las citas y las
@@ -152,8 +148,8 @@ inalcanzable por construcción.
 
 ## Privacidad
 
-Scribe no hace peticiones de red y no recopila nada. Los documentos, las
-preferencias y las plantillas se quedan en tu equipo. Ver
+Scribe no hace peticiones de red y no recopila nada. Los documentos y las
+preferencias se quedan en tu equipo. Ver
 [PRIVACY.md](PRIVACY.md).
 
 ## Capturas
@@ -177,7 +173,7 @@ La interfaz está actualmente en español.
 **Ventana de preferencias**
 
 <p align="center">
-  <img alt="Ventana de preferencias con las páginas de Apariencia, Editor y Plantillas" src="assets/screenshot-preferences-es-light.png" width="800">
+  <img alt="Ventana de preferencias con las páginas de Apariencia, Editor y Exportación" src="assets/screenshot-preferences-es-light.png" width="800">
 </p>
 
 **Modo foco (todo atenuado salvo el párrafo actual)**

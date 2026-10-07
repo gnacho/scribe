@@ -409,13 +409,6 @@ impl AppSettings {
         i32,
         30
     );
-    prop!(
-        default_template,
-        set_default_template,
-        "default-template",
-        String,
-        ""
-    );
 
     pub fn markup_visibility(&self) -> MarkupVisibility {
         MarkupVisibility::from_nick(&self.get("focus".to_string(), |s| {

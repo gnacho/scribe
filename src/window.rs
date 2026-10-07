@@ -14,12 +14,11 @@ use crate::preferences;
 use crate::preview::PreviewPanel;
 use crate::recovery;
 use crate::settings::AppSettings;
-use crate::templates;
 
 const SHORTCUTS_UI: &str = include_str!("shortcuts.ui");
 
-/// Crea un documento nuevo, opcionalmente a partir de una plantilla.
-type NewDocument = Rc<dyn Fn(Option<&str>)>;
+/// Crea un documento nuevo en blanco.
+type NewDocument = Rc<dyn Fn()>;
 
 /// Factoría de documentos: texto inicial y fichero asociado (si lo hay).
 /// Devuelve el documento creado, ya insertado en el TabView y seleccionado.
@@ -289,13 +288,7 @@ fn refresh_doc_tab(
             file_name_of(p),
             p.parent().map(shorten_home).unwrap_or_default(),
         ),
-        // Sin fichero, el borrador se identifica por su primera cabecera,
-        // que es lo que el usuario tiene en la cabeza. El texto solo se lee
-        // para la pestaña activa; el resto usa el nombre cacheado.
-        None if is_active => (
-            templates::title_from(&doc.editor.text()).unwrap_or_else(|| gettext("Untitled")),
-            gettext("Draft"),
-        ),
+        // Sin fichero, el borrador usa el nombre cacheado ("Untitled").
         None => (doc.display_name.borrow().clone(), gettext("Draft")),
     };
     let tooltip = match file.as_ref() {
@@ -612,16 +605,16 @@ impl ScribeWindow {
         open_button.set_action_name(Some("win.open"));
         header.pack_start(&open_button);
 
-        let templates_menu = gio::Menu::new();
-        let new_button = gtk4::MenuButton::builder()
-            .icon_name("document-new-symbolic")
-            .tooltip_text(gettext("New document (Ctrl+N)"))
-            .menu_model(&templates_menu)
-            .build();
-        header.pack_start(&new_button);
-
         let title_widget = adw::WindowTitle::new(&gettext("Untitled"), "");
         header.set_title_widget(Some(&title_widget));
+
+        // Botón «nueva pestaña» (issue #28): icono plano que crea un
+        // documento en blanco, como en gnome-text-editor.
+        let new_tab_button = gtk4::Button::builder()
+            .icon_name("tab-new-symbolic")
+            .tooltip_text(gettext("New Tab (Ctrl+N)"))
+            .action_name("win.new-document")
+            .build();
 
         let menu_button = gtk4::MenuButton::builder()
             .icon_name("open-menu-symbolic")
@@ -629,6 +622,7 @@ impl ScribeWindow {
             .tooltip_text(gettext("Main menu"))
             .build();
         header.pack_end(&menu_button);
+        header.pack_end(&new_tab_button);
 
         // ---- menú principal, con la fila de zoom como en las apps de GNOME ----
         let menu = gio::Menu::new();
@@ -1094,31 +1088,6 @@ impl ScribeWindow {
         };
         refresh_recents("");
 
-        let refresh_templates: Rc<dyn Fn()> = {
-            let templates_menu = templates_menu.clone();
-            Rc::new(move || {
-                templates_menu.remove_all();
-                let blank = gio::Menu::new();
-                blank.append(Some(&gettext("Blank Document")), Some("win.new-document"));
-                templates_menu.append_section(None, &blank);
-
-                let list = templates::list();
-                if !list.is_empty() {
-                    let section = gio::Menu::new();
-                    for template in list {
-                        let item = gio::MenuItem::new(Some(&template.name), None);
-                        item.set_action_and_target_value(
-                            Some("win.new-from-template"),
-                            Some(&template.name.to_variant()),
-                        );
-                        section.append_item(&item);
-                    }
-                    templates_menu.append_section(Some(&gettext("Templates")), &section);
-                }
-            })
-        };
-        refresh_templates();
-
         // ---- aplicar preferencias ----
         let apply_settings: Rc<dyn Fn()> = {
             let settings = settings.clone();
@@ -1126,7 +1095,6 @@ impl ScribeWindow {
             let preview = preview.clone();
             let zoom_label = zoom_label.clone();
             let refresh_recents = refresh_recents.clone();
-            let refresh_templates = refresh_templates.clone();
             Rc::new(move || {
                 adw::StyleManager::default().set_color_scheme(
                     match settings.color_scheme_index() {
@@ -1145,7 +1113,6 @@ impl ScribeWindow {
                 preview.set_font_size(settings.font_size());
                 zoom_label.set_label(&format!("{}px", settings.font_size()));
                 refresh_recents("");
-                refresh_templates();
             })
         };
         apply_settings();
@@ -1194,7 +1161,7 @@ impl ScribeWindow {
                 let page = tab_view.append(&editor.widget);
                 let display_name = match &file {
                     Some(p) => file_name_of(p),
-                    None => templates::title_from(&body).unwrap_or_else(|| gettext("Untitled")),
+                    None => gettext("Untitled"),
                 };
                 let doc = Rc::new(Document {
                     editor,
@@ -1483,9 +1450,7 @@ impl ScribeWindow {
                     doc.is_modified.set(true);
                     *doc.display_name.borrow_mut() = match &ruta {
                         Some(p) => file_name_of(p),
-                        None => {
-                            templates::title_from(&texto).unwrap_or_else(|| gettext("Untitled"))
-                        }
+                        None => gettext("Untitled"),
                     };
                     atar_monitor(&doc);
                     tab_view.set_selected_page(&doc.page);
@@ -1500,13 +1465,8 @@ impl ScribeWindow {
 
         let new_document: NewDocument = {
             let create_document = create_document.clone();
-            Rc::new(move |template_name: Option<&str>| {
-                let body = template_name
-                    .and_then(templates::find)
-                    .and_then(|t| t.body())
-                    .map(|b| templates::render(&b, &gettext("Untitled")))
-                    .unwrap_or_default();
-                create_document(body, None);
+            Rc::new(move || {
+                create_document(String::new(), None);
             })
         };
 
@@ -1552,8 +1512,6 @@ impl ScribeWindow {
         let action_new_document = gio::SimpleAction::new("new-document", None);
         let action_open_recent =
             gio::SimpleAction::new("open-recent", Some(glib::VariantTy::STRING));
-        let action_new_template =
-            gio::SimpleAction::new("new-from-template", Some(glib::VariantTy::STRING));
         let action_zoom_in = gio::SimpleAction::new("zoom-in", None);
         let action_zoom_out = gio::SimpleAction::new("zoom-out", None);
         let action_zoom_reset = gio::SimpleAction::new("zoom-reset", None);
@@ -1614,7 +1572,6 @@ impl ScribeWindow {
             window.add_action(a);
         }
         window.add_action(&action_open_recent);
-        window.add_action(&action_new_template);
         window.add_action(&action_sidebar);
         window.add_action(&action_preview);
         window.add_action(&action_focus);
@@ -1768,18 +1725,8 @@ impl ScribeWindow {
         // ---- documentos nuevos ----
         {
             let new_document = new_document.clone();
-            let settings = settings.clone();
             action_new_document.connect_activate(move |_, _| {
-                let name = settings.default_template();
-                new_document(if name.is_empty() { None } else { Some(&name) });
-            });
-        }
-        {
-            let new_document = new_document.clone();
-            action_new_template.connect_activate(move |_, param| {
-                if let Some(name) = param.and_then(|p| p.str()) {
-                    new_document(Some(name));
-                }
+                new_document();
             });
         }
         {

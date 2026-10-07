@@ -31,8 +31,6 @@ mod preview;
 mod recovery;
 #[path = "../src/settings.rs"]
 mod settings;
-#[path = "../src/templates.rs"]
-mod templates;
 #[path = "../src/window.rs"]
 mod window;
 

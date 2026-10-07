@@ -114,10 +114,6 @@
       <summary>Autosave interval in seconds</summary>
     </key>
 
-    <key name="default-template" type="s">
-      <default>''</default>
-      <summary>Template used for new documents (empty means blank)</summary>
-    </key>
     <key name="recent-files" type="as">
       <default>[]</default>
       <summary>Recent files</summary>
