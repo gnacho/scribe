@@ -605,6 +605,7 @@ impl ScribeWindow {
         let recents_menu = gio::Menu::new();
         let open_button = adw::SplitButton::builder()
             .label(gettext("_Open"))
+            .use_underline(true)
             .tooltip_text(gettext("Open a document (Ctrl+O)"))
             .menu_model(&recents_menu)
             .build();
@@ -727,6 +728,7 @@ impl ScribeWindow {
         goto_spin.set_numeric(true);
         let goto_button = gtk4::Button::builder()
             .label(gettext("_Go"))
+            .use_underline(true)
             .css_classes(vec!["suggested-action".to_string()])
             .build();
         let goto_box = gtk4::Box::builder()
