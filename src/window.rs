@@ -11,6 +11,7 @@ use crate::editor::Editor;
 use crate::file_manager::{FileManager, OpenOutcome, Outcome};
 use crate::preferences;
 use crate::preview::PreviewPanel;
+use crate::recovery;
 use crate::settings::AppSettings;
 use crate::templates;
 
@@ -47,6 +48,9 @@ struct Document {
     external_change: Cell<bool>,
     /// Monitor del fichero en disco; vive mientras viva la pestaña.
     monitor: RefCell<Option<gio::FileMonitor>>,
+    /// Id estable del documento para el nombre de su snapshot de recuperación
+    /// (issue #23). No cambia con «guardar como» ni con el pid.
+    recovery_id: Cell<u64>,
 }
 
 /// Qué hacer cuando el fichero de un documento cambia en disco (issue #20).
@@ -86,6 +90,43 @@ impl Document {
     fn cancelar_monitor(&self) {
         if let Some(monitor) = self.monitor.borrow_mut().take() {
             monitor.cancel();
+        }
+    }
+
+    /// Nombre del snapshot de recuperación de este documento: estable por
+    /// documento mientras viva la pestaña (issue #23).
+    fn nombre_snapshot(&self) -> String {
+        recovery::nombre_snapshot(std::process::id(), self.recovery_id.get())
+    }
+
+    /// Borra el snapshot de recuperación de este documento (al guardar o al
+    /// descartar). Idempotente: si no existía, no hace nada.
+    fn borrar_snapshot(&self) {
+        let dir = recovery::dir_recuperacion();
+        if let Err(e) = recovery::borrar_snapshot(&dir, &self.nombre_snapshot()) {
+            glib::g_warning!(
+                "scribe",
+                "no se pudo borrar el snapshot de recuperación: {e}"
+            );
+        }
+    }
+
+    /// Escribe el snapshot de recuperación de este documento (texto + ruta +
+    /// título). Se llama con debounce tras cada edición, mientras el
+    /// documento esté modificado. Un fallo no interrumpe al usuario: solo se
+    /// registra (la recuperación queda degradada, no el editor).
+    fn escribir_snapshot(&self) {
+        let dir = recovery::dir_recuperacion();
+        let nombre = self.nombre_snapshot();
+        let texto = self.editor.text();
+        let ruta = self.current_file.borrow().clone();
+        let titulo = self.display_name.borrow().clone();
+        if let Err(e) = recovery::escribir_snapshot(&dir, &nombre, &texto, ruta.as_deref(), &titulo)
+        {
+            glib::g_warning!(
+                "scribe",
+                "no se pudo escribir el snapshot de recuperación: {e}"
+            );
         }
     }
 }
@@ -144,6 +185,7 @@ fn recargar_desde_disco(doc: &Document, path: &Path) -> Result<(), String> {
     doc.editor.set_text(&contenido);
     doc.editor.place_cursor_at(linea as u32, columna as u32);
     doc.is_modified.set(false);
+    doc.borrar_snapshot();
     doc.external_change.set(false);
     Ok(())
 }
@@ -162,6 +204,9 @@ pub struct ScribeWindow {
     open_path_at: OpenPathAt,
     /// Abre texto como documento sin título, marcado sin guardar (stdin).
     open_untitled: Rc<dyn Fn(String)>,
+    /// Abre un snapshot recuperado: texto + ruta original (si había), marcado
+    /// modificado para forzar una decisión consciente (issue #23).
+    open_recovered: Rc<dyn Fn(String, Option<PathBuf>)>,
     /// Ancla fuerte de la lista de documentos: los closures registrados en
     /// objetos de la ventana la capturan en Weak (R3), así que alguien tiene
     /// que poseerla. La poseen este struct (que main retiene en su registro
@@ -362,6 +407,7 @@ fn ask_save_step(
                     Some(p) => match std::fs::write(&p, doc.editor.text()) {
                         Ok(()) => {
                             doc.is_modified.set(false);
+                            doc.borrar_snapshot();
                             ask_save_step(
                                 win,
                                 pending,
@@ -394,6 +440,7 @@ fn ask_save_step(
                                     doc.editor.set_base_dir(p.parent().map(Path::to_path_buf));
                                     *doc.current_file.borrow_mut() = Some(p);
                                     doc.is_modified.set(false);
+                                    doc.borrar_snapshot();
                                     ask_save_step(
                                         win2,
                                         pending2,
@@ -1139,6 +1186,7 @@ impl ScribeWindow {
                     page,
                     external_change: Cell::new(false),
                     monitor: RefCell::new(None),
+                    recovery_id: Cell::new(recovery::nuevo_id_doc()),
                 });
 
                 // Monitor del fichero (recarga en vivo, issue #20): vigila el
@@ -1161,6 +1209,7 @@ impl ScribeWindow {
                     let toc_list = toc_list.clone();
                     let toc_lines = toc_lines.clone();
                     let generation = Rc::new(Cell::new(0u64));
+                    let rec_generation = Rc::new(Cell::new(0u64));
                     doc.editor.connect_changed(move |text| {
                         let Some(doc) = doc_weak.upgrade() else {
                             return;
@@ -1170,6 +1219,24 @@ impl ScribeWindow {
                             // needs_attention de todas las pestañas.
                             refresh_tabs();
                         }
+                        // ---- recuperación (issue #23): un snapshot por
+                        // documento mientras esté modificado, con debounce
+                        // corto para no escribir a disco en cada pulsación ----
+                        let rec_gen = rec_generation.get().wrapping_add(1);
+                        rec_generation.set(rec_gen);
+                        let doc_weak_rec = doc_weak.clone();
+                        let rec_generation_rec = rec_generation.clone();
+                        glib::timeout_add_local_once(Duration::from_secs(3), move || {
+                            if rec_generation_rec.get() != rec_gen {
+                                return;
+                            }
+                            let Some(doc) = doc_weak_rec.upgrade() else {
+                                return;
+                            };
+                            if doc.is_modified.get() {
+                                doc.escribir_snapshot();
+                            }
+                        });
                         // Contadores, TOC y vista previa solo siguen a la
                         // pestaña activa.
                         let Some(tab_view) = tab_view.upgrade() else {
@@ -1358,6 +1425,58 @@ impl ScribeWindow {
             })
         };
 
+        // Abre un snapshot recuperado (issue #23): el texto se abre como
+        // documento sin título, vinculado a su ruta original si la tenía,
+        // pero MARCADO modificado para forzar una decisión consciente del
+        // usuario (guardar o descartar). Reutiliza la pestaña virgen si es
+        // la única, igual que `open_untitled`.
+        let open_recovered: Rc<dyn Fn(String, Option<PathBuf>)> = {
+            let documents = Rc::downgrade(&documents);
+            let tab_view = tab_view.clone();
+            let create_document = create_document.clone();
+            let refresh_tabs = refresh_tabs.clone();
+            let update_status = update_status.clone();
+            Rc::new(move |texto: String, ruta: Option<PathBuf>| {
+                let Some(docs) = documents.upgrade() else {
+                    return;
+                };
+                let pristine = {
+                    let list = docs.borrow();
+                    match list.as_slice() {
+                        [d] if d.current_file.borrow().is_none()
+                            && !d.is_modified.get()
+                            && d.editor.text().is_empty() =>
+                        {
+                            Some(d.clone())
+                        }
+                        _ => None,
+                    }
+                };
+                if let Some(doc) = pristine {
+                    doc.editor.set_text(&texto);
+                    doc.editor.set_base_dir(
+                        ruta.as_ref()
+                            .and_then(|p| p.parent().map(Path::to_path_buf)),
+                    );
+                    *doc.current_file.borrow_mut() = ruta.clone();
+                    doc.is_modified.set(true);
+                    *doc.display_name.borrow_mut() = match &ruta {
+                        Some(p) => file_name_of(p),
+                        None => {
+                            templates::title_from(&texto).unwrap_or_else(|| gettext("Untitled"))
+                        }
+                    };
+                    atar_monitor(&doc);
+                    tab_view.set_selected_page(&doc.page);
+                } else {
+                    let doc = create_document(texto, ruta);
+                    doc.is_modified.set(true);
+                }
+                refresh_tabs();
+                update_status();
+            })
+        };
+
         let new_document: NewDocument = {
             let create_document = create_document.clone();
             Rc::new(move |template_name: Option<&str>| {
@@ -1391,6 +1510,9 @@ impl ScribeWindow {
                 if let Some(docs) = documents.upgrade() {
                     if let Some(cerrado) = docs.borrow().iter().find(|d| d.page == *page).cloned() {
                         cerrado.cancelar_monitor();
+                        // Al cerrar (o descartar) la pestaña se borra su
+                        // snapshot de recuperación (issue #23).
+                        cerrado.borrar_snapshot();
                     }
                     docs.borrow_mut().retain(|d| d.page != *page);
                 }
@@ -1722,6 +1844,7 @@ impl ScribeWindow {
                             doc.editor.set_base_dir(p.parent().map(Path::to_path_buf));
                             *doc.current_file.borrow_mut() = Some(p.clone());
                             doc.is_modified.set(false);
+                            doc.borrar_snapshot();
                             // El guardado reconcilia buffer y disco; se limpia
                             // el flag y se re-ata el monitor a la ruta nueva
                             // (puede haber cambiado con «guardar como»).
@@ -1949,6 +2072,7 @@ impl ScribeWindow {
                                 Some(p) => match std::fs::write(&p, doc.editor.text()) {
                                     Ok(()) => {
                                         doc.is_modified.set(false);
+                                        doc.borrar_snapshot();
                                         finish_close(&page, true);
                                     }
                                     // Un guardado fallido aborta el cierre:
@@ -1978,6 +2102,7 @@ impl ScribeWindow {
                                                 );
                                                 *doc.current_file.borrow_mut() = Some(p);
                                                 doc.is_modified.set(false);
+                                                doc.borrar_snapshot();
                                                 finish_close(&page, true);
                                             }
                                             Outcome::Error(e) => {
@@ -2072,6 +2197,7 @@ impl ScribeWindow {
                     match std::fs::write(&path, doc.editor.text()) {
                         Ok(()) => {
                             doc.is_modified.set(false);
+                            doc.borrar_snapshot();
                             doc.external_change.set(false);
                             // También quita el «•»/needs_attention de las
                             // pestañas no activas (D4).
@@ -2125,6 +2251,13 @@ impl ScribeWindow {
                     .collect();
                 if modified.is_empty() {
                     persist_geometry(win, &settings);
+                    // Cierre con gracia: no quedan docs modificados, así que
+                    // se limpian los snapshots de este proceso por si alguno
+                    // quedó huérfano (issue #23).
+                    recovery::limpiar_de_este_pid(
+                        &recovery::dir_recuperacion(),
+                        std::process::id(),
+                    );
                     alive.set(false);
                     return glib::Propagation::Proceed;
                 }
@@ -2138,6 +2271,13 @@ impl ScribeWindow {
                     let alive = alive.clone();
                     Rc::new(move |win: &adw::ApplicationWindow| {
                         persist_geometry(win, &settings);
+                        // Cierre con gracia tras resolver todos los docs
+                        // modificados: se limpian los snapshots de este
+                        // proceso (issue #23).
+                        recovery::limpiar_de_este_pid(
+                            &recovery::dir_recuperacion(),
+                            std::process::id(),
+                        );
                         alive.set(false);
                         force_close.set(true);
                         win.close();
@@ -2169,6 +2309,7 @@ impl ScribeWindow {
             load_file,
             open_path_at,
             open_untitled,
+            open_recovered,
             documents,
             tab_view,
         }
@@ -2184,6 +2325,10 @@ impl ScribeWindow {
 
     pub fn open_untitled(&self, text: String) {
         (self.open_untitled)(text);
+    }
+
+    pub fn open_recovered(&self, text: String, ruta: Option<PathBuf>) {
+        (self.open_recovered)(text, ruta);
     }
 
     pub fn present(&self) {

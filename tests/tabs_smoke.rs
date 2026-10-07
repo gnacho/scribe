@@ -25,6 +25,8 @@ mod markdown_view;
 mod preferences;
 #[path = "../src/preview.rs"]
 mod preview;
+#[path = "../src/recovery.rs"]
+mod recovery;
 #[path = "../src/settings.rs"]
 mod settings;
 #[path = "../src/templates.rs"]
