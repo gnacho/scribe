@@ -86,6 +86,11 @@ actually use to draft notes and docs.
 - **Header bar** follows GNOME Text Editor: open button with recent files
   dropdown, new document button, centered title, main menu with zoom row.
 - **Preferences** window with three pages: Appearance, Editor and Templates.
+- **Export to PDF** (Ctrl+P): print or export the document through the GTK
+  print pipeline, reusing the same span/ornament analysis as the editor.
+  Headings, code blocks, quotes and tables are themed, with separate export
+  settings (color scheme, fonts, page size and orientation) and careful
+  pagination (no orphan headings, `\newpage` support).
 - **Files**: open, save and save-as with `GtkFileDialog`, atomic writes,
   unsaved-changes warning, configurable autosave.
 - **Sidebar** (F9) with filterable recent files and a navigable outline.
@@ -120,7 +125,9 @@ invisible-text abort path of GNOME/gtk#8346 is unreachable by construction.
   not interpreted: it stays as dimmed text in the editor and is dropped in the
   split preview. The result is an approximation of the Markdown, not a copy of
   a browser rendering.
-- **No find & replace, no export to HTML or PDF, and no spell checking.**
+- **No find & replace, no export to HTML, and no spell checking.**
+- **PDF export has no outline/bookmarks.** `GtkPrintOperation` does not expose
+  PDF bookmarks, so the exported PDF carries no table of contents or outline.
 - **Images are local only.** Remote URLs are never fetched (no network code is
   linked) and show a placeholder. Only regular files up to 20 MB are painted,
   at most 144 px tall. Inline images (not alone on their line) show the

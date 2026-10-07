@@ -92,7 +92,14 @@ con GTK4 y ha terminado siendo algo que uso de verdad para borradores y notas.
 - **Cabecera** al estilo de GNOME Text Editor: botón de abrir con desplegable
   de recientes, botón de documento nuevo, título centrado y menú principal con
   fila de zoom.
-- **Preferencias** en tres páginas: Apariencia, Editor y Plantillas.
+- **Preferencias** en cuatro páginas: Apariencia, Editor, Exportación y
+  Plantillas.
+- **Exportar a PDF** (Ctrl+P): imprime o exporta el documento a través del
+  pipeline de impresión de GTK, reutilizando el mismo análisis de tramos y
+  adornos del editor. Las cabeceras, los bloques de código, las citas y las
+  tablas se tematizan, con ajustes de exportación separados (esquema de color,
+  fuentes, tamaño de página y orientación) y una paginación cuidadosa (sin
+  cabeceras huérfanas, soporte de `\newpage`).
 - **Archivos**: abrir, guardar y guardar como con `GtkFileDialog`, escritura
   atómica, aviso de cambios sin guardar y autoguardado configurable.
 - **Barra lateral** (F9) con documentos recientes filtrables e índice del
@@ -129,8 +136,11 @@ inalcanzable por construcción.
   El HTML del fuente no se interpreta: queda como texto atenuado en el editor y
   se descarta en la vista dividida. El resultado es una aproximación del
   Markdown, no una copia del render de un navegador.
-- **Sin buscar y reemplazar, sin exportar a HTML o PDF y sin corrección
+- **Sin buscar y reemplazar, sin exportar a HTML y sin corrección
   ortográfica.**
+- **La exportación a PDF no lleva índice ni marcadores.** `GtkPrintOperation`
+  no expone marcadores de PDF, así que el PDF exportado no tiene tabla de
+  contenidos ni outline.
 - **Las imágenes son solo locales.** Las URLs remotas no se descargan (no hay
   código de red enlazado) y muestran un placeholder. Solo se pintan ficheros
   regulares de hasta 20 MB, como máximo 144 px de alto. Las imágenes inline (no
