@@ -86,6 +86,13 @@ fn decidir_recarga(
     }
 }
 
+/// Visibilidad de la barra de pestañas (issue #26): se oculta mientras haya
+/// un único documento, de modo que la ventana se lea como un documento
+/// simple, y se muestra a partir de dos pestañas.
+fn barra_visible(n_paginas: usize) -> bool {
+    n_paginas > 1
+}
+
 impl Document {
     /// Cancela el monitor del fichero al cerrar la pestaña.
     fn cancelar_monitor(&self) {
@@ -564,6 +571,16 @@ impl ScribeWindow {
             .autohide(false)
             .expand_tabs(true)
             .build();
+        // Issue #26: la barra se oculta con un solo documento y se muestra
+        // a partir de dos; el número de pestañas cambia vía items-changed.
+        tab_bar.set_visible(barra_visible(tab_view.n_pages() as usize));
+        {
+            let tab_bar = tab_bar.clone();
+            let tab_view = tab_view.clone();
+            tab_view.pages().connect_items_changed(move |_, _, _, _| {
+                tab_bar.set_visible(barra_visible(tab_view.n_pages() as usize));
+            });
+        }
 
         // ============================== CONTENIDO ==============================
         let paned = gtk4::Paned::builder()
@@ -2380,6 +2397,15 @@ impl ScribeWindow {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn barra_de_pestanas_visible_solo_desde_dos() {
+        // Con cero o una pestaña la barra se oculta; a partir de dos, aparece.
+        assert!(!barra_visible(0));
+        assert!(!barra_visible(1));
+        assert!(barra_visible(2));
+        assert!(barra_visible(3));
+    }
 
     #[test]
     fn reload_limpio_con_cambios_recarga() {
