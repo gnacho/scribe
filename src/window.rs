@@ -42,6 +42,110 @@ struct Document {
     /// evita dialogos duplicados si se pide cerrarla dos veces.
     closing: Cell<bool>,
     page: adw::TabPage,
+    /// true si el fichero cambió en disco desde la última carga/guardado.
+    /// Lo marca el `FileMonitor`; la recarga en vivo lo consulta al enfocar.
+    external_change: Cell<bool>,
+    /// Monitor del fichero en disco; vive mientras viva la pestaña.
+    monitor: RefCell<Option<gio::FileMonitor>>,
+}
+
+/// Qué hacer cuando el fichero de un documento cambia en disco (issue #20).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum AccionRecarga {
+    /// Releer el fichero y sustituir el buffer (limpio + fichero cambiado).
+    Recargar,
+    /// El buffer tiene cambios sin guardar: preguntar antes de descartarlos.
+    Preguntar,
+    /// No hay cambios externos que atender.
+    Nada,
+    /// El fichero se borró en disco: conservar el buffer, marcar sin guardar.
+    MantenerSinFichero,
+}
+
+/// Decide la acción de recarga a partir del estado del buffer y del fichero.
+///
+/// Pura (sin GTK ni sistema de ficheros) para poder probarla en unit tests.
+fn decidir_recarga(
+    buffer_limpio: bool,
+    hay_cambios_externos: bool,
+    fichero_existe: bool,
+) -> AccionRecarga {
+    if !fichero_existe {
+        AccionRecarga::MantenerSinFichero
+    } else if hay_cambios_externos && buffer_limpio {
+        AccionRecarga::Recargar
+    } else if hay_cambios_externos {
+        AccionRecarga::Preguntar
+    } else {
+        AccionRecarga::Nada
+    }
+}
+
+impl Document {
+    /// Cancela el monitor del fichero al cerrar la pestaña.
+    fn cancelar_monitor(&self) {
+        if let Some(monitor) = self.monitor.borrow_mut().take() {
+            monitor.cancel();
+        }
+    }
+}
+
+/// Ata un `gio::FileMonitor` al fichero del documento para detectar cambios
+/// en disco, sustituyendo al anterior si lo había. El handler solo marca el
+/// flag `external_change` (nunca toca el buffer): la recarga real se decide al
+/// recuperar el foco o al pulsar F5.
+fn atar_monitor(doc: &Rc<Document>) {
+    if let Some(previo) = doc.monitor.borrow_mut().take() {
+        previo.cancel();
+    }
+    let Some(path) = doc.current_file.borrow().clone() else {
+        return;
+    };
+    let doc_weak = Rc::downgrade(doc);
+    // Sistema de ficheros sin monitorización: la recarga en vivo simplemente
+    // no estará disponible (degradación graciosa).
+    if let Ok(monitor) =
+        gio::File::for_path(&path).monitor_file(gio::FileMonitorFlags::NONE, gio::Cancellable::NONE)
+    {
+        monitor.connect_changed(move |_, _, _, evento| {
+            if !matches!(
+                evento,
+                gio::FileMonitorEvent::Changed
+                    | gio::FileMonitorEvent::Created
+                    | gio::FileMonitorEvent::Deleted
+                    | gio::FileMonitorEvent::Moved
+                    | gio::FileMonitorEvent::Renamed
+                    | gio::FileMonitorEvent::MovedIn
+                    | gio::FileMonitorEvent::MovedOut
+            ) {
+                return;
+            }
+            let Some(doc) = doc_weak.upgrade() else {
+                return;
+            };
+            doc.external_change.set(true);
+        });
+        *doc.monitor.borrow_mut() = Some(monitor);
+    }
+}
+
+/// Relee el fichero en disco y sustituye el buffer, conservando la línea y la
+/// columna del cursor (clampeadas a la longitud del contenido nuevo). Si el
+/// contenido en disco coincide con el buffer (p. ej. una escritura propia del
+/// guardado/autoguardado) no toca el buffer, para no resetear el cursor ni el
+/// historial de deshacer.
+fn recargar_desde_disco(doc: &Document, path: &Path) -> Result<(), String> {
+    let contenido = std::fs::read_to_string(path).map_err(|e| e.to_string())?;
+    if contenido == doc.editor.text() {
+        doc.external_change.set(false);
+        return Ok(());
+    }
+    let (linea, columna) = doc.editor.cursor_position();
+    doc.editor.set_text(&contenido);
+    doc.editor.place_cursor_at(linea as u32, columna as u32);
+    doc.is_modified.set(false);
+    doc.external_change.set(false);
+    Ok(())
 }
 
 /// Remate del cierre de una pestaña: confirma/aborta y limpia (ver
@@ -474,6 +578,7 @@ impl ScribeWindow {
         file_section.append(Some(&gettext("_Open…")), Some("win.open"));
         file_section.append(Some(&gettext("_Save")), Some("win.save"));
         file_section.append(Some(&gettext("Save _As…")), Some("win.save-as"));
+        file_section.append(Some(&gettext("_Reload")), Some("win.reload"));
         file_section.append(Some(&gettext("_Close Tab")), Some("win.close-tab"));
         menu.append_section(None, &file_section);
 
@@ -680,6 +785,115 @@ impl ScribeWindow {
                     let is_active = selected.as_ref() == Some(&doc.page);
                     refresh_doc_tab(doc, &window, &title_widget, is_active);
                 }
+            })
+        };
+
+        // ---- recarga en vivo (issue #20): decisión por documento ----
+        // Consulta el flag del monitor y decide con la función pura. Solo se
+        // recarga de forma automática el buffer limpio; el sucio con cambios
+        // externos deja el flag para que F5 ofrezca el diálogo (o se reconcilia
+        // al guardar).
+        let maybe_reload: Rc<dyn Fn(&Document)> = {
+            let toast = toast.clone();
+            let refresh_tabs = refresh_tabs.clone();
+            Rc::new(move |doc| {
+                let buffer_limpio = !doc.is_modified.get();
+                let fichero_existe = doc
+                    .current_file
+                    .borrow()
+                    .as_ref()
+                    .is_some_and(|p| p.exists());
+                match decidir_recarga(buffer_limpio, true, fichero_existe) {
+                    AccionRecarga::Recargar => {
+                        let Some(path) = doc.current_file.borrow().clone() else {
+                            return;
+                        };
+                        match recargar_desde_disco(doc, &path) {
+                            Ok(()) => refresh_tabs(),
+                            Err(e) => toast(&gettext("Could not reload: {e}").replace("{e}", &e)),
+                        }
+                    }
+                    AccionRecarga::MantenerSinFichero => {
+                        doc.is_modified.set(true);
+                        doc.external_change.set(false);
+                        refresh_tabs();
+                        toast(&gettext("File deleted on disk; save to recreate it"));
+                    }
+                    // Sucio con cambios externos: no se recarga solo.
+                    AccionRecarga::Preguntar => {}
+                    AccionRecarga::Nada => {
+                        doc.external_change.set(false);
+                    }
+                }
+            })
+        };
+
+        // ---- recarga manual (F5): guard de cambios sin guardar ----
+        let manual_reload: Rc<dyn Fn()> = {
+            let active_document = active_document.clone();
+            let toast = toast.clone();
+            let refresh_tabs = refresh_tabs.clone();
+            let window = window.downgrade();
+            Rc::new(move || {
+                let Some(doc) = active_document() else {
+                    return;
+                };
+                let Some(path) = doc.current_file.borrow().clone() else {
+                    toast(&gettext("This document is not linked to a file"));
+                    return;
+                };
+                if !path.exists() {
+                    // Borrado externo: conservar el buffer, marcar sin guardar.
+                    doc.is_modified.set(true);
+                    doc.external_change.set(false);
+                    refresh_tabs();
+                    toast(&gettext("File deleted on disk; save to recreate it"));
+                    return;
+                }
+                if !doc.is_modified.get() {
+                    // Buffer limpio: recarga manual directa.
+                    match recargar_desde_disco(&doc, &path) {
+                        Ok(()) => refresh_tabs(),
+                        Err(e) => toast(&gettext("Could not reload: {e}").replace("{e}", &e)),
+                    }
+                    return;
+                }
+                if !doc.external_change.get() {
+                    // Sucio y sin cambios externos: no hay nada que recargar.
+                    return;
+                }
+                // Sucio y con cambios externos: diálogo recargar/cancelar.
+                let Some(win) = window.upgrade() else {
+                    return;
+                };
+                let name = doc.display_name.borrow().clone();
+                let dialog = adw::MessageDialog::new(
+                    Some(&win),
+                    Some(&gettext("Reload “{name}” and discard changes?").replace("{name}", &name)),
+                    Some(&gettext(
+                        "The file changed on disk. Reloading discards your unsaved edits.",
+                    )),
+                );
+                dialog.add_response("cancel", &gettext("_Cancel"));
+                dialog.add_response("reload", &gettext("_Reload"));
+                dialog.set_response_appearance("reload", adw::ResponseAppearance::Destructive);
+                dialog.set_default_response(Some("cancel"));
+                dialog.set_close_response("cancel");
+                // Diálogo one-shot y acotado: captura el documento en fuerte.
+                let refresh_tabs = refresh_tabs.clone();
+                let toast = toast.clone();
+                dialog.choose(gio::Cancellable::NONE, move |response| {
+                    if response.as_str() != "reload" {
+                        return;
+                    }
+                    let Some(path) = doc.current_file.borrow().clone() else {
+                        return;
+                    };
+                    match recargar_desde_disco(&doc, &path) {
+                        Ok(()) => refresh_tabs(),
+                        Err(e) => toast(&gettext("Could not reload: {e}").replace("{e}", &e)),
+                    }
+                });
             })
         };
 
@@ -916,7 +1130,13 @@ impl ScribeWindow {
                     display_name: RefCell::new(display_name),
                     closing: Cell::new(false),
                     page,
+                    external_change: Cell::new(false),
+                    monitor: RefCell::new(None),
                 });
+
+                // Monitor del fichero (recarga en vivo, issue #20): vigila el
+                // fichero recién abierto mientras la pestaña esté viva.
+                atar_monitor(&doc);
 
                 // ---- cableado por documento ----
                 {
@@ -1056,7 +1276,9 @@ impl ScribeWindow {
                         .set_base_dir(path.parent().map(Path::to_path_buf));
                     *doc.current_file.borrow_mut() = Some(path.clone());
                     doc.is_modified.set(false);
+                    doc.external_change.set(false);
                     *doc.display_name.borrow_mut() = file_name_of(&path);
+                    atar_monitor(&doc);
                     tab_view.set_selected_page(&doc.page);
                 } else {
                     create_document(content, Some(path.clone()));
@@ -1160,6 +1382,9 @@ impl ScribeWindow {
                     return;
                 }
                 if let Some(docs) = documents.upgrade() {
+                    if let Some(cerrado) = docs.borrow().iter().find(|d| d.page == *page).cloned() {
+                        cerrado.cancelar_monitor();
+                    }
                     docs.borrow_mut().retain(|d| d.page != *page);
                 }
                 if tab_view.n_pages() == 0 {
@@ -1190,6 +1415,7 @@ impl ScribeWindow {
         let action_close_tab = gio::SimpleAction::new("close-tab", None);
         let action_tab_next = gio::SimpleAction::new("tab-next", None);
         let action_tab_prev = gio::SimpleAction::new("tab-prev", None);
+        let action_reload = gio::SimpleAction::new("reload", None);
 
         // Las alternancias son con estado, para que el menú muestre la marca.
         let action_sidebar = gio::SimpleAction::new_stateful(
@@ -1231,6 +1457,7 @@ impl ScribeWindow {
             &action_close_tab,
             &action_tab_next,
             &action_tab_prev,
+            &action_reload,
         ] {
             window.add_action(a);
         }
@@ -1305,6 +1532,14 @@ impl ScribeWindow {
             let tab_view = tab_view.clone();
             action_tab_prev.connect_activate(move |_, _| {
                 tab_view.select_previous_page();
+            });
+        }
+
+        // ---- recarga manual (F5) ----
+        {
+            let manual_reload = manual_reload.clone();
+            action_reload.connect_activate(move |_, _| {
+                manual_reload();
             });
         }
 
@@ -1480,6 +1715,11 @@ impl ScribeWindow {
                             doc.editor.set_base_dir(p.parent().map(Path::to_path_buf));
                             *doc.current_file.borrow_mut() = Some(p.clone());
                             doc.is_modified.set(false);
+                            // El guardado reconcilia buffer y disco; se limpia
+                            // el flag y se re-ata el monitor a la ruta nueva
+                            // (puede haber cambiado con «guardar como»).
+                            doc.external_change.set(false);
+                            atar_monitor(&doc);
                             *doc.display_name.borrow_mut() = file_name_of(&p);
                             settings.push_recent_file(&p.to_string_lossy());
                             refresh_recents("");
@@ -1607,6 +1847,28 @@ impl ScribeWindow {
                     preview.update(&text);
                 }
                 rebuild_toc(&toc_list, &toc_lines, &text);
+            });
+        }
+
+        // ---- recarga en vivo al recuperar el foco (issue #20) ----
+        {
+            // Débiles: la señal vive en la ventana. Al volver el foco se
+            // consulta el flag del monitor de cada documento y se decide con
+            // la función pura.
+            let documents = Rc::downgrade(&documents);
+            let maybe_reload = maybe_reload.clone();
+            window.connect_is_active_notify(move |win| {
+                if !win.is_active() {
+                    return;
+                }
+                let Some(docs) = documents.upgrade() else {
+                    return;
+                };
+                for doc in docs.borrow().iter() {
+                    if doc.external_change.get() {
+                        maybe_reload(doc);
+                    }
+                }
             });
         }
 
@@ -1803,6 +2065,7 @@ impl ScribeWindow {
                     match std::fs::write(&path, doc.editor.text()) {
                         Ok(()) => {
                             doc.is_modified.set(false);
+                            doc.external_change.set(false);
                             // También quita el «•»/needs_attention de las
                             // pestañas no activas (D4).
                             refresh_tabs();
@@ -1930,5 +2193,43 @@ impl ScribeWindow {
     #[allow(dead_code)]
     pub fn document_count(&self) -> usize {
         self.documents.borrow().len()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn reload_limpio_con_cambios_recarga() {
+        // Buffer limpio + fichero cambiado en disco: recarga automática.
+        assert_eq!(decidir_recarga(true, true, true), AccionRecarga::Recargar);
+    }
+
+    #[test]
+    fn reload_sucio_con_cambios_pregunta() {
+        // Buffer con cambios + fichero cambiado: preguntar antes de descartar.
+        assert_eq!(decidir_recarga(false, true, true), AccionRecarga::Preguntar);
+    }
+
+    #[test]
+    fn reload_limpio_sin_cambios_no_hace_nada() {
+        // Sin cambios externos no hay nada que atender.
+        assert_eq!(decidir_recarga(true, false, true), AccionRecarga::Nada);
+        assert_eq!(decidir_recarga(false, false, true), AccionRecarga::Nada);
+    }
+
+    #[test]
+    fn reload_fichero_borrado_mantiene_el_buffer() {
+        // Fichero borrado en disco: conservar el buffer y marcar sin guardar,
+        // sin importar si el buffer estaba limpio o sucio.
+        assert_eq!(
+            decidir_recarga(true, true, false),
+            AccionRecarga::MantenerSinFichero
+        );
+        assert_eq!(
+            decidir_recarga(false, true, false),
+            AccionRecarga::MantenerSinFichero
+        );
     }
 }
