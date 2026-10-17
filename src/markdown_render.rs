@@ -61,6 +61,35 @@ impl Span {
     }
 }
 
+/// Relleno de una celda de tabla: avance extra que hay que añadir tras el
+/// carácter ancla (el `|` que precede a la celda) para que su contenido caiga
+/// en la columna canónica que marca la fila delimitadora.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct TablePad {
+    /// Byte del carácter ancla. El editor lo convierte a offset de carácter y
+    /// aplica ahí el avance extra con `letter-spacing`.
+    pub offset: usize,
+    /// Avance extra, en celdas de carácter. Nunca negativo (si el contenido no
+    /// cabe en su columna, se deja desbordar en vez de encogerlo).
+    pub cells: f32,
+}
+
+/// Unidades Pango (1024 = 1 px) de `letter-spacing` que desplazan `cells`
+/// celdas de `advance` píxeles.
+///
+/// GTK solo aplica **la mitad** del desplazamiento pedido cuando el tag cae en
+/// el primer carácter de su línea, así que el relleno cuya ancla abre la fila
+/// (el `|` inicial de la celda 0) se compensa doblando las unidades. El resto
+/// de anclas desplazan lo pedido. Regla medida con `letter-spacing` de 10 px
+/// sobre Monoespaciada: el texto siguiente avanza 5 px con el ancla en el
+/// primer carácter y 10 px con el ancla en cualquier otra posición, con
+/// independencia de la escala y del color del tag (fijada en
+/// `el_relleno_del_ancla_que_abre_la_fila_se_dobla`).
+pub fn pad_units(cells: f32, advance: f32, opens_line: bool) -> i32 {
+    let factor = if opens_line { 2.0 } else { 1.0 };
+    (cells as f64 * advance as f64 * factor * 1024.0).round() as i32
+}
+
 /// Elemento que hay que pintar a mano. Las líneas son lógicas y empiezan en 0.
 ///
 /// No es `Copy`: algunos adornos llevan texto (la ruta de una imagen).
@@ -86,10 +115,24 @@ pub enum Ornament {
     /// en su sitio un glifo de retorno. Fuera de tablas no se genera: ahí el
     /// `<br>` se deja con su tag `html` como hasta ahora.
     Break { offset: usize },
-    /// Separador de columna de tabla (un `|` del fuente). El widget dibuja una
-    /// línea vertical en su posición, para dotar a la tabla de rejilla visual
-    /// sin necesidad de un widget compuesto.
-    CellSeparator { offset: usize },
+    /// Rejilla de una tabla: las fronteras verticales salen de la fila
+    /// delimitadora del fuente, no de la posición de los `|` de cada fila
+    /// (que depende del relleno). El widget dibuja una línea continua en cada
+    /// frontera y el editor recoloca el contenido de las celdas con `pads`
+    /// para que caiga en su columna.
+    TableGrid {
+        /// Primera y última línea lógica de la tabla.
+        first: usize,
+        last: usize,
+        /// Línea de la fila delimitadora: origen de la geometría en X (sus
+        /// offsets son las posiciones canónicas de las columnas).
+        anchor: usize,
+        /// Fronteras verticales, en celdas de carácter desde el inicio de la
+        /// fila delimitadora.
+        bounds: Vec<usize>,
+        /// Rellenos de celda, en orden de lectura.
+        pads: Vec<TablePad>,
+    },
     /// Filete fino bajo un título H1/H2, estilo GitHub. Aditivo: no sustituye
     /// ninguna marca.
     HeadingRule { line: usize },
@@ -129,7 +172,7 @@ impl Ornament {
             | Ornament::Rule { .. }
             | Ornament::TableRule { .. }
             | Ornament::Break { .. }
-            | Ornament::CellSeparator { .. } => OrnamentFamily::Substitute,
+            | Ornament::TableGrid { .. } => OrnamentFamily::Substitute,
             Ornament::HeadingRule { .. } | Ornament::Image { .. } => OrnamentFamily::Additive,
         }
     }
@@ -324,6 +367,242 @@ fn is_delimiter_row(line: &str) -> bool {
         && trimmed
             .bytes()
             .all(|b| matches!(b, b'|' | b'-' | b':' | b' '))
+}
+
+/// Peso, en celdas de carácter, de un tramo según su tag. La tabla va en
+/// monoespaciada (tag `table`), así que todo conserva el ancho salvo el código
+/// en línea, que el editor pinta con escala 0.9 (tag `code`); dentro de una
+/// tabla el parser usa `tablecode` (escala 1) para que la rejilla no dependa
+/// de la escala de los tags. Las marcas encogidas (pipes, markup) pesan
+/// `SHRUNK_CELLS` (véase `syn_shrink` en editor.rs).
+const SHRUNK_CELLS: f32 = 0.05;
+
+/// Geometría de una columna, en celdas de carácter desde el inicio de la fila
+/// delimitadora.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct ColumnGeom {
+    /// Posición del contenido de la columna en la fila delimitadora (el primer
+    /// guion de su celda). El contenido de cualquier fila se coloca ahí.
+    start: usize,
+    /// Ancho de la columna: longitud del relleno de guiones, que es lo que
+    /// fija el ancho de la columna.
+    width: usize,
+    align: Align,
+}
+
+/// Celda de una fila de tabla, con el ancla de su relleno.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct RowCell {
+    /// Índice de columna (0 = primera).
+    column: usize,
+    /// Byte del `|` que precede a la celda dentro de su fila, si lo hay. Las
+    /// filas sin `|` inicial no tienen ancla (no se pueden rellenar).
+    anchor: Option<usize>,
+    /// Contenido de la celda, ya recortado, en bytes dentro de la fila.
+    start: usize,
+    end: usize,
+}
+
+/// Pipes no escapados de una fila, en bytes.
+fn row_pipes(row: &str) -> Vec<usize> {
+    let bytes = row.as_bytes();
+    (0..bytes.len())
+        .filter(|&i| bytes[i] == b'|' && (i == 0 || bytes[i - 1] != b'\\'))
+        .collect()
+}
+
+/// Celdas con contenido de una fila, con su índice de columna y el `|` que las
+/// precede. Los pipes exteriores son opcionales: una fila sin `|` inicial deja
+/// la primera celda sin ancla.
+fn row_cells(row: &str) -> Vec<RowCell> {
+    let pipes = row_pipes(row);
+    let lead = row.trim_start().starts_with('|');
+    let mut cuts: Vec<usize> = pipes.clone();
+    cuts.push(row.len());
+    let mut out = Vec::new();
+    let mut prev = 0usize;
+    for (k, &cut) in cuts.iter().enumerate() {
+        // El segmento k es el que va del pipe k-1 al pipe k; k pipes lo
+        // preceden. Con `|` inicial, el primer pipe es el borde, no un
+        // separador, así que la columna va una menos.
+        let column = k.saturating_sub(usize::from(lead));
+        let segment = &row[prev..cut];
+        let trimmed = segment.trim();
+        if !trimmed.is_empty() {
+            let lead_ws = segment.len() - segment.trim_start().len();
+            out.push(RowCell {
+                column,
+                anchor: (k > 0).then(|| pipes[k - 1]),
+                start: prev + lead_ws,
+                end: prev + lead_ws + trimmed.len(),
+            });
+        }
+        prev = cut + 1;
+    }
+    out
+}
+
+/// Posiciones, en celdas de carácter, de cada char de un rango del documento.
+/// Los tramos encogidos (pipes, markup) casi no ocupan ancho: contarlos como
+/// celdas completas falsearía la rejilla.
+struct RowMetrics {
+    /// `(byte del char, celdas consumidas antes de él)`, en orden.
+    starts: Vec<(usize, f32)>,
+    /// Total de celdas de la fila.
+    total: f32,
+}
+
+impl RowMetrics {
+    fn new(text: &str, start: usize, end: usize, shrunk: &[(usize, usize)]) -> Self {
+        let mut starts = Vec::new();
+        let mut pos = 0.0f32;
+        let mut i = start;
+        while i < end {
+            let Some(ch) = text[i..end].chars().next() else {
+                break;
+            };
+            starts.push((i, pos));
+            pos += if is_shrunk(i, shrunk) {
+                SHRUNK_CELLS
+            } else {
+                1.0
+            };
+            i += ch.len_utf8();
+        }
+        Self { starts, total: pos }
+    }
+
+    /// Celdas consumidas antes del byte `at` (o al final de la fila).
+    fn pos(&self, at: usize) -> f32 {
+        match self.starts.binary_search_by_key(&at, |&(byte, _)| byte) {
+            Ok(i) => self.starts[i].1,
+            Err(i) => self.starts.get(i).map(|&(_, p)| p).unwrap_or(self.total),
+        }
+    }
+}
+
+/// ¿Cae este byte dentro de algún rango encogido? `ranges` va ordenado y sin
+/// solapes.
+fn is_shrunk(byte: usize, ranges: &[(usize, usize)]) -> bool {
+    let i = ranges.partition_point(|&(start, _)| start <= byte);
+    i > 0 && byte < ranges[i - 1].1
+}
+
+/// Rangos (en bytes) de los tramos que el render encoge, ordenados.
+fn shrunk_ranges(spans: &[Span]) -> Vec<(usize, usize)> {
+    let mut out: Vec<(usize, usize)> = spans
+        .iter()
+        .filter(|s| s.kind == SpanKind::Replaced)
+        .map(|s| (s.start, s.end))
+        .collect();
+    out.sort_unstable();
+    out
+}
+
+/// Tabla cuya rejilla está pendiente del relleno de celdas: el peso del markup
+/// (que se encoge y casi no ocupa ancho) solo se conoce al terminar el
+/// recorrido de eventos.
+struct PendingTable {
+    /// Índice de su `Ornament::TableGrid` en `ornaments`.
+    grid: usize,
+    plan: TablePlan,
+}
+
+/// Plan de la rejilla de una tabla: la geometría que se deriva de la fila
+/// delimitadora más las celdas de cada fila, a la espera de conocer los tramos
+/// encogidos para calcular los rellenos (véase `TablePlan::pads`).
+struct TablePlan {
+    /// Fronteras verticales, en celdas desde el inicio de la fila
+    /// delimitadora.
+    bounds: Vec<usize>,
+    /// Línea lógica de la fila delimitadora.
+    anchor: usize,
+    /// Columna por columna: posición del contenido y alineación.
+    columns: Vec<ColumnGeom>,
+    /// `(byte de inicio, byte de fin, celdas)` de cada fila de contenido.
+    rows: Vec<(usize, usize, Vec<RowCell>)>,
+}
+
+fn table_plan(text: &str, rows: &[(usize, usize)], lines: &LineIndex) -> Option<TablePlan> {
+    let (dls, dle) = rows
+        .iter()
+        .copied()
+        .find(|&(ls, le)| is_delimiter_row(&text[ls..le]))?;
+    let drow = &text[dls..dle];
+    // La fila delimitadora solo lleva `-`, `:`, `|` y espacios: es ASCII, así
+    // que sus offsets de byte son también celdas de carácter.
+    let columns: Vec<ColumnGeom> = cell_text_ranges(drow)
+        .into_iter()
+        .map(|(s, e)| ColumnGeom {
+            start: s,
+            width: e - s,
+            align: alignment_of(&drow[s..e]),
+        })
+        .collect();
+    let mut bounds = row_pipes(drow);
+    if !drow.trim_start().starts_with('|') {
+        bounds.insert(0, 0);
+    }
+    if !drow.trim_end().ends_with('|') {
+        bounds.push(drow.chars().count());
+    }
+    let rows = rows
+        .iter()
+        .filter(|&&(ls, _)| ls != dls)
+        .map(|&(ls, le)| {
+            let cells = row_cells(&text[ls..le]);
+            (ls, le, cells)
+        })
+        .filter(|(_, _, cells)| !cells.is_empty())
+        .collect();
+    Some(TablePlan {
+        bounds,
+        anchor: lines.line_of(dls),
+        columns,
+        rows,
+    })
+}
+
+impl TablePlan {
+    /// Rellenos que colocan el contenido de cada celda en su columna canónica.
+    ///
+    /// El recorrido es de izquierda a derecha y acumula lo ya rellenado, así
+    /// que un desbordamiento (contenido más ancho que su columna) desplaza a
+    /// las columnas siguientes en vez de encoger nada. Las filas sin `|`
+    /// inicial no tienen ancla y se dejan como están.
+    fn pads(&self, text: &str, shrunk: &[(usize, usize)]) -> Vec<TablePad> {
+        let mut out = Vec::new();
+        for (row_start, row_end, cells) in &self.rows {
+            let metrics = RowMetrics::new(text, *row_start, *row_end, shrunk);
+            // Las celdas vienen con offsets relativos a su fila; `RowMetrics`
+            // trabaja en bytes absolutos del documento.
+            let pos = |at: usize| metrics.pos(row_start + at);
+            let mut shift = 0.0f32;
+            for cell in cells {
+                let (Some(anchor), Some(column)) = (cell.anchor, self.columns.get(cell.column))
+                else {
+                    continue;
+                };
+                let width = pos(cell.end) - pos(cell.start);
+                let slack = column.width as f32 - width;
+                let target = column.start as f32
+                    + match column.align {
+                        Align::Right => slack.max(0.0),
+                        Align::Center => (slack / 2.0).max(0.0),
+                        Align::None | Align::Left => 0.0,
+                    };
+                let pad = (target - (pos(cell.start) + shift)).max(0.0);
+                shift += pad;
+                if pad > 0.02 {
+                    out.push(TablePad {
+                        offset: row_start + anchor,
+                        cells: pad,
+                    });
+                }
+            }
+        }
+        out
+    }
 }
 
 /// Longitud de la marca `>` (con su espacio) al principio de una línea de cita.
@@ -633,6 +912,7 @@ pub fn analyze(text: &str) -> Analysis {
     let mut unclosed_fences: Vec<UnclosedFence> = Vec::new();
     let mut list_depth = 0usize;
     let mut table_depth = 0usize;
+    let mut pending_tables: Vec<PendingTable> = Vec::new();
 
     for (event, range) in Parser::new_ext(text, opts).into_offset_iter() {
         match event {
@@ -685,7 +965,12 @@ pub fn analyze(text: &str) -> Analysis {
             }
 
             Event::Code(_) => {
-                spans.push(style(range.start, range.end, "code"));
+                // Dentro de una tabla el código va con `tablecode` (mismo
+                // tamaño que el resto de la fila): la rejilla se calcula en
+                // celdas de carácter y un cambio de escala movería las
+                // columnas.
+                let tag = if table_depth > 0 { "tablecode" } else { "code" };
+                spans.push(style(range.start, range.end, tag));
                 let ticks = text[range.start..range.end]
                     .bytes()
                     .take_while(|b| *b == b'`')
@@ -873,10 +1158,12 @@ pub fn analyze(text: &str) -> Analysis {
             }
 
             Event::Start(Tag::Table(_)) => {
-                // La tabla no es monoespaciada (véase editor.rs): aquí solo
-                // marcamos el bloque para el indent y la caja de fondo, y los
-                // pipes se sustituyen por separado. El inline (strong, em,
-                // code) fluye dentro de las celdas.
+                // La tabla va en monoespaciada (tag `table`, véase editor.rs):
+                // el inline (strong, em, código) fluye dentro de las celdas y
+                // la rejilla se calcula en celdas de carácter. La geometría de
+                // las columnas sale de la fila delimitadora (anchos y
+                // alineación) y el contenido de cada celda se recoloca con
+                // `pads`, para no depender del relleno del fuente.
                 table_depth += 1;
                 let end = trim_nl(text, range.end);
                 spans.push(style(range.start, end, "table"));
@@ -887,10 +1174,10 @@ pub fn analyze(text: &str) -> Analysis {
                 let rows = line_ranges(text, range.start, end);
                 // La primera línea del rango es la fila de cabecera.
                 let header_start = rows.first().map(|&(ls, _)| ls);
-                for (ls, le) in rows {
+                // Los pipes y el resto del markup son marcas sustituidas: en
+                // WYSIWYG se encogen y su sitio lo ocupa el adorno (rejilla).
+                for &(ls, le) in &rows {
                     if is_delimiter_row(&text[ls..le]) {
-                        // La fila de guiones se sustituye y en su hueco se
-                        // pinta la línea que separa la cabecera.
                         spans.push(replaced(ls, le));
                         spans.push(style(ls, le, "tablerule"));
                         ornaments.push(Ornament::TableRule {
@@ -898,16 +1185,11 @@ pub fn analyze(text: &str) -> Analysis {
                         });
                         continue;
                     }
-                    // Los pipes son marcas sustituidas: en WYSIWYG se encogen
-                    // y en su sitio el widget dibuja un separador vertical
-                    // (`CellSeparator`), para dotar a la tabla de rejilla
-                    // visual sin necesidad de un widget compuesto.
                     let row = &text[ls..le];
                     let bytes = row.as_bytes();
                     for (i, b) in bytes.iter().enumerate() {
                         if *b == b'|' && (i == 0 || bytes[i - 1] != b'\\') {
                             spans.push(replaced(ls + i, ls + i + 1));
-                            ornaments.push(Ornament::CellSeparator { offset: ls + i });
                         }
                         // La `\` que escapa un pipe dentro de una celda es
                         // marca, no contenido: se encoge para que la celda
@@ -923,6 +1205,18 @@ pub fn analyze(text: &str) -> Analysis {
                             spans.push(style(ls + s, ls + e, "tablehead"));
                         }
                     }
+                }
+
+                if let Some(plan) = table_plan(text, &rows, &lines) {
+                    let grid = ornaments.len();
+                    ornaments.push(Ornament::TableGrid {
+                        first,
+                        last,
+                        anchor: plan.anchor,
+                        bounds: plan.bounds.clone(),
+                        pads: Vec::new(),
+                    });
+                    pending_tables.push(PendingTable { grid, plan });
                 }
             }
 
@@ -964,6 +1258,17 @@ pub fn analyze(text: &str) -> Analysis {
             }
 
             _ => {}
+        }
+    }
+
+    // Relleno de las celdas de tabla: se calcula aquí, y no al abrir la tabla,
+    // porque los tramos que se encogen (pipes, markup) solo se conocen cuando
+    // ha terminado el recorrido de eventos.
+    let shrunk = shrunk_ranges(&spans);
+    for pending in pending_tables {
+        let pads = pending.plan.pads(text, &shrunk);
+        if let Some(Ornament::TableGrid { pads: slot, .. }) = ornaments.get_mut(pending.grid) {
+            *slot = pads;
         }
     }
 
@@ -1477,10 +1782,11 @@ mod tests {
                 | Ornament::Image { line, .. } => line,
                 Ornament::Quote { last, .. }
                 | Ornament::CodeBlock { last, .. }
-                | Ornament::Table { last, .. } => last,
-                // Break y CellSeparator van por offset, no por línea: se
-                // comprueban aparte en sus tests propios.
-                Ornament::Break { .. } | Ornament::CellSeparator { .. } => continue,
+                | Ornament::Table { last, .. }
+                | Ornament::TableGrid { last, .. } => last,
+                // Break va por offset, no por línea: se comprueba aparte en
+                // su test propio.
+                Ornament::Break { .. } => continue,
             };
             assert!(max < total, "{o:?} fuera de rango ({total} líneas)");
         }
@@ -1580,15 +1886,19 @@ mod tests {
         let text = "| a | b |\n|---|---|\n| **x** | `y` |\n";
         let a = analyze(text);
         assert!(!find(&a.spans, "bold").is_empty(), "bold dentro de celda");
-        assert!(!find(&a.spans, "code").is_empty(), "code dentro de celda");
+        assert!(
+            !find(&a.spans, "tablecode").is_empty(),
+            "código dentro de celda"
+        );
     }
 
     #[test]
     fn los_delimitadores_inline_de_tabla_son_siempre_sustituidos() {
         // En las tablas los delimitadores (`**`, `*`, backticks) se marcan como
-        // Replaced, no como Marker: su visibilidad no puede depender de la
-        // línea del cursor, porque revelarlos sobre el texto en negrita
-        // descuadraría la celda.
+        // Replaced, no como Marker: las marcas normales se ven siempre en este
+        // GTK y, sobre el texto en negrita, descuadrarían la celda. Como
+        // sustituidos se encogen (manda la rejilla) y solo se revelan en la
+        // línea del cursor, que es donde el usuario edita el fuente.
         let text = "| **a** | `b` |\n|---|---|\n| *c* | d |\n";
         let a = analyze(text);
         assert!(
@@ -1617,28 +1927,142 @@ mod tests {
         );
     }
 
+    /// Rejilla de la primera tabla del documento, tal como la ve el pintor:
+    /// `(primera línea, última línea, línea delimitadora, fronteras, rellenos)`.
+    fn grid(text: &str) -> (usize, usize, usize, Vec<usize>, Vec<TablePad>) {
+        analyze(text)
+            .ornaments
+            .into_iter()
+            .find_map(|o| match o {
+                Ornament::TableGrid {
+                    first,
+                    last,
+                    anchor,
+                    bounds,
+                    pads,
+                } => Some((first, last, anchor, bounds, pads)),
+                _ => None,
+            })
+            .expect("la tabla no generó rejilla")
+    }
+
+    /// Posición final (en celdas de carácter) del byte `at` de una fila, tras
+    /// aplicar los rellenos: simula el avance del render (una celda por
+    /// carácter salvo los encogidos) y suma cada relleno en su ancla. Es la
+    /// comprobación independiente de que el contenido cae en su columna.
+    fn reubicado(text: &str, row_start: usize, at: usize, pads: &[TablePad]) -> f32 {
+        let shrunk = shrunk_ranges(&spans(text));
+        let mut pos = 0.0f32;
+        for (i, _) in text[row_start..at].char_indices() {
+            let byte = row_start + i;
+            pos += if is_shrunk(byte, &shrunk) {
+                SHRUNK_CELLS
+            } else {
+                1.0
+            };
+            if let Some(pad) = pads.iter().find(|p| p.offset == byte) {
+                pos += pad.cells;
+            }
+        }
+        pos
+    }
+
     #[test]
-    fn cada_pipe_de_tabla_genera_un_separador() {
-        // Cada `|` del fuente (en cabecera y cuerpo; la fila de guiones va
-        // oculta y se salta) debe emitir un `CellSeparator` para que el widget
-        // dibuje las líneas verticales.
+    fn la_rejilla_sale_de_la_fila_de_guiones() {
+        // Una sola rejilla por tabla (no una línea por pipe) y sus fronteras
+        // son los pipes de la fila delimitadora, no los de cada fila.
         let text = "| a | b |\n|---|---|\n| 1 | 2 |\n";
-        let a = analyze(text);
-        let seps = a
+        let (first, last, anchor, bounds, _) = grid(text);
+        assert_eq!((first, last, anchor), (0, 2, 1));
+        assert_eq!(bounds, vec![0, 4, 8]);
+        let grids = analyze(text)
             .ornaments
             .iter()
-            .filter(|o| matches!(o, Ornament::CellSeparator { .. }))
+            .filter(|o| matches!(o, Ornament::TableGrid { .. }))
             .count();
-        // 2 filas (cabecera + 1 body) × 3 pipes por fila = 6.
-        assert_eq!(seps, 6, "una tubería por pipe de cabecera/cuerpo");
-        // y debe coincidir con el número de pipes sustituidos (spans
-        // Replaced de un byte; la fila de guiones es uno solo y más largo).
-        let pipes = a
-            .spans
-            .iter()
-            .filter(|s| s.kind == SpanKind::Replaced && s.end == s.start + 1)
-            .count();
-        assert_eq!(seps, pipes);
+        assert_eq!(grids, 1, "una rejilla por tabla");
+    }
+
+    #[test]
+    fn el_contenido_cae_en_la_columna_que_marca_la_fila_de_guiones() {
+        // Tabla rellenada en el fuente: el primer relleno compensa el ancho
+        // que el pipe encogido deja de ocupar y la columna alineada a la
+        // derecha corre su contenido hasta el borde de la columna.
+        let text = "| Command    | Precio |\n| ---------- | -----: |\n| git status |    $12 |\n";
+        let (_, _, _, bounds, pads) = grid(text);
+        assert_eq!(bounds, vec![0, 13, 22]);
+        let body = text.len() - "| git status |    $12 |".len() - 1;
+        // Primera columna: `Command` y `git status` (10 celdas) empiezan bajo
+        // el primer guion de la fila delimitadora.
+        assert!((reubicado(text, 0, 2, &pads) - 2.0).abs() < 0.01);
+        assert!((reubicado(text, body, body + 2, &pads) - 2.0).abs() < 0.01);
+        // Columna derecha: `Precio` (6) y `$12` (3) acaban en el borde derecho
+        // de la columna (celda 21).
+        assert!((reubicado(text, 0, 15, &pads) + 6.0 - 21.0).abs() < 0.01);
+        assert!((reubicado(text, body, body + 18, &pads) + 3.0 - 21.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn la_rejilla_no_depende_del_relleno_del_fuente() {
+        // La misma tabla sin rellenar: la geometría es idéntica (sale de la
+        // fila de guiones) y el contenido acaba en la misma columna aunque su
+        // celda tenga otro ancho.
+        let text = "| C | P |\n| ---------- | -----: |\n| x | 1 |\n";
+        let (_, _, _, bounds, pads) = grid(text);
+        assert_eq!(bounds, vec![0, 13, 22]);
+        let body = text.len() - "| x | 1 |".len() - 1;
+        assert!((reubicado(text, 0, 2, &pads) - 2.0).abs() < 0.01);
+        assert!((reubicado(text, body, body + 2, &pads) - 2.0).abs() < 0.01);
+        assert!((reubicado(text, 0, 6, &pads) + 1.0 - 21.0).abs() < 0.01);
+        assert!((reubicado(text, body, body + 6, &pads) + 1.0 - 21.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn la_alineacion_de_la_fila_de_guiones_situa_el_contenido() {
+        // Columnas de 6 guiones con contenido de una celda: izquierda al
+        // principio, centrada en medio, derecha al final. Es la alineación
+        // aplicada por el render, no por los espacios del fuente.
+        let text = "| a | b | c |\n| :----- | :----: | -----: |\n| x | y | z |\n";
+        let (_, _, _, bounds, pads) = grid(text);
+        assert_eq!(bounds, vec![0, 9, 18, 27]);
+        let body = text.len() - "| x | y | z |".len() - 1;
+        let sitio = |at: usize| reubicado(text, body, at, &pads);
+        assert!((sitio(body + 2) - 2.0).abs() < 0.01, "{:?}", pads);
+        assert!((sitio(body + 6) - 13.5).abs() < 0.01, "{:?}", pads);
+        assert!((sitio(body + 10) - 25.0).abs() < 0.01, "{:?}", pads);
+    }
+
+    #[test]
+    fn una_celda_mas_ancha_que_su_columna_no_encoge_nada() {
+        // Sin relleno negativo (GTK no lo admite): la celda se deja desbordar
+        // y las siguientes no se recolocan hacia atrás.
+        let text = "| a | b |\n|---|---|\n| desbordaaaaa | 2 |\n";
+        let (_, _, _, _, pads) = grid(text);
+        assert_eq!(pads.len(), 1, "{pads:?}");
+        assert_eq!(pads[0].offset, 4);
+        assert!((pads[0].cells - 0.9).abs() < 0.01, "{pads:?}");
+    }
+
+    #[test]
+    fn el_relleno_del_ancla_que_abre_la_fila_se_dobla() {
+        // GTK aplica la mitad del `letter-spacing` cuando el tag empieza en el
+        // primer carácter de su línea: el ancla que abre la fila se compensa
+        // doblando las unidades. Una celda de 8,8 px son 9011 unidades Pango.
+        assert_eq!(pad_units(1.0, 8.8, false), 9011);
+        assert_eq!(pad_units(1.0, 8.8, true), 18022);
+        assert_eq!(pad_units(0.0, 8.8, true), 0);
+        // Sin avance medido (vista sin maquetar) no hay relleno posible.
+        assert_eq!(pad_units(3.0, 0.0, true), 0);
+    }
+
+    #[test]
+    fn el_codigo_dentro_de_una_tabla_no_cambia_de_escala() {
+        // `code` va a escala 0.9; dentro de una tabla la rejilla se calcula en
+        // celdas, así que el código usa `tablecode` (misma escala que la fila).
+        let dentro = "| a | b |\n|---|---|\n| `x` | 2 |\n";
+        assert_eq!(find(&spans(dentro), "tablecode").len(), 1);
+        assert!(find(&spans(dentro), "code").is_empty());
+        assert_eq!(find(&spans("un `x` suelto\n"), "code").len(), 1);
     }
 
     #[test]
@@ -1800,7 +2224,14 @@ mod tests {
             OrnamentFamily::Substitute
         );
         assert_eq!(
-            Ornament::CellSeparator { offset: 0 }.family(),
+            Ornament::TableGrid {
+                first: 0,
+                last: 1,
+                anchor: 1,
+                bounds: vec![0, 4],
+                pads: Vec::new(),
+            }
+            .family(),
             OrnamentFamily::Substitute
         );
         assert_eq!(

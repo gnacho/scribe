@@ -9,7 +9,7 @@ use std::rc::Rc;
 use std::time::Duration;
 
 use crate::markdown_render::{
-    analyze, ornaments_for, Ornament, SpanKind, UnclosedFence, MAX_LIVE_BYTES,
+    analyze, ornaments_for, pad_units, Ornament, SpanKind, UnclosedFence, MAX_LIVE_BYTES,
 };
 use crate::markdown_view::{MarkdownView, OrnamentPalette};
 use crate::settings::{gtk_hides_invisible_safely, FontFamily, MarkupVisibility};
@@ -181,6 +181,13 @@ fn build_tags() -> gtk4::TextTagTable {
         .family("monospace")
         .scale(0.9)
         .build());
+    // Código en línea dentro de una tabla: monoespaciado y a escala 1.0, para
+    // que todos los tramos de la fila avancen lo mismo. La rejilla de la
+    // tabla se calcula en celdas de carácter y una escala distinta la tuerce.
+    add(gtk4::TextTag::builder()
+        .name("tablecode")
+        .family("monospace")
+        .build());
     add(gtk4::TextTag::builder()
         .name("link")
         .underline(pango::Underline::Single)
@@ -267,6 +274,7 @@ fn apply_theme(tags: &gtk4::TextTagTable, view: &MarkdownView, dark: bool) {
     // y su barra se dibujan, que permite esquinas redondeadas y márgenes.
     if dark {
         set("code", Some("#f0a868"), None);
+        set("tablecode", Some("#f0a868"), None);
         set("codeblock", Some("#e4e4e4"), None);
         set("table", Some("#e0e0e0"), None);
         set("tablehead", Some("#e0e0e0"), None);
@@ -289,6 +297,7 @@ fn apply_theme(tags: &gtk4::TextTagTable, view: &MarkdownView, dark: bool) {
         });
     } else {
         set("code", Some("#a34a00"), None);
+        set("tablecode", Some("#a34a00"), None);
         set("codeblock", Some("#1f1f1f"), None);
         set("table", Some("#1f1f1f"), None);
         set("tablehead", Some("#1f1f1f"), None);
@@ -501,16 +510,52 @@ fn decorate(
         buffer.apply_tag_by_name(name, &start_iter, &end_iter);
     }
 
+    // Relleno de las celdas de tabla: `letter-spacing` sobre el `|` que
+    // precede a cada celda, para que su contenido caiga en la columna que marca
+    // la fila de guiones y no en la X que le deja el relleno del fuente. El
+    // avance de celda se mide del widget (Pango); GTK no expone el del tag.
+    let advance = view.cell_advance();
+    if advance > 0.0 {
+        for ornament in &analysis.ornaments {
+            let Ornament::TableGrid { pads, .. } = ornament else {
+                continue;
+            };
+            for pad in pads {
+                // El ancla que abre su línea (el `|` inicial de la celda 0)
+                // recibe la mitad del desplazamiento: `pad_units` lo compensa.
+                let opens_line =
+                    pad.offset == 0 || text.as_bytes().get(pad.offset - 1) == Some(&b'\n');
+                let units = pad_units(pad.cells, advance, opens_line);
+                if units <= 0 {
+                    continue;
+                }
+                let (Some(&from), Some(&to)) = (
+                    byte_to_char.get(pad.offset),
+                    byte_to_char.get(pad.offset + 1),
+                ) else {
+                    continue;
+                };
+                if from >= to {
+                    continue;
+                }
+                let start_iter = buffer.iter_at_offset(from);
+                let end_iter = buffer.iter_at_offset(to);
+                let name = view.pad_tag(units);
+                buffer.apply_tag_by_name(&name, &start_iter, &end_iter);
+            }
+        }
+    }
+
     // Los adornos se filtran por familia según la preferencia (véase
     // `ornaments_for`): en «Atenuar» solo ambientales y aditivos; en los
     // modos WYSIWYG todos, con las marcas sustituidas encogidas u ocultas.
     let mut ornaments = ornaments_for(&analysis.ornaments, config.markup);
-    // Los adornos van por número de línea salvo `Break` y `CellSeparator`, que
-    // guardan byte offsets: el widget indexa por caracteres, así que convertimos.
+    // Los adornos van por número de línea salvo `Break`, que guarda un byte
+    // offset: el widget indexa por caracteres, así que lo convertimos.
     for o in &mut ornaments {
         let cap = byte_to_char.len().saturating_sub(1);
         match o {
-            Ornament::Break { offset } | Ornament::CellSeparator { offset } => {
+            Ornament::Break { offset } => {
                 let at = (*offset).min(cap);
                 *offset = byte_to_char[at] as usize;
             }
@@ -1081,9 +1126,6 @@ impl Editor {
                 return;
             }
             last_line.set(line);
-            // La visibilidad del marcado ya no depende del cursor: lo único
-            // que lo sigue es el atenuado del modo foco, que se re-aplica en
-            // el acto (barato) en vez de programar un decorate() O(n) entero.
             if decoration.get().focus_mode {
                 apply_focus_shade(buf, line);
             }
