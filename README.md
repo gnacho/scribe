@@ -171,7 +171,7 @@ The interface is currently in Spanish.
 
 ## Build requirements
 
-- Rust 1.83 or later
+- Rust 1.85 or later
 - GTK4 (&ge; 4.14), libadwaita (&ge; 1.5), GtkSourceView 5 and GLib
   development files
 

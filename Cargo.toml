@@ -4,7 +4,7 @@ version = "0.3.10"
 edition = "2021"
 authors = ["gnacho"]
 description = "A native GNOME Markdown editor"
-rust-version = "1.83"
+rust-version = "1.85"
 license = "AGPL-3.0-or-later"
 
 [dependencies]

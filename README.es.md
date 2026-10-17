@@ -184,7 +184,7 @@ La interfaz está actualmente en español.
 
 ## Requisitos de compilación
 
-- Rust 1.83 o superior
+- Rust 1.85 o superior
 - GTK4 (&ge; 4.14), libadwaita (&ge; 1.5), GtkSourceView 5 y GLib con sus
   ficheros de desarrollo
 
