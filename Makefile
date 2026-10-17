@@ -4,7 +4,7 @@
 # binario, esquema GSettings, fichero .desktop e iconos.
 #
 # Requisitos del sistema:
-#   - Rust 1.83+ y cargo en el PATH (habitualmente ~/.cargo/bin)
+#   - Rust 1.85+ y cargo en el PATH (habitualmente ~/.cargo/bin)
 #   - glib-compile-schemas (paquete glib2 / libglib2.0-dev)
 #   - GTK4, libadwaita y GtkSourceView 5 con sus ficheros de desarrollo
 #
