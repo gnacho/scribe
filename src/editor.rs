@@ -319,11 +319,9 @@ fn set_column_margins(tags: &gtk4::TextTagTable, base: i32) {
             tag.set_right_margin(base + right);
         }
     }
-    for name in ["fence"] {
-        if let Some(tag) = tags.lookup(name) {
-            tag.set_left_margin(base + 24);
-            tag.set_right_margin(base + 24);
-        }
+    if let Some(tag) = tags.lookup("fence") {
+        tag.set_left_margin(base + 24);
+        tag.set_right_margin(base + 24);
     }
 }
 
