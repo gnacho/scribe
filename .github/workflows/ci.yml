@@ -4,6 +4,9 @@ on:
   push:
     branches: [master]
   pull_request:
+  schedule:
+    - cron: '0 0 * * 1'
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -51,8 +54,21 @@ jobs:
           sudo apt-get install -y --no-install-recommends \
             libgtk-4-dev libadwaita-1-dev libgtksourceview-5-dev libglib2.0-dev
 
-      - uses: dtolnay/rust-toolchain@1.83
+      - uses: dtolnay/rust-toolchain@1.85
 
       - uses: Swatinem/rust-cache@v2
 
       - run: cargo check --locked
+
+  audit:
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-audit
+
+      - run: cargo audit

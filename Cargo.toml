@@ -4,7 +4,7 @@ version = "0.3.10"
 edition = "2021"
 authors = ["gnacho"]
 description = "A native GNOME Markdown editor"
-rust-version = "1.83"
+rust-version = "1.85"
 license = "AGPL-3.0-or-later"
 
 [dependencies]
@@ -14,5 +14,6 @@ gtksourceview5 = { version = "0.9", package = "sourceview5", features = ["v5_10"
 glib = "0.20"
 gio = "0.20"
 gdk4 = "0.9"
+gdk-pixbuf = "0.20"
 pulldown-cmark = "0.12"
 gettext-rs = { version = "0.8", features = ["gettext-system"] }

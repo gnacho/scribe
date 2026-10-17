@@ -8,16 +8,17 @@ use std::rc::Rc;
 use std::time::Duration;
 
 use crate::editor::Editor;
+use crate::export_pdf;
 use crate::file_manager::{FileManager, OpenOutcome, Outcome};
 use crate::preferences;
 use crate::preview::PreviewPanel;
+use crate::recovery;
 use crate::settings::AppSettings;
-use crate::templates;
 
 const SHORTCUTS_UI: &str = include_str!("shortcuts.ui");
 
-/// Crea un documento nuevo, opcionalmente a partir de una plantilla.
-type NewDocument = Rc<dyn Fn(Option<&str>)>;
+/// Crea un documento nuevo en blanco.
+type NewDocument = Rc<dyn Fn()>;
 
 /// Factoría de documentos: texto inicial y fichero asociado (si lo hay).
 /// Devuelve el documento creado, ya insertado en el TabView y seleccionado.
@@ -42,15 +43,177 @@ struct Document {
     /// evita dialogos duplicados si se pide cerrarla dos veces.
     closing: Cell<bool>,
     page: adw::TabPage,
+    /// true si el fichero cambió en disco desde la última carga/guardado.
+    /// Lo marca el `FileMonitor`; la recarga en vivo lo consulta al enfocar.
+    external_change: Cell<bool>,
+    /// Monitor del fichero en disco; vive mientras viva la pestaña.
+    monitor: RefCell<Option<gio::FileMonitor>>,
+    /// Id estable del documento para el nombre de su snapshot de recuperación
+    /// (issue #23). No cambia con «guardar como» ni con el pid.
+    recovery_id: Cell<u64>,
+}
+
+/// Qué hacer cuando el fichero de un documento cambia en disco (issue #20).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum AccionRecarga {
+    /// Releer el fichero y sustituir el buffer (limpio + fichero cambiado).
+    Recargar,
+    /// El buffer tiene cambios sin guardar: preguntar antes de descartarlos.
+    Preguntar,
+    /// No hay cambios externos que atender.
+    Nada,
+    /// El fichero se borró en disco: conservar el buffer, marcar sin guardar.
+    MantenerSinFichero,
+}
+
+/// Decide la acción de recarga a partir del estado del buffer y del fichero.
+///
+/// Pura (sin GTK ni sistema de ficheros) para poder probarla en unit tests.
+fn decidir_recarga(
+    buffer_limpio: bool,
+    hay_cambios_externos: bool,
+    fichero_existe: bool,
+) -> AccionRecarga {
+    if !fichero_existe {
+        AccionRecarga::MantenerSinFichero
+    } else if hay_cambios_externos && buffer_limpio {
+        AccionRecarga::Recargar
+    } else if hay_cambios_externos {
+        AccionRecarga::Preguntar
+    } else {
+        AccionRecarga::Nada
+    }
+}
+
+/// Visibilidad de la barra de pestañas (issue #26): se oculta mientras haya
+/// un único documento, de modo que la ventana se lea como un documento
+/// simple, y se muestra a partir de dos pestañas.
+fn barra_visible(n_paginas: usize) -> bool {
+    n_paginas > 1
+}
+
+impl Document {
+    /// Cancela el monitor del fichero al cerrar la pestaña.
+    fn cancelar_monitor(&self) {
+        if let Some(monitor) = self.monitor.borrow_mut().take() {
+            monitor.cancel();
+        }
+    }
+
+    /// Nombre del snapshot de recuperación de este documento: estable por
+    /// documento mientras viva la pestaña (issue #23).
+    fn nombre_snapshot(&self) -> String {
+        recovery::nombre_snapshot(std::process::id(), self.recovery_id.get())
+    }
+
+    /// Borra el snapshot de recuperación de este documento (al guardar o al
+    /// descartar). Idempotente: si no existía, no hace nada.
+    fn borrar_snapshot(&self) {
+        let dir = recovery::dir_recuperacion();
+        if let Err(e) = recovery::borrar_snapshot(&dir, &self.nombre_snapshot()) {
+            glib::g_warning!(
+                "scribe",
+                "no se pudo borrar el snapshot de recuperación: {e}"
+            );
+        }
+    }
+
+    /// Escribe el snapshot de recuperación de este documento (texto + ruta +
+    /// título). Se llama con debounce tras cada edición, mientras el
+    /// documento esté modificado. Un fallo no interrumpe al usuario: solo se
+    /// registra (la recuperación queda degradada, no el editor).
+    fn escribir_snapshot(&self) {
+        let dir = recovery::dir_recuperacion();
+        let nombre = self.nombre_snapshot();
+        let texto = self.editor.text();
+        let ruta = self.current_file.borrow().clone();
+        let titulo = self.display_name.borrow().clone();
+        if let Err(e) = recovery::escribir_snapshot(&dir, &nombre, &texto, ruta.as_deref(), &titulo)
+        {
+            glib::g_warning!(
+                "scribe",
+                "no se pudo escribir el snapshot de recuperación: {e}"
+            );
+        }
+    }
+}
+
+/// Ata un `gio::FileMonitor` al fichero del documento para detectar cambios
+/// en disco, sustituyendo al anterior si lo había. El handler solo marca el
+/// flag `external_change` (nunca toca el buffer): la recarga real se decide al
+/// recuperar el foco o al pulsar F5.
+fn atar_monitor(doc: &Rc<Document>) {
+    if let Some(previo) = doc.monitor.borrow_mut().take() {
+        previo.cancel();
+    }
+    let Some(path) = doc.current_file.borrow().clone() else {
+        return;
+    };
+    let doc_weak = Rc::downgrade(doc);
+    // Sistema de ficheros sin monitorización: la recarga en vivo simplemente
+    // no estará disponible (degradación graciosa).
+    if let Ok(monitor) =
+        gio::File::for_path(&path).monitor_file(gio::FileMonitorFlags::NONE, gio::Cancellable::NONE)
+    {
+        monitor.connect_changed(move |_, _, _, evento| {
+            if !matches!(
+                evento,
+                gio::FileMonitorEvent::Changed
+                    | gio::FileMonitorEvent::Created
+                    | gio::FileMonitorEvent::Deleted
+                    | gio::FileMonitorEvent::Moved
+                    | gio::FileMonitorEvent::Renamed
+                    | gio::FileMonitorEvent::MovedIn
+                    | gio::FileMonitorEvent::MovedOut
+            ) {
+                return;
+            }
+            let Some(doc) = doc_weak.upgrade() else {
+                return;
+            };
+            doc.external_change.set(true);
+        });
+        *doc.monitor.borrow_mut() = Some(monitor);
+    }
+}
+
+/// Relee el fichero en disco y sustituye el buffer, conservando la línea y la
+/// columna del cursor (clampeadas a la longitud del contenido nuevo). Si el
+/// contenido en disco coincide con el buffer (p. ej. una escritura propia del
+/// guardado/autoguardado) no toca el buffer, para no resetear el cursor ni el
+/// historial de deshacer.
+fn recargar_desde_disco(doc: &Document, path: &Path) -> Result<(), String> {
+    let contenido = std::fs::read_to_string(path).map_err(|e| e.to_string())?;
+    if contenido == doc.editor.text() {
+        doc.external_change.set(false);
+        return Ok(());
+    }
+    let (linea, columna) = doc.editor.cursor_position();
+    doc.editor.set_text(&contenido);
+    doc.editor.place_cursor_at(linea as u32, columna as u32);
+    doc.is_modified.set(false);
+    doc.borrar_snapshot();
+    doc.external_change.set(false);
+    Ok(())
 }
 
 /// Remate del cierre de una pestaña: confirma/aborta y limpia (ver
 /// `finish_close` en `ScribeWindow::new`).
 type FinishCloseFn = Rc<dyn Fn(&adw::TabPage, bool)>;
 
+/// Abre un fichero y coloca el cursor en línea/columna (1-based).
+type OpenPathAt = Rc<dyn Fn(&Path, u32, u32)>;
+
 pub struct ScribeWindow {
     pub window: adw::ApplicationWindow,
     load_file: Rc<dyn Fn(&Path)>,
+    /// Abre un fichero y coloca el cursor en línea/columna (1-based).
+    open_path_at: OpenPathAt,
+    /// Abre texto como documento sin título, marcado sin guardar (stdin).
+    open_untitled: Rc<dyn Fn(String)>,
+    /// Abre un snapshot recuperado: texto + ruta original (si había), marcado
+    /// modificado para forzar una decisión consciente (issue #23).
+    open_recovered: Rc<dyn Fn(String, Option<PathBuf>)>,
     /// Ancla fuerte de la lista de documentos: los closures registrados en
     /// objetos de la ventana la capturan en Weak (R3), así que alguien tiene
     /// que poseerla. La poseen este struct (que main retiene en su registro
@@ -62,6 +225,17 @@ pub struct ScribeWindow {
     /// Igual que `documents`: ancla del TabView y superficie de los tests.
     #[allow(dead_code)]
     tab_view: adw::TabView,
+    /// Superficie del test de la barra de pestañas (issue #26).
+    #[allow(dead_code)]
+    tab_bar: adw::TabBar,
+}
+
+impl ScribeWindow {
+    /// Visibilidad actual de la barra de pestañas (superficie de tests, #26).
+    #[allow(dead_code)]
+    pub fn barra_pestanas_visible(&self) -> bool {
+        self.tab_bar.is_visible()
+    }
 }
 
 fn shorten_home(path: &Path) -> String {
@@ -125,13 +299,7 @@ fn refresh_doc_tab(
             file_name_of(p),
             p.parent().map(shorten_home).unwrap_or_default(),
         ),
-        // Sin fichero, el borrador se identifica por su primera cabecera,
-        // que es lo que el usuario tiene en la cabeza. El texto solo se lee
-        // para la pestaña activa; el resto usa el nombre cacheado.
-        None if is_active => (
-            templates::title_from(&doc.editor.text()).unwrap_or_else(|| gettext("Untitled")),
-            gettext("Draft"),
-        ),
+        // Sin fichero, el borrador usa el nombre cacheado ("Untitled").
         None => (doc.display_name.borrow().clone(), gettext("Draft")),
     };
     let tooltip = match file.as_ref() {
@@ -251,6 +419,7 @@ fn ask_save_step(
                     Some(p) => match std::fs::write(&p, doc.editor.text()) {
                         Ok(()) => {
                             doc.is_modified.set(false);
+                            doc.borrar_snapshot();
                             ask_save_step(
                                 win,
                                 pending,
@@ -283,6 +452,7 @@ fn ask_save_step(
                                     doc.editor.set_base_dir(p.parent().map(Path::to_path_buf));
                                     *doc.current_file.borrow_mut() = Some(p);
                                     doc.is_modified.set(false);
+                                    doc.borrar_snapshot();
                                     ask_save_step(
                                         win2,
                                         pending2,
@@ -405,6 +575,17 @@ impl ScribeWindow {
             .autohide(false)
             .expand_tabs(true)
             .build();
+        // Issue #26: la barra se oculta con un solo documento y se muestra
+        // a partir de dos. Se usa la notificación de la propiedad «n-pages»:
+        // conectar items-changed sobre pages() en línea dejaba el wrapper del
+        // modelo efímero y la señal moría con él (la barra no reaparecía).
+        tab_bar.set_visible(barra_visible(tab_view.n_pages() as usize));
+        {
+            let tab_bar = tab_bar.clone();
+            tab_view.connect_n_pages_notify(move |view| {
+                tab_bar.set_visible(barra_visible(view.n_pages() as usize));
+            });
+        }
 
         // ============================== CONTENIDO ==============================
         let paned = gtk4::Paned::builder()
@@ -429,22 +610,25 @@ impl ScribeWindow {
         let recents_menu = gio::Menu::new();
         let open_button = adw::SplitButton::builder()
             .label(gettext("_Open"))
+            .use_underline(true)
             .tooltip_text(gettext("Open a document (Ctrl+O)"))
             .menu_model(&recents_menu)
             .build();
         open_button.set_action_name(Some("win.open"));
         header.pack_start(&open_button);
 
-        let templates_menu = gio::Menu::new();
-        let new_button = gtk4::MenuButton::builder()
-            .icon_name("document-new-symbolic")
-            .tooltip_text(gettext("New document (Ctrl+N)"))
-            .menu_model(&templates_menu)
-            .build();
-        header.pack_start(&new_button);
-
         let title_widget = adw::WindowTitle::new(&gettext("Untitled"), "");
         header.set_title_widget(Some(&title_widget));
+
+        // Botón «nueva pestaña» (issue #28): icono plano que crea un
+        // documento en blanco. Va a la IZQUIERDA, junto al de Abrir, como
+        // estaba siempre (el usuario lo validó así).
+        let new_tab_button = gtk4::Button::builder()
+            .icon_name("tab-new-symbolic")
+            .tooltip_text(gettext("New Tab (Ctrl+N)"))
+            .action_name("win.new-document")
+            .build();
+        header.pack_start(&new_tab_button);
 
         let menu_button = gtk4::MenuButton::builder()
             .icon_name("open-menu-symbolic")
@@ -467,7 +651,9 @@ impl ScribeWindow {
         file_section.append(Some(&gettext("_Open…")), Some("win.open"));
         file_section.append(Some(&gettext("_Save")), Some("win.save"));
         file_section.append(Some(&gettext("Save _As…")), Some("win.save-as"));
+        file_section.append(Some(&gettext("_Reload")), Some("win.reload"));
         file_section.append(Some(&gettext("_Close Tab")), Some("win.close-tab"));
+        file_section.append(Some(&gettext("Export to _PDF…")), Some("win.export-pdf"));
         menu.append_section(None, &file_section);
 
         let edit_section = gio::Menu::new();
@@ -549,6 +735,7 @@ impl ScribeWindow {
         goto_spin.set_numeric(true);
         let goto_button = gtk4::Button::builder()
             .label(gettext("_Go"))
+            .use_underline(true)
             .css_classes(vec!["suggested-action".to_string()])
             .build();
         let goto_box = gtk4::Box::builder()
@@ -673,6 +860,115 @@ impl ScribeWindow {
                     let is_active = selected.as_ref() == Some(&doc.page);
                     refresh_doc_tab(doc, &window, &title_widget, is_active);
                 }
+            })
+        };
+
+        // ---- recarga en vivo (issue #20): decisión por documento ----
+        // Consulta el flag del monitor y decide con la función pura. Solo se
+        // recarga de forma automática el buffer limpio; el sucio con cambios
+        // externos deja el flag para que F5 ofrezca el diálogo (o se reconcilia
+        // al guardar).
+        let maybe_reload: Rc<dyn Fn(&Document)> = {
+            let toast = toast.clone();
+            let refresh_tabs = refresh_tabs.clone();
+            Rc::new(move |doc| {
+                let buffer_limpio = !doc.is_modified.get();
+                let fichero_existe = doc
+                    .current_file
+                    .borrow()
+                    .as_ref()
+                    .is_some_and(|p| p.exists());
+                match decidir_recarga(buffer_limpio, true, fichero_existe) {
+                    AccionRecarga::Recargar => {
+                        let Some(path) = doc.current_file.borrow().clone() else {
+                            return;
+                        };
+                        match recargar_desde_disco(doc, &path) {
+                            Ok(()) => refresh_tabs(),
+                            Err(e) => toast(&gettext("Could not reload: {e}").replace("{e}", &e)),
+                        }
+                    }
+                    AccionRecarga::MantenerSinFichero => {
+                        doc.is_modified.set(true);
+                        doc.external_change.set(false);
+                        refresh_tabs();
+                        toast(&gettext("File deleted on disk; save to recreate it"));
+                    }
+                    // Sucio con cambios externos: no se recarga solo.
+                    AccionRecarga::Preguntar => {}
+                    AccionRecarga::Nada => {
+                        doc.external_change.set(false);
+                    }
+                }
+            })
+        };
+
+        // ---- recarga manual (F5): guard de cambios sin guardar ----
+        let manual_reload: Rc<dyn Fn()> = {
+            let active_document = active_document.clone();
+            let toast = toast.clone();
+            let refresh_tabs = refresh_tabs.clone();
+            let window = window.downgrade();
+            Rc::new(move || {
+                let Some(doc) = active_document() else {
+                    return;
+                };
+                let Some(path) = doc.current_file.borrow().clone() else {
+                    toast(&gettext("This document is not linked to a file"));
+                    return;
+                };
+                if !path.exists() {
+                    // Borrado externo: conservar el buffer, marcar sin guardar.
+                    doc.is_modified.set(true);
+                    doc.external_change.set(false);
+                    refresh_tabs();
+                    toast(&gettext("File deleted on disk; save to recreate it"));
+                    return;
+                }
+                if !doc.is_modified.get() {
+                    // Buffer limpio: recarga manual directa.
+                    match recargar_desde_disco(&doc, &path) {
+                        Ok(()) => refresh_tabs(),
+                        Err(e) => toast(&gettext("Could not reload: {e}").replace("{e}", &e)),
+                    }
+                    return;
+                }
+                if !doc.external_change.get() {
+                    // Sucio y sin cambios externos: no hay nada que recargar.
+                    return;
+                }
+                // Sucio y con cambios externos: diálogo recargar/cancelar.
+                let Some(win) = window.upgrade() else {
+                    return;
+                };
+                let name = doc.display_name.borrow().clone();
+                let dialog = adw::MessageDialog::new(
+                    Some(&win),
+                    Some(&gettext("Reload “{name}” and discard changes?").replace("{name}", &name)),
+                    Some(&gettext(
+                        "The file changed on disk. Reloading discards your unsaved edits.",
+                    )),
+                );
+                dialog.add_response("cancel", &gettext("_Cancel"));
+                dialog.add_response("reload", &gettext("_Reload"));
+                dialog.set_response_appearance("reload", adw::ResponseAppearance::Destructive);
+                dialog.set_default_response(Some("cancel"));
+                dialog.set_close_response("cancel");
+                // Diálogo one-shot y acotado: captura el documento en fuerte.
+                let refresh_tabs = refresh_tabs.clone();
+                let toast = toast.clone();
+                dialog.choose(gio::Cancellable::NONE, move |response| {
+                    if response.as_str() != "reload" {
+                        return;
+                    }
+                    let Some(path) = doc.current_file.borrow().clone() else {
+                        return;
+                    };
+                    match recargar_desde_disco(&doc, &path) {
+                        Ok(()) => refresh_tabs(),
+                        Err(e) => toast(&gettext("Could not reload: {e}").replace("{e}", &e)),
+                    }
+                });
             })
         };
 
@@ -805,31 +1101,6 @@ impl ScribeWindow {
         };
         refresh_recents("");
 
-        let refresh_templates: Rc<dyn Fn()> = {
-            let templates_menu = templates_menu.clone();
-            Rc::new(move || {
-                templates_menu.remove_all();
-                let blank = gio::Menu::new();
-                blank.append(Some(&gettext("Blank Document")), Some("win.new-document"));
-                templates_menu.append_section(None, &blank);
-
-                let list = templates::list();
-                if !list.is_empty() {
-                    let section = gio::Menu::new();
-                    for template in list {
-                        let item = gio::MenuItem::new(Some(&template.name), None);
-                        item.set_action_and_target_value(
-                            Some("win.new-from-template"),
-                            Some(&template.name.to_variant()),
-                        );
-                        section.append_item(&item);
-                    }
-                    templates_menu.append_section(Some(&gettext("Templates")), &section);
-                }
-            })
-        };
-        refresh_templates();
-
         // ---- aplicar preferencias ----
         let apply_settings: Rc<dyn Fn()> = {
             let settings = settings.clone();
@@ -837,7 +1108,6 @@ impl ScribeWindow {
             let preview = preview.clone();
             let zoom_label = zoom_label.clone();
             let refresh_recents = refresh_recents.clone();
-            let refresh_templates = refresh_templates.clone();
             Rc::new(move || {
                 adw::StyleManager::default().set_color_scheme(
                     match settings.color_scheme_index() {
@@ -856,7 +1126,6 @@ impl ScribeWindow {
                 preview.set_font_size(settings.font_size());
                 zoom_label.set_label(&format!("{}px", settings.font_size()));
                 refresh_recents("");
-                refresh_templates();
             })
         };
         apply_settings();
@@ -879,6 +1148,7 @@ impl ScribeWindow {
             let refresh_tabs = refresh_tabs.clone();
             let update_status = update_status.clone();
             let update_counts = update_counts.clone();
+            let toast = toast.clone();
             Rc::new(move |body: String, file: Option<PathBuf>| {
                 // Solo puede fallar con la ventana destruyendose, cuando
                 // nadie deberia crear documentos.
@@ -894,11 +1164,17 @@ impl ScribeWindow {
                     file.as_ref()
                         .and_then(|p| p.parent().map(Path::to_path_buf)),
                 );
+                // Avisos transitorios del editor (p. ej. «guarda antes de pegar
+                // imágenes») hacia el ToastOverlay de la ventana.
+                {
+                    let toast = toast.clone();
+                    editor.connect_toast(move |msg| toast(msg));
+                }
 
                 let page = tab_view.append(&editor.widget);
                 let display_name = match &file {
                     Some(p) => file_name_of(p),
-                    None => templates::title_from(&body).unwrap_or_else(|| gettext("Untitled")),
+                    None => gettext("Untitled"),
                 };
                 let doc = Rc::new(Document {
                     editor,
@@ -909,7 +1185,14 @@ impl ScribeWindow {
                     display_name: RefCell::new(display_name),
                     closing: Cell::new(false),
                     page,
+                    external_change: Cell::new(false),
+                    monitor: RefCell::new(None),
+                    recovery_id: Cell::new(recovery::nuevo_id_doc()),
                 });
+
+                // Monitor del fichero (recarga en vivo, issue #20): vigila el
+                // fichero recién abierto mientras la pestaña esté viva.
+                atar_monitor(&doc);
 
                 // ---- cableado por documento ----
                 {
@@ -927,6 +1210,7 @@ impl ScribeWindow {
                     let toc_list = toc_list.clone();
                     let toc_lines = toc_lines.clone();
                     let generation = Rc::new(Cell::new(0u64));
+                    let rec_generation = Rc::new(Cell::new(0u64));
                     doc.editor.connect_changed(move |text| {
                         let Some(doc) = doc_weak.upgrade() else {
                             return;
@@ -936,6 +1220,24 @@ impl ScribeWindow {
                             // needs_attention de todas las pestañas.
                             refresh_tabs();
                         }
+                        // ---- recuperación (issue #23): un snapshot por
+                        // documento mientras esté modificado, con debounce
+                        // corto para no escribir a disco en cada pulsación ----
+                        let rec_gen = rec_generation.get().wrapping_add(1);
+                        rec_generation.set(rec_gen);
+                        let doc_weak_rec = doc_weak.clone();
+                        let rec_generation_rec = rec_generation.clone();
+                        glib::timeout_add_local_once(Duration::from_secs(3), move || {
+                            if rec_generation_rec.get() != rec_gen {
+                                return;
+                            }
+                            let Some(doc) = doc_weak_rec.upgrade() else {
+                                return;
+                            };
+                            if doc.is_modified.get() {
+                                doc.escribir_snapshot();
+                            }
+                        });
                         // Contadores, TOC y vista previa solo siguen a la
                         // pestaña activa.
                         let Some(tab_view) = tab_view.upgrade() else {
@@ -1049,7 +1351,9 @@ impl ScribeWindow {
                         .set_base_dir(path.parent().map(Path::to_path_buf));
                     *doc.current_file.borrow_mut() = Some(path.clone());
                     doc.is_modified.set(false);
+                    doc.external_change.set(false);
                     *doc.display_name.borrow_mut() = file_name_of(&path);
+                    atar_monitor(&doc);
                     tab_view.set_selected_page(&doc.page);
                 } else {
                     create_document(content, Some(path.clone()));
@@ -1070,15 +1374,112 @@ impl ScribeWindow {
             })
         };
 
+        // Abre un fichero y coloca el cursor: `load_file` lee y abre de forma
+        // síncrona (set_text incluido), así que al volver el documento abierto
+        // es la pestaña activa y el cursor se puede posicionar ya.
+        let open_path_at: OpenPathAt = {
+            let load_file = load_file.clone();
+            let active_document = active_document.clone();
+            Rc::new(move |path: &Path, line: u32, column: u32| {
+                load_file(path);
+                if let Some(doc) = active_document() {
+                    doc.editor.place_cursor_at(line, column);
+                }
+            })
+        };
+
+        // Abre texto (stdin) como documento sin título, marcado sin guardar
+        // para que «Guardar» abra «Guardar como». Reutiliza la pestaña virgen
+        // si es la única, igual que `open_loaded`.
+        let open_untitled: Rc<dyn Fn(String)> = {
+            let documents = Rc::downgrade(&documents);
+            let tab_view = tab_view.clone();
+            let create_document = create_document.clone();
+            let refresh_tabs = refresh_tabs.clone();
+            let update_status = update_status.clone();
+            Rc::new(move |texto: String| {
+                let Some(docs) = documents.upgrade() else {
+                    return;
+                };
+                let pristine = {
+                    let list = docs.borrow();
+                    match list.as_slice() {
+                        [d] if d.current_file.borrow().is_none()
+                            && !d.is_modified.get()
+                            && d.editor.text().is_empty() =>
+                        {
+                            Some(d.clone())
+                        }
+                        _ => None,
+                    }
+                };
+                if let Some(doc) = pristine {
+                    doc.editor.set_text(&texto);
+                    doc.is_modified.set(true);
+                    tab_view.set_selected_page(&doc.page);
+                } else {
+                    let doc = create_document(texto, None);
+                    doc.is_modified.set(true);
+                }
+                refresh_tabs();
+                update_status();
+            })
+        };
+
+        // Abre un snapshot recuperado (issue #23): el texto se abre como
+        // documento sin título, vinculado a su ruta original si la tenía,
+        // pero MARCADO modificado para forzar una decisión consciente del
+        // usuario (guardar o descartar). Reutiliza la pestaña virgen si es
+        // la única, igual que `open_untitled`.
+        let open_recovered: Rc<dyn Fn(String, Option<PathBuf>)> = {
+            let documents = Rc::downgrade(&documents);
+            let tab_view = tab_view.clone();
+            let create_document = create_document.clone();
+            let refresh_tabs = refresh_tabs.clone();
+            let update_status = update_status.clone();
+            Rc::new(move |texto: String, ruta: Option<PathBuf>| {
+                let Some(docs) = documents.upgrade() else {
+                    return;
+                };
+                let pristine = {
+                    let list = docs.borrow();
+                    match list.as_slice() {
+                        [d] if d.current_file.borrow().is_none()
+                            && !d.is_modified.get()
+                            && d.editor.text().is_empty() =>
+                        {
+                            Some(d.clone())
+                        }
+                        _ => None,
+                    }
+                };
+                if let Some(doc) = pristine {
+                    doc.editor.set_text(&texto);
+                    doc.editor.set_base_dir(
+                        ruta.as_ref()
+                            .and_then(|p| p.parent().map(Path::to_path_buf)),
+                    );
+                    *doc.current_file.borrow_mut() = ruta.clone();
+                    doc.is_modified.set(true);
+                    *doc.display_name.borrow_mut() = match &ruta {
+                        Some(p) => file_name_of(p),
+                        None => gettext("Untitled"),
+                    };
+                    atar_monitor(&doc);
+                    tab_view.set_selected_page(&doc.page);
+                } else {
+                    let doc = create_document(texto, ruta);
+                    doc.is_modified.set(true);
+                }
+                refresh_tabs();
+                update_status();
+            })
+        };
+
         let new_document: NewDocument = {
             let create_document = create_document.clone();
-            Rc::new(move |template_name: Option<&str>| {
-                let body = template_name
-                    .and_then(templates::find)
-                    .and_then(|t| t.body())
-                    .map(|b| templates::render(&b, &gettext("Untitled")))
-                    .unwrap_or_default();
-                create_document(body, None);
+            Rc::new(move || {
+                create_document(String::new(), None);
             })
         };
 
@@ -1101,6 +1502,12 @@ impl ScribeWindow {
                     return;
                 }
                 if let Some(docs) = documents.upgrade() {
+                    if let Some(cerrado) = docs.borrow().iter().find(|d| d.page == *page).cloned() {
+                        cerrado.cancelar_monitor();
+                        // Al cerrar (o descartar) la pestaña se borra su
+                        // snapshot de recuperación (issue #23).
+                        cerrado.borrar_snapshot();
+                    }
                     docs.borrow_mut().retain(|d| d.page != *page);
                 }
                 if tab_view.n_pages() == 0 {
@@ -1118,8 +1525,6 @@ impl ScribeWindow {
         let action_new_document = gio::SimpleAction::new("new-document", None);
         let action_open_recent =
             gio::SimpleAction::new("open-recent", Some(glib::VariantTy::STRING));
-        let action_new_template =
-            gio::SimpleAction::new("new-from-template", Some(glib::VariantTy::STRING));
         let action_zoom_in = gio::SimpleAction::new("zoom-in", None);
         let action_zoom_out = gio::SimpleAction::new("zoom-out", None);
         let action_zoom_reset = gio::SimpleAction::new("zoom-reset", None);
@@ -1131,6 +1536,8 @@ impl ScribeWindow {
         let action_close_tab = gio::SimpleAction::new("close-tab", None);
         let action_tab_next = gio::SimpleAction::new("tab-next", None);
         let action_tab_prev = gio::SimpleAction::new("tab-prev", None);
+        let action_reload = gio::SimpleAction::new("reload", None);
+        let action_export_pdf = gio::SimpleAction::new("export-pdf", None);
 
         // Las alternancias son con estado, para que el menú muestre la marca.
         let action_sidebar = gio::SimpleAction::new_stateful(
@@ -1172,11 +1579,12 @@ impl ScribeWindow {
             &action_close_tab,
             &action_tab_next,
             &action_tab_prev,
+            &action_reload,
+            &action_export_pdf,
         ] {
             window.add_action(a);
         }
         window.add_action(&action_open_recent);
-        window.add_action(&action_new_template);
         window.add_action(&action_sidebar);
         window.add_action(&action_preview);
         window.add_action(&action_focus);
@@ -1249,6 +1657,39 @@ impl ScribeWindow {
             });
         }
 
+        // ---- recarga manual (F5) ----
+        {
+            let manual_reload = manual_reload.clone();
+            action_reload.connect_activate(move |_, _| {
+                manual_reload();
+            });
+        }
+
+        // ---- exportar a PDF ----
+        {
+            let active_document = active_document.clone();
+            let window = window.downgrade();
+            let settings = settings.clone();
+            action_export_pdf.connect_activate(move |_, _| {
+                let Some(window) = window.upgrade() else {
+                    return;
+                };
+                let Some(doc) = active_document() else {
+                    return;
+                };
+                let config = export_pdf::ExportConfig::desde_settings(&settings);
+                let texto = doc.editor.text();
+                let titulo = doc.display_name.borrow().clone();
+                export_pdf::exportar(
+                    &window,
+                    &config,
+                    &texto,
+                    &titulo,
+                    adw::StyleManager::default().is_dark(),
+                );
+            });
+        }
+
         {
             // Débil: la ventana posee sus acciones; una captura fuerte aquí
             // sería un ciclo ventana↔acción.
@@ -1297,18 +1738,8 @@ impl ScribeWindow {
         // ---- documentos nuevos ----
         {
             let new_document = new_document.clone();
-            let settings = settings.clone();
             action_new_document.connect_activate(move |_, _| {
-                let name = settings.default_template();
-                new_document(if name.is_empty() { None } else { Some(&name) });
-            });
-        }
-        {
-            let new_document = new_document.clone();
-            action_new_template.connect_activate(move |_, param| {
-                if let Some(name) = param.and_then(|p| p.str()) {
-                    new_document(Some(name));
-                }
+                new_document();
             });
         }
         {
@@ -1421,6 +1852,12 @@ impl ScribeWindow {
                             doc.editor.set_base_dir(p.parent().map(Path::to_path_buf));
                             *doc.current_file.borrow_mut() = Some(p.clone());
                             doc.is_modified.set(false);
+                            doc.borrar_snapshot();
+                            // El guardado reconcilia buffer y disco; se limpia
+                            // el flag y se re-ata el monitor a la ruta nueva
+                            // (puede haber cambiado con «guardar como»).
+                            doc.external_change.set(false);
+                            atar_monitor(&doc);
                             *doc.display_name.borrow_mut() = file_name_of(&p);
                             settings.push_recent_file(&p.to_string_lossy());
                             refresh_recents("");
@@ -1551,6 +1988,28 @@ impl ScribeWindow {
             });
         }
 
+        // ---- recarga en vivo al recuperar el foco (issue #20) ----
+        {
+            // Débiles: la señal vive en la ventana. Al volver el foco se
+            // consulta el flag del monitor de cada documento y se decide con
+            // la función pura.
+            let documents = Rc::downgrade(&documents);
+            let maybe_reload = maybe_reload.clone();
+            window.connect_is_active_notify(move |win| {
+                if !win.is_active() {
+                    return;
+                }
+                let Some(docs) = documents.upgrade() else {
+                    return;
+                };
+                for doc in docs.borrow().iter() {
+                    if doc.external_change.get() {
+                        maybe_reload(doc);
+                    }
+                }
+            });
+        }
+
         // ---- cierre de pestaña (botón de la TabBar o win.close-tab) ----
         {
             // Débiles: esta señal vive en el TabView, que es de la ventana.
@@ -1621,6 +2080,7 @@ impl ScribeWindow {
                                 Some(p) => match std::fs::write(&p, doc.editor.text()) {
                                     Ok(()) => {
                                         doc.is_modified.set(false);
+                                        doc.borrar_snapshot();
                                         finish_close(&page, true);
                                     }
                                     // Un guardado fallido aborta el cierre:
@@ -1650,6 +2110,7 @@ impl ScribeWindow {
                                                 );
                                                 *doc.current_file.borrow_mut() = Some(p);
                                                 doc.is_modified.set(false);
+                                                doc.borrar_snapshot();
                                                 finish_close(&page, true);
                                             }
                                             Outcome::Error(e) => {
@@ -1744,6 +2205,8 @@ impl ScribeWindow {
                     match std::fs::write(&path, doc.editor.text()) {
                         Ok(()) => {
                             doc.is_modified.set(false);
+                            doc.borrar_snapshot();
+                            doc.external_change.set(false);
                             // También quita el «•»/needs_attention de las
                             // pestañas no activas (D4).
                             refresh_tabs();
@@ -1796,6 +2259,13 @@ impl ScribeWindow {
                     .collect();
                 if modified.is_empty() {
                     persist_geometry(win, &settings);
+                    // Cierre con gracia: no quedan docs modificados, así que
+                    // se limpian los snapshots de este proceso por si alguno
+                    // quedó huérfano (issue #23).
+                    recovery::limpiar_de_este_pid(
+                        &recovery::dir_recuperacion(),
+                        std::process::id(),
+                    );
                     alive.set(false);
                     return glib::Propagation::Proceed;
                 }
@@ -1809,6 +2279,13 @@ impl ScribeWindow {
                     let alive = alive.clone();
                     Rc::new(move |win: &adw::ApplicationWindow| {
                         persist_geometry(win, &settings);
+                        // Cierre con gracia tras resolver todos los docs
+                        // modificados: se limpian los snapshots de este
+                        // proceso (issue #23).
+                        recovery::limpiar_de_este_pid(
+                            &recovery::dir_recuperacion(),
+                            std::process::id(),
+                        );
                         alive.set(false);
                         force_close.set(true);
                         win.close();
@@ -1838,13 +2315,29 @@ impl ScribeWindow {
         Self {
             window,
             load_file,
+            open_path_at,
+            open_untitled,
+            open_recovered,
             documents,
             tab_view,
+            tab_bar,
         }
     }
 
     pub fn open_path(&self, path: &Path) {
         (self.load_file)(path);
+    }
+
+    pub fn open_path_at(&self, path: &Path, line: u32, column: u32) {
+        (self.open_path_at)(path, line, column);
+    }
+
+    pub fn open_untitled(&self, text: String) {
+        (self.open_untitled)(text);
+    }
+
+    pub fn open_recovered(&self, text: String, ruta: Option<PathBuf>) {
+        (self.open_recovered)(text, ruta);
     }
 
     pub fn present(&self) {
@@ -1861,5 +2354,52 @@ impl ScribeWindow {
     #[allow(dead_code)]
     pub fn document_count(&self) -> usize {
         self.documents.borrow().len()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn barra_de_pestanas_visible_solo_desde_dos() {
+        // Con cero o una pestaña la barra se oculta; a partir de dos, aparece.
+        assert!(!barra_visible(0));
+        assert!(!barra_visible(1));
+        assert!(barra_visible(2));
+        assert!(barra_visible(3));
+    }
+
+    #[test]
+    fn reload_limpio_con_cambios_recarga() {
+        // Buffer limpio + fichero cambiado en disco: recarga automática.
+        assert_eq!(decidir_recarga(true, true, true), AccionRecarga::Recargar);
+    }
+
+    #[test]
+    fn reload_sucio_con_cambios_pregunta() {
+        // Buffer con cambios + fichero cambiado: preguntar antes de descartar.
+        assert_eq!(decidir_recarga(false, true, true), AccionRecarga::Preguntar);
+    }
+
+    #[test]
+    fn reload_limpio_sin_cambios_no_hace_nada() {
+        // Sin cambios externos no hay nada que atender.
+        assert_eq!(decidir_recarga(true, false, true), AccionRecarga::Nada);
+        assert_eq!(decidir_recarga(false, false, true), AccionRecarga::Nada);
+    }
+
+    #[test]
+    fn reload_fichero_borrado_mantiene_el_buffer() {
+        // Fichero borrado en disco: conservar el buffer y marcar sin guardar,
+        // sin importar si el buffer estaba limpio o sucio.
+        assert_eq!(
+            decidir_recarga(true, true, false),
+            AccionRecarga::MantenerSinFichero
+        );
+        assert_eq!(
+            decidir_recarga(false, true, false),
+            AccionRecarga::MantenerSinFichero
+        );
     }
 }

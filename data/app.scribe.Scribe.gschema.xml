@@ -15,6 +15,25 @@
     <value nick="serif" value="1"/>
     <value nick="mono" value="2"/>
   </enum>
+  <enum id="app.scribe.Scribe.ExportColorScheme">
+    <value nick="system" value="0"/>
+    <value nick="light" value="1"/>
+    <value nick="dark" value="2"/>
+    <value nick="mono" value="3"/>
+  </enum>
+  <enum id="app.scribe.Scribe.ExportMonoFont">
+    <value nick="adwaita-mono" value="0"/>
+    <value nick="source-code-pro" value="1"/>
+    <value nick="fira-mono" value="2"/>
+  </enum>
+  <enum id="app.scribe.Scribe.ExportPageSize">
+    <value nick="a4" value="0"/>
+    <value nick="letter" value="1"/>
+  </enum>
+  <enum id="app.scribe.Scribe.ExportOrientation">
+    <value nick="portrait" value="0"/>
+    <value nick="landscape" value="1"/>
+  </enum>
 
   <schema id="app.scribe.Scribe" path="/app/scribe/Scribe/">
     <key name="window-width" type="i">
@@ -95,13 +114,35 @@
       <summary>Autosave interval in seconds</summary>
     </key>
 
-    <key name="default-template" type="s">
-      <default>''</default>
-      <summary>Template used for new documents (empty means blank)</summary>
-    </key>
     <key name="recent-files" type="as">
       <default>[]</default>
       <summary>Recent files</summary>
+    </key>
+
+    <key name="export-color-scheme" enum="app.scribe.Scribe.ExportColorScheme">
+      <default>'light'</default>
+      <summary>PDF export color scheme</summary>
+    </key>
+    <key name="export-font-family" enum="app.scribe.Scribe.FontFamily">
+      <default>'sans'</default>
+      <summary>PDF export body font family</summary>
+    </key>
+    <key name="export-font-size" type="i">
+      <default>11</default>
+      <range min="8" max="24"/>
+      <summary>PDF export body font size in points</summary>
+    </key>
+    <key name="export-mono-font" enum="app.scribe.Scribe.ExportMonoFont">
+      <default>'adwaita-mono'</default>
+      <summary>PDF export monospace font</summary>
+    </key>
+    <key name="export-page-size" enum="app.scribe.Scribe.ExportPageSize">
+      <default>'a4'</default>
+      <summary>PDF export page size</summary>
+    </key>
+    <key name="export-orientation" enum="app.scribe.Scribe.ExportOrientation">
+      <default>'portrait'</default>
+      <summary>PDF export page orientation</summary>
     </key>
   </schema>
 </schemalist>

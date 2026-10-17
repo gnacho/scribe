@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: scribe\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-09-19 20:13+0200\n"
+"POT-Creation-Date: 2026-10-07 22:58+0200\n"
 "PO-Revision-Date: 2026-09-19 19:58+0200\n"
 "Last-Translator: Automatically generated\n"
 "Language-Team: none\n"
@@ -17,167 +17,212 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=2; plural=(n != 1);\n"
 
-#: src/window.rs:87 src/window.rs:132 src/window.rs:446 src/window.rs:901
-#: src/window.rs:1079
+#: src/main.rs:236
+msgid "Recover unsaved documents?"
+msgstr "¿Recuperar los documentos sin guardar?"
+
+#: src/main.rs:239
+msgid "_Recover All"
+msgstr "_Recuperar todo"
+
+#: src/main.rs:240
+msgid "_Discard All"
+msgstr "_Descartar todo"
+
+#: src/main.rs:241
+msgid "Decide Later"
+msgstr "Decidir más tarde"
+
+#: src/window.rs:250 src/window.rs:608 src/window.rs:1164 src/window.rs:1453
 msgid "Untitled"
 msgstr "Sin título"
 
-#: src/window.rs:133 src/window.rs:135
+#: src/window.rs:292
 msgid "Draft"
 msgstr "Borrador"
 
-#: src/window.rs:139
+#: src/window.rs:296
 msgid "Unsaved draft"
 msgstr "Borrador sin guardar"
 
-#: src/window.rs:229 src/window.rs:1594
+#: src/window.rs:386 src/window.rs:2040
 #, rust-format
 msgid "Save changes to “{name}”?"
 msgstr "¿Guardar los cambios en «{name}»?"
 
-#: src/window.rs:231 src/window.rs:1596
+#: src/window.rs:388 src/window.rs:2042
 msgid "If you close without saving, you will lose what you have written."
 msgstr "Si cierras sin guardar, perderás lo que hayas escrito."
 
-#: src/window.rs:234 src/window.rs:1599
+#: src/window.rs:391 src/window.rs:939 src/window.rs:2045
 msgid "_Cancel"
 msgstr "_Cancelar"
 
-#: src/window.rs:235 src/window.rs:1600
+#: src/window.rs:392 src/window.rs:2046
 msgid "_Discard"
 msgstr "_Descartar"
 
-#: src/window.rs:236 src/window.rs:468 src/window.rs:1601
+#: src/window.rs:393 src/window.rs:639 src/window.rs:2047
 msgid "_Save"
 msgstr "_Guardar"
 
-#: src/window.rs:264 src/window.rs:297 src/window.rs:1630 src/window.rs:1657
+#: src/window.rs:422 src/window.rs:456 src/window.rs:2077 src/window.rs:2105
 #, rust-format
 msgid "Could not save: {e}"
 msgstr "No se pudo guardar: {e}"
 
-#: src/window.rs:345
+#: src/window.rs:504
 msgid "Documents"
 msgstr "Documentos"
 
-#: src/window.rs:351
+#: src/window.rs:510
 msgid "Filter recents…"
 msgstr "Filtrar recientes…"
 
-#: src/window.rs:380
+#: src/window.rs:539
 msgid "Recents"
 msgstr "Recientes"
 
-#: src/window.rs:382
+#: src/window.rs:541
 msgid "Contents"
 msgstr "Contenido"
 
-#: src/window.rs:431
+#: src/window.rs:600
 msgid "_Open"
 msgstr "_Abrir"
 
-#: src/window.rs:432
+#: src/window.rs:602
 msgid "Open a document (Ctrl+O)"
 msgstr "Abrir un documento (Ctrl+O)"
 
-#: src/window.rs:441
-msgid "New document (Ctrl+N)"
-msgstr "Documento nuevo (Ctrl+N)"
+#: src/window.rs:615
+msgid "New Tab (Ctrl+N)"
+msgstr "Nueva pestaña (Ctrl+N)"
 
-#: src/window.rs:452
+#: src/window.rs:622
 msgid "Main menu"
 msgstr "Menú principal"
 
-#: src/window.rs:466 src/shortcuts.ui:38
+#: src/window.rs:637 src/shortcuts.ui:50
 msgid "New Window"
 msgstr "Nueva ventana"
 
-#: src/window.rs:467
+#: src/window.rs:638
 msgid "_Open…"
 msgstr "_Abrir…"
 
-#: src/window.rs:469
+#: src/window.rs:640
 msgid "Save _As…"
 msgstr "Guardar _como…"
 
-#: src/window.rs:470
+#: src/window.rs:641 src/window.rs:940
+msgid "_Reload"
+msgstr "_Recargar"
+
+#: src/window.rs:642
 msgid "_Close Tab"
 msgstr "_Cerrar pestaña"
 
-#: src/window.rs:474 src/shortcuts.ui:102
+#: src/window.rs:643
+msgid "Export to _PDF…"
+msgstr "Exportar a _PDF…"
+
+#: src/window.rs:647 src/shortcuts.ui:114
 msgid "Align Tables"
 msgstr "Alinear tablas"
 
-#: src/window.rs:476
+#: src/window.rs:649
 msgid "Close Unclosed Code Fences"
 msgstr "Cerrar vallas de código abiertas"
 
-#: src/window.rs:482 src/shortcuts.ui:119
+#: src/window.rs:655 src/shortcuts.ui:131
 msgid "Sidebar"
 msgstr "Barra lateral"
 
-#: src/window.rs:483 src/shortcuts.ui:125
+#: src/window.rs:656 src/shortcuts.ui:137
 msgid "Split View"
 msgstr "Vista dividida"
 
-#: src/window.rs:484 src/shortcuts.ui:131
+#: src/window.rs:657 src/shortcuts.ui:143
 msgid "Focus Mode"
 msgstr "Modo foco"
 
-#: src/window.rs:486 src/shortcuts.ui:137
+#: src/window.rs:659 src/shortcuts.ui:149
 msgid "Typewriter Mode"
 msgstr "Máquina de escribir"
 
-#: src/window.rs:492
+#: src/window.rs:665
 msgid "_Preferences"
 msgstr "_Preferencias"
 
-#: src/window.rs:494
+#: src/window.rs:667
 msgid "_Keyboard Shortcuts"
 msgstr "_Atajos de teclado"
 
-#: src/window.rs:497
+#: src/window.rs:670
 msgid "_About Scribe"
 msgstr "_Acerca de Scribe"
 
-#: src/window.rs:511
+#: src/window.rs:684
 msgid "Zoom Out"
 msgstr "Reducir"
 
-#: src/window.rs:516
+#: src/window.rs:689
 msgid "Zoom Reset"
 msgstr "Restablecer"
 
-#: src/window.rs:521
+#: src/window.rs:694
 msgid "Zoom In"
 msgstr "Ampliar"
 
-#: src/window.rs:546
+#: src/window.rs:719
 msgid "Close the unterminated code fences"
 msgstr "Cerrar las vallas de código abiertas"
 
-#: src/window.rs:551
+#: src/window.rs:724
 msgid "_Go"
 msgstr "_Ir"
 
-#: src/window.rs:562
+#: src/window.rs:736
 msgid "Line"
 msgstr "Línea"
 
-#: src/window.rs:569
+#: src/window.rs:743
 msgid "Go to line"
 msgstr "Ir a la línea"
 
-#: src/window.rs:583
+#: src/window.rs:757
 msgid "Document properties"
 msgstr "Propiedades del documento"
 
-#: src/window.rs:695
+#: src/window.rs:875 src/window.rs:919 src/window.rs:956
+#, rust-format
+msgid "Could not reload: {e}"
+msgstr "No se pudo recargar: {e}"
+
+#: src/window.rs:882 src/window.rs:912
+msgid "File deleted on disk; save to recreate it"
+msgstr "El fichero se borró en disco; guárdalo para recrearlo"
+
+#: src/window.rs:904
+msgid "This document is not linked to a file"
+msgstr "Este documento no está asociado a un fichero"
+
+#: src/window.rs:934
+#, rust-format
+msgid "Reload “{name}” and discard changes?"
+msgstr "¿Recargar «{name}» y descartar los cambios?"
+
+#: src/window.rs:936
+msgid "The file changed on disk. Reloading discards your unsaved edits."
+msgstr "El fichero cambió en disco. Recargar descarta tus cambios sin guardar."
+
+#: src/window.rs:978
 #, rust-format
 msgid "{words} words"
 msgstr "{words} palabras"
 
-#: src/window.rs:698
+#: src/window.rs:981
 #, rust-format
 msgid ""
 "Words: {words}\n"
@@ -190,430 +235,326 @@ msgstr ""
 "Líneas: {lines}\n"
 "Lectura: ~{minutes} min"
 
-#: src/window.rs:733
+#: src/window.rs:1016
 #, rust-format
 msgid "Unclosed fence (line {first}){extra}"
 msgstr "Valla abierta (línea {first}){extra}"
 
-#: src/window.rs:778
+#: src/window.rs:1061
 msgid "Not found"
 msgstr "No encontrado"
 
-#: src/window.rs:796
+#: src/window.rs:1079
 msgid "No recent documents"
 msgstr "Sin documentos recientes"
 
-#: src/window.rs:798
+#: src/window.rs:1081
 msgid "No results"
 msgstr "Ningún resultado"
 
-#: src/window.rs:813
-msgid "Blank Document"
-msgstr "Documento en blanco"
-
-#: src/window.rs:827 src/preferences.rs:321
-msgid "Templates"
-msgstr "Plantillas"
-
-#: src/window.rs:1069
+#: src/window.rs:1360
 #, rust-format
 msgid "Could not open: {e}"
 msgstr "No se pudo abrir: {e}"
 
-#: src/window.rs:1221
+#: src/window.rs:1616
 msgid "Code fences closed"
 msgstr "Vallas de código cerradas"
 
-#: src/window.rs:1223
+#: src/window.rs:1618
 msgid "No unclosed fences"
 msgstr "No hay vallas abiertas"
 
-#: src/window.rs:1415
+#: src/window.rs:1833
 msgid "That file is already open in another tab"
 msgstr "Ese fichero ya está abierto en otra pestaña"
 
-#: src/window.rs:1757
+#: src/window.rs:2207
 #, rust-format
 msgid "Could not autosave: {e}"
 msgstr "No se pudo autoguardar: {e}"
 
-#: src/preferences.rs:48
+#: src/editor.rs:786 src/editor.rs:791 src/editor.rs:796
+msgid "Could not save the image"
+msgstr "No se pudo guardar la imagen"
+
+#: src/editor.rs:836
+msgid "Save the document before pasting images"
+msgstr "Guarda el documento antes de pegar imágenes"
+
+#: src/editor.rs:856 src/editor.rs:873 src/editor.rs:912
+msgid "Save the document before dropping images"
+msgstr "Guarda el documento antes de soltar imágenes"
+
+#: src/preferences.rs:50
 msgid "Appearance"
 msgstr "Apariencia"
 
-#: src/preferences.rs:53
+#: src/preferences.rs:55
 msgid "Theme"
 msgstr "Tema"
 
-#: src/preferences.rs:56
+#: src/preferences.rs:58 src/preferences.rs:358
 msgid "Color scheme"
 msgstr "Esquema de color"
 
-#: src/preferences.rs:57
+#: src/preferences.rs:59
 msgid "Follows the system unless you force one"
 msgstr "Sigue al sistema salvo que fuerces uno"
 
-#: src/preferences.rs:58
+#: src/preferences.rs:60 src/preferences.rs:361
 msgid "System"
 msgstr "Sistema"
 
-#: src/preferences.rs:58
+#: src/preferences.rs:60 src/preferences.rs:362
 msgid "Light"
 msgstr "Claro"
 
-#: src/preferences.rs:58
+#: src/preferences.rs:60 src/preferences.rs:363
 msgid "Dark"
 msgstr "Oscuro"
 
-#: src/preferences.rs:65
+#: src/preferences.rs:67
 msgid "Text"
 msgstr "Texto"
 
-#: src/preferences.rs:66
+#: src/preferences.rs:68
 msgid "Code and tables always use a monospaced font"
 msgstr "El código y las tablas usan siempre monoespaciada"
 
-#: src/preferences.rs:70
+#: src/preferences.rs:72 src/preferences.rs:369
 msgid "Font family"
 msgstr "Familia tipográfica"
 
-#: src/preferences.rs:71
+#: src/preferences.rs:73 src/preferences.rs:370
 msgid "Document body"
 msgstr "Cuerpo del documento"
 
-#: src/preferences.rs:73
+#: src/preferences.rs:75 src/preferences.rs:372
 msgid "Sans (Cantarell)"
 msgstr "Sans (Cantarell)"
 
-#: src/preferences.rs:74
+#: src/preferences.rs:76 src/preferences.rs:373
 msgid "Serif"
 msgstr "Serif"
 
-#: src/preferences.rs:75
+#: src/preferences.rs:77 src/preferences.rs:374
 msgid "Monospace"
 msgstr "Monoespaciada"
 
-#: src/preferences.rs:80
+#: src/preferences.rs:82
 msgid "Size"
 msgstr "Tamaño"
 
-#: src/preferences.rs:81
+#: src/preferences.rs:83
 msgid "Pixels"
 msgstr "Píxeles"
 
-#: src/preferences.rs:86
+#: src/preferences.rs:88
 msgid "Line spacing"
 msgstr "Interlineado"
 
-#: src/preferences.rs:87
+#: src/preferences.rs:89
 msgid "Multiplier on the font size"
 msgstr "Multiplicador sobre el tamaño de fuente"
 
-#: src/preferences.rs:92
+#: src/preferences.rs:94
 msgid "Column width"
 msgstr "Ancho de la columna"
 
-#: src/preferences.rs:93
+#: src/preferences.rs:95
 msgid "Maximum text width, in pixels"
 msgstr "Ancho máximo del texto, en píxeles"
 
-#: src/preferences.rs:156
+#: src/preferences.rs:158
 msgid "Editor"
 msgstr "Editor"
 
-#: src/preferences.rs:161
+#: src/preferences.rs:163
 msgid "Markup"
 msgstr "Marcado"
 
-#: src/preferences.rs:163
+#: src/preferences.rs:165
 msgid "What to do with asterisks, hash marks and URLs while you write"
 msgstr "Qué hacer con los asteriscos, almohadillas y URLs mientras escribes"
 
-#: src/preferences.rs:173 src/preferences.rs:184
+#: src/preferences.rs:175 src/preferences.rs:186
 msgid "Markdown marks"
 msgstr "Marcas de Markdown"
 
-#: src/preferences.rs:174
+#: src/preferences.rs:176
 msgid "“On focus” reveals them only on the cursor line"
 msgstr "«Al enfocar» las revela solo en la línea del cursor"
 
-#: src/preferences.rs:176
+#: src/preferences.rs:178
 msgid "Always hide"
 msgstr "Ocultar siempre"
 
-#: src/preferences.rs:177
+#: src/preferences.rs:179
 msgid "Show on focus"
 msgstr "Mostrar al enfocar"
 
-#: src/preferences.rs:178 src/preferences.rs:189
+#: src/preferences.rs:180 src/preferences.rs:191
 msgid "Always dim"
 msgstr "Atenuar siempre"
 
-#: src/preferences.rs:185
+#: src/preferences.rs:187
 msgid "Hiding text still crashes this GTK: the marks shrink instead"
 msgstr ""
 "Ocultar texto aún aborta con este GTK: las marcas se encogen en su lugar"
 
-#: src/preferences.rs:187
+#: src/preferences.rs:189
 msgid "Always hide (shrinks the marks; GTK cannot hide them yet)"
 msgstr "Ocultar siempre (encoge las marcas; GTK aún no permite ocultarlas)"
 
-#: src/preferences.rs:188
+#: src/preferences.rs:190
 msgid "Show on focus (shrinks the marks; GTK cannot hide them yet)"
 msgstr "Mostrar al enfocar (encoge las marcas; GTK aún no permite ocultarlas)"
 
-#: src/preferences.rs:198
+#: src/preferences.rs:200
 msgid "Writing"
 msgstr "Escritura"
 
-#: src/preferences.rs:201
+#: src/preferences.rs:203
 msgid "Continue lists"
 msgstr "Continuar listas"
 
-#: src/preferences.rs:203
+#: src/preferences.rs:205
 msgid "Enter repeats the dash or number; on an empty item, it closes the list"
 msgstr ""
 "Intro repite el guion o el número; en un elemento vacío, cierra la lista"
 
-#: src/preferences.rs:208
+#: src/preferences.rs:210
 msgid "Focus mode"
 msgstr "Modo foco"
 
-#: src/preferences.rs:209
+#: src/preferences.rs:211
 msgid "Dims everything except the current paragraph"
 msgstr "Atenúa todo salvo el párrafo actual"
 
-#: src/preferences.rs:213
+#: src/preferences.rs:215
 msgid "Typewriter mode"
 msgstr "Máquina de escribir"
 
-#: src/preferences.rs:214
+#: src/preferences.rs:216
 msgid "Keeps the cursor line vertically centered"
 msgstr "Mantiene la línea del cursor centrada verticalmente"
 
-#: src/preferences.rs:218
+#: src/preferences.rs:220
 msgid "Tab width"
 msgstr "Ancho de tabulación"
 
-#: src/preferences.rs:219
+#: src/preferences.rs:221
 msgid "Spaces per indent level"
 msgstr "Espacios por nivel de sangría"
 
-#: src/preferences.rs:230
+#: src/preferences.rs:232
 msgid "Saving"
 msgstr "Guardado"
 
-#: src/preferences.rs:233
+#: src/preferences.rs:235
 msgid "Autosave"
 msgstr "Guardado automático"
 
-#: src/preferences.rs:234
+#: src/preferences.rs:236
 msgid "Only when the document already has a file"
 msgstr "Solo si el documento ya tiene un fichero asociado"
 
-#: src/preferences.rs:238
+#: src/preferences.rs:240
 msgid "Interval"
 msgstr "Intervalo"
 
-#: src/preferences.rs:239
+#: src/preferences.rs:241
 msgid "Seconds between saves"
 msgstr "Segundos entre guardados"
 
-#: src/preferences.rs:326
-msgid "Blank document"
-msgstr "Documento en blanco"
-
-#: src/preferences.rs:336
-msgid "New documents"
-msgstr "Documentos nuevos"
-
-#: src/preferences.rs:338
-msgid ""
-"Templates are .md files in your data folder. They support {{title}}, "
-"{{date}}, {{time}}, {{datetime}} and {{year}}."
-msgstr ""
-"Las plantillas son ficheros .md en tu carpeta de datos. Admiten {{title}}, "
-"{{date}}, {{time}}, {{datetime}} y {{year}}."
-
-#: src/preferences.rs:344
-msgid "Default template"
-msgstr "Plantilla por defecto"
-
-#: src/preferences.rs:345
-msgid "Used when creating a new document"
-msgstr "Se usa al crear un documento nuevo"
-
-#: src/preferences.rs:355
-msgid "Open folder"
-msgstr "Abrir la carpeta"
-
-#: src/preferences.rs:358
-msgid "Templates folder"
-msgstr "Carpeta de plantillas"
-
-#: src/preferences.rs:367
+#: src/preferences.rs:258
 msgid "History"
 msgstr "Historial"
 
-#: src/preferences.rs:370
+#: src/preferences.rs:261
 msgid "Clear"
 msgstr "Vaciar"
 
-#: src/preferences.rs:375
+#: src/preferences.rs:266
 msgid "Recent documents"
 msgstr "Documentos recientes"
 
-#: src/preferences.rs:376
+#: src/preferences.rs:267
 msgid "Clears the list shown in the sidebar"
 msgstr "Borra la lista que aparece en la barra lateral"
 
-#: src/templates.rs:30
-msgid "Note"
-msgstr "Nota"
+#: src/preferences.rs:346
+msgid "Export"
+msgstr "Exportar"
 
-#: src/templates.rs:30
-msgid ""
-"# {{title}}\n"
-"\n"
-"*{{date}}*\n"
-"\n"
-"\n"
+#: src/preferences.rs:351
+msgid "PDF"
+msgstr "PDF"
+
+#: src/preferences.rs:353
+msgid "These settings apply to PDF export only, not to the editor view"
 msgstr ""
-"# {{title}}\n"
-"\n"
-"*{{date}}*\n"
-"\n"
-"\n"
+"Estos ajustes se aplican solo a la exportación a PDF, no a la vista del "
+"editor"
 
-#: src/templates.rs:32
-msgid "Journal"
-msgstr "Diario"
+#: src/preferences.rs:359
+msgid "Monochrome prints everything in black on white"
+msgstr "Monocromo imprime todo en negro sobre blanco"
 
-#: src/templates.rs:33
-msgid ""
-"# {{date}}\n"
-"\n"
-"## What happened\n"
-"\n"
-"\n"
-"\n"
-"## What I learned\n"
-"\n"
-"\n"
-"\n"
-"## Tomorrow\n"
-"\n"
-"- \n"
-msgstr ""
-"# {{date}}\n"
-"\n"
-"## Qué ha pasado\n"
-"\n"
-"\n"
-"\n"
-"## Qué he aprendido\n"
-"\n"
-"\n"
-"\n"
-"## Mañana\n"
-"\n"
-"- \n"
+#: src/preferences.rs:364
+msgid "Monochrome"
+msgstr "Monocromo"
 
-#: src/templates.rs:36
-msgid "Meeting notes"
-msgstr "Acta de reunión"
+#: src/preferences.rs:379
+msgid "Font size"
+msgstr "Tamaño de fuente"
 
-#: src/templates.rs:37
-msgid ""
-"# {{title}}\n"
-"\n"
-"- **Date:** {{datetime}}\n"
-"- **Attendees:** \n"
-"\n"
-"## Topics\n"
-"\n"
-"1. \n"
-"\n"
-"## Agreements\n"
-"\n"
-"- \n"
-"\n"
-"## Tasks\n"
-"\n"
-"- [ ] \n"
-msgstr ""
-"# {{title}}\n"
-"\n"
-"- **Fecha:** {{datetime}}\n"
-"- **Asistentes:** \n"
-"\n"
-"## Temas\n"
-"\n"
-"1. \n"
-"\n"
-"## Acuerdos\n"
-"\n"
-"- \n"
-"\n"
-"## Tareas\n"
-"\n"
-"- [ ] \n"
+#: src/preferences.rs:380
+msgid "Points"
+msgstr "Puntos"
 
-#: src/templates.rs:40
-msgid "Article"
-msgstr "Artículo"
+#: src/preferences.rs:385
+msgid "Monospace font"
+msgstr "Fuente monoespaciada"
 
-#: src/templates.rs:41
-msgid ""
-"---\n"
-"title: {{title}}\n"
-"date: {{date}}\n"
-"draft: true\n"
-"---\n"
-"\n"
-"# {{title}}\n"
-"\n"
-"## Introduction\n"
-"\n"
-"\n"
-"\n"
-"## Development\n"
-"\n"
-"\n"
-"\n"
-"## Conclusion\n"
-"\n"
-"\n"
-msgstr ""
-"---\n"
-"title: {{title}}\n"
-"date: {{date}}\n"
-"draft: true\n"
-"---\n"
-"\n"
-"# {{title}}\n"
-"\n"
-"## Introducción\n"
-"\n"
-"\n"
-"\n"
-"## Desarrollo\n"
-"\n"
-"\n"
-"\n"
-"## Conclusión\n"
-"\n"
-"\n"
+#: src/preferences.rs:386
+msgid "Used for code blocks and tables"
+msgstr "Se usa en bloques de código y tablas"
 
-#: src/file_manager.rs:51
+#: src/preferences.rs:395
+msgid "Page size"
+msgstr "Tamaño de página"
+
+#: src/preferences.rs:396
+msgid "Paper"
+msgstr "Papel"
+
+#: src/preferences.rs:401
+msgid "Orientation"
+msgstr "Orientación"
+
+#: src/preferences.rs:402
+msgid "Paper orientation"
+msgstr "Orientación del papel"
+
+#: src/preferences.rs:403
+msgid "Portrait"
+msgstr "Vertical"
+
+#: src/preferences.rs:403
+msgid "Landscape"
+msgstr "Horizontal"
+
+#: src/file_manager.rs:52
 msgid "Open Document"
 msgstr "Abrir documento"
 
-#: src/file_manager.rs:58
+#: src/file_manager.rs:59
 msgid "Markdown Documents"
 msgstr "Documentos Markdown"
 
-#: src/file_manager.rs:96
+#: src/file_manager.rs:97
 msgid "Save Document"
 msgstr "Guardar documento"
 
@@ -637,58 +578,67 @@ msgstr "Guardar"
 msgid "Save As"
 msgstr "Guardar como"
 
+#: src/shortcuts.ui:38
+msgid "Reload"
+msgstr "Recargar"
+
 #: src/shortcuts.ui:44
+msgid "Export to PDF"
+msgstr "Exportar a PDF"
+
+#: src/shortcuts.ui:56
 msgid "Quit"
 msgstr "Salir"
 
-#: src/shortcuts.ui:52
+#: src/shortcuts.ui:64
 msgid "Tabs"
 msgstr "Pestañas"
 
-#: src/shortcuts.ui:55
+#: src/shortcuts.ui:67
 msgid "Close Tab"
 msgstr "Cerrar pestaña"
 
-#: src/shortcuts.ui:61
+#: src/shortcuts.ui:73
 msgid "Next Tab"
 msgstr "Pestaña siguiente"
 
-#: src/shortcuts.ui:67
+#: src/shortcuts.ui:79
 msgid "Previous Tab"
 msgstr "Pestaña anterior"
 
-#: src/shortcuts.ui:73
+#: src/shortcuts.ui:85
 msgid "Switch Tabs"
 msgstr "Cambiar de pestaña"
 
-#: src/shortcuts.ui:81
+#: src/shortcuts.ui:93
 msgid "Format"
 msgstr "Formato"
 
-#: src/shortcuts.ui:84
+#: src/shortcuts.ui:96
 msgid "Bold"
 msgstr "Negrita"
 
-#: src/shortcuts.ui:90
+#: src/shortcuts.ui:102
 msgid "Italic"
 msgstr "Cursiva"
 
-#: src/shortcuts.ui:96
+#: src/shortcuts.ui:108
 msgid "Code"
 msgstr "Código"
 
-#: src/shortcuts.ui:108
+#: src/shortcuts.ui:120
 msgid "Close Unclosed Fences"
 msgstr "Cerrar vallas abiertas"
 
-#: src/shortcuts.ui:116
+#: src/shortcuts.ui:128
 msgid "View"
 msgstr "Vista"
 
-#: src/shortcuts.ui:143
+#: src/shortcuts.ui:155
 msgid "Zoom In or Out"
 msgstr "Ampliar o reducir"
 
-#: src/shortcuts.ui:149
+#: src/shortcuts.ui:161
 msgid "Preferences"
 msgstr "Preferencias"
+

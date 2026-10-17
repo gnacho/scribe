@@ -735,6 +735,12 @@ impl MarkdownView {
             self.queue_draw();
         }
     }
+
+    /// Olvida la textura cacheada de una ruta para que la siguiente decoración
+    /// la vuelva a cargar (p. ej. tras escribir una imagen recién pegada).
+    pub fn invalidate_texture(&self, path: &str) {
+        self.imp().textures.borrow_mut().remove(path);
+    }
 }
 
 impl Default for MarkdownView {

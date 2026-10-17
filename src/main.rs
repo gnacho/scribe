@@ -1,16 +1,25 @@
+use gettextrs::gettext;
 use gtk4::prelude::*;
 use libadwaita as adw;
+use libadwaita::prelude::*;
 use std::cell::RefCell;
+use std::ffi::OsStr;
+use std::io::{IsTerminal, Read};
+use std::path::PathBuf;
 use std::rc::Rc;
+use std::sync::atomic::{AtomicBool, Ordering};
 
+mod arranque;
 mod editor;
+mod export_pdf;
 mod file_manager;
+mod guardado;
 mod markdown_render;
 mod markdown_view;
 mod preferences;
 mod preview;
+mod recovery;
 mod settings;
-mod templates;
 mod window;
 
 use settings::AppSettings;
@@ -46,17 +55,21 @@ thread_local! {
     static WINDOWS: RefCell<Vec<Rc<ScribeWindow>>> = const { RefCell::new(Vec::new()) };
 }
 
+/// Guarda de «recuperación ya ofrecida»: el diálogo de snapshots pendientes
+/// se muestra una sola vez por proceso, en la primera ventana construida
+/// (aunque luego se abran más ventanas).
+static RECUPERACION_OFRECIDA: AtomicBool = AtomicBool::new(false);
+
 fn main() -> glib::ExitCode {
     init_gettext();
     let app = adw::Application::builder()
         .application_id(APP_ID)
-        // Necesario para que `scribe fichero.md` y «Abrir con» funcionen.
-        .flags(gio::ApplicationFlags::HANDLES_OPEN)
+        // HANDLES_OPEN para `scribe fichero.md` y «Abrir con»; HANDLES_COMMAND_LINE
+        // para leer los argumentos en crudo y poder separar `ruta:línea:columna`.
+        .flags(gio::ApplicationFlags::HANDLES_OPEN | gio::ApplicationFlags::HANDLES_COMMAND_LINE)
         .build();
 
     app.connect_startup(|app| {
-        templates::ensure_defaults();
-
         // CSS a nivel de aplicación (D9): antes cada Editor instalaba su
         // propio provider en el display y nunca lo retiraba; ahora hay uno
         // solo, registrado una vez, que Editor::set_font recarga.
@@ -95,6 +108,7 @@ fn main() -> glib::ExitCode {
             ("win.open", &["<Ctrl>o"]),
             ("win.save", &["<Ctrl>s"]),
             ("win.save-as", &["<Ctrl><Shift>s"]),
+            ("win.reload", &["F5"]),
             ("win.close-tab", &["<Ctrl>w"]),
             ("win.tab-next", &["<Ctrl>Tab", "<Ctrl>Page_Down"]),
             ("win.tab-prev", &["<Ctrl><Shift>Tab", "<Ctrl>Page_Up"]),
@@ -105,6 +119,7 @@ fn main() -> glib::ExitCode {
             ("win.code", &["<Ctrl>k"]),
             ("win.format-tables", &["<Ctrl><Alt>t"]),
             ("win.close-fences", &["<Ctrl><Alt>f"]),
+            ("win.export-pdf", &["<Ctrl>p"]),
             ("win.toggle-sidebar", &["F9"]),
             ("win.toggle-preview", &["<Ctrl><Shift>p"]),
             ("win.focus-mode", &["<Ctrl><Shift>f"]),
@@ -138,6 +153,45 @@ fn main() -> glib::ExitCode {
         win.present();
     });
 
+    app.connect_command_line(|app, cmdline| {
+        // El primer argumento es el nombre del programa; las opciones
+        // (empiezan por '-') se ignoran. El resto son ficheros, cada uno
+        // resuelto a (ruta, posición de cursor opcional).
+        let mut aperturas: Vec<(PathBuf, Option<(u32, u32)>)> = Vec::new();
+        for arg in cmdline.arguments().iter().skip(1) {
+            if arg.to_string_lossy().starts_with('-') {
+                continue;
+            }
+            aperturas.push(resolver_argumento(arg));
+        }
+
+        match arranque::accion_arranque(!aperturas.is_empty(), std::io::stdin().is_terminal()) {
+            arranque::AccionArranque::LeerStdin => {
+                // stdin redirigido (p. ej. `git diff | scribe`): abrir el
+                // texto como documento sin título, marcado sin guardar.
+                let mut texto = String::new();
+                let _ = std::io::stdin().read_to_string(&mut texto);
+                let win = active_or_new_window(app);
+                win.open_untitled(texto);
+                win.present();
+            }
+            arranque::AccionArranque::AbrirFicheros => {
+                let win = active_or_new_window(app);
+                for (ruta, posicion) in aperturas {
+                    match posicion {
+                        Some((linea, columna)) => win.open_path_at(&ruta, linea, columna),
+                        None => win.open_path(&ruta),
+                    }
+                }
+                win.present();
+            }
+            arranque::AccionArranque::VentanaVacia => {
+                active_or_new_window(app).present();
+            }
+        }
+        0
+    });
+
     app.run()
 }
 
@@ -156,7 +210,60 @@ fn build_window(app: &adw::Application) -> Rc<ScribeWindow> {
             });
         });
     });
+    // Oferta de recuperación de snapshots pendientes (issue #23), una sola
+    // vez por arranque.
+    ofrecer_recuperacion(&win);
     win
+}
+
+/// Ofrece recuperar los snapshots pendientes al arrancar (issue #23): si
+/// quedan documentos sin guardar de una ejecución anterior que murió, se
+/// muestra un diálogo con tres acciones: recuperar todo, descartar todo o
+/// decidir más tarde.
+fn ofrecer_recuperacion(win: &Rc<ScribeWindow>) {
+    if RECUPERACION_OFRECIDA.swap(true, Ordering::SeqCst) {
+        return;
+    }
+    let dir = recovery::dir_recuperacion();
+    let snapshots = recovery::listar_snapshots(&dir);
+    if snapshots.is_empty() {
+        return;
+    }
+    let titulos: Vec<String> = snapshots.iter().map(|s| s.titulo.clone()).collect();
+    let cuerpo = titulos.join("\n");
+    let dialog = adw::MessageDialog::new(
+        Some(&win.window),
+        Some(&gettext("Recover unsaved documents?")),
+        Some(&cuerpo),
+    );
+    dialog.add_response("recover", &gettext("_Recover All"));
+    dialog.add_response("discard", &gettext("_Discard All"));
+    dialog.add_response("later", &gettext("Decide Later"));
+    dialog.set_response_appearance("discard", adw::ResponseAppearance::Destructive);
+    dialog.set_response_appearance("recover", adw::ResponseAppearance::Suggested);
+    dialog.set_default_response(Some("recover"));
+    dialog.set_close_response("later");
+    let win = win.clone();
+    dialog.choose(gio::Cancellable::NONE, move |response| {
+        match response.as_str() {
+            "recover" => {
+                for s in &snapshots {
+                    win.open_recovered(s.texto.clone(), s.ruta.clone());
+                }
+                for s in &snapshots {
+                    let _ = recovery::borrar_snapshot(&dir, &s.nombre);
+                }
+            }
+            "discard" => {
+                for s in &snapshots {
+                    let _ = recovery::borrar_snapshot(&dir, &s.nombre);
+                }
+            }
+            // "later" (o cierre del diálogo): no se tocan los snapshots; se
+            // ofrecerán de nuevo en el próximo arranque.
+            _ => {}
+        }
+    });
 }
 
 /// La ventana activa de Scribe, o una nueva si no hay ninguna. Poda del
@@ -174,4 +281,15 @@ fn active_or_new_window(app: &adw::Application) -> Rc<ScribeWindow> {
         })
     });
     found.unwrap_or_else(|| build_window(app))
+}
+
+/// Resuelve un argumento de la línea de comandos a (ruta, posición opcional).
+/// Si el sufijo `:N:N` es numérico pero el fichero no existe, se trata el
+/// argumento completo como una ruta normal (no se inventan ficheros).
+fn resolver_argumento(arg: &OsStr) -> (PathBuf, Option<(u32, u32)>) {
+    let texto = arg.to_string_lossy();
+    match arranque::parsear_argumento(&texto) {
+        Ok((ruta, Some((linea, columna)))) if ruta.exists() => (ruta, Some((linea, columna))),
+        _ => (PathBuf::from(arg), None),
+    }
 }

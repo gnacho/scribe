@@ -109,6 +109,178 @@ impl FontFamily {
     }
 }
 
+/// Tema de color del PDF exportado. Independiente del tema de lectura.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ExportColorScheme {
+    /// Sigue el tema del editor (claro/oscuro del sistema).
+    System,
+    Light,
+    Dark,
+    /// Blanco y negro: sin color, para imprimir.
+    Mono,
+}
+
+impl ExportColorScheme {
+    fn from_nick(nick: &str) -> Self {
+        match nick {
+            "dark" => Self::Dark,
+            "mono" => Self::Mono,
+            "system" => Self::System,
+            _ => Self::Light,
+        }
+    }
+    pub fn nick(self) -> &'static str {
+        match self {
+            Self::System => "system",
+            Self::Light => "light",
+            Self::Dark => "dark",
+            Self::Mono => "mono",
+        }
+    }
+    pub fn index(self) -> u32 {
+        match self {
+            Self::System => 0,
+            Self::Light => 1,
+            Self::Dark => 2,
+            Self::Mono => 3,
+        }
+    }
+    pub fn from_index(i: u32) -> Self {
+        match i {
+            0 => Self::System,
+            2 => Self::Dark,
+            3 => Self::Mono,
+            _ => Self::Light,
+        }
+    }
+}
+
+/// Fuente monoespaciada del código en el PDF exportado.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ExportMonoFont {
+    AdwaitaMono,
+    SourceCodePro,
+    FiraMono,
+}
+
+impl ExportMonoFont {
+    fn from_nick(nick: &str) -> Self {
+        match nick {
+            "source-code-pro" => Self::SourceCodePro,
+            "fira-mono" => Self::FiraMono,
+            _ => Self::AdwaitaMono,
+        }
+    }
+    pub fn nick(self) -> &'static str {
+        match self {
+            Self::AdwaitaMono => "adwaita-mono",
+            Self::SourceCodePro => "source-code-pro",
+            Self::FiraMono => "fira-mono",
+        }
+    }
+    pub fn index(self) -> u32 {
+        match self {
+            Self::AdwaitaMono => 0,
+            Self::SourceCodePro => 1,
+            Self::FiraMono => 2,
+        }
+    }
+    pub fn from_index(i: u32) -> Self {
+        match i {
+            1 => Self::SourceCodePro,
+            2 => Self::FiraMono,
+            _ => Self::AdwaitaMono,
+        }
+    }
+    /// Nombre de familia Pango/Fontconfig para cairo.
+    pub fn family(self) -> &'static str {
+        match self {
+            Self::AdwaitaMono => "Adwaita Mono",
+            Self::SourceCodePro => "Source Code Pro",
+            Self::FiraMono => "Fira Mono",
+        }
+    }
+}
+
+/// Tamaño de página del PDF exportado.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ExportPageSize {
+    A4,
+    Letter,
+}
+
+impl ExportPageSize {
+    fn from_nick(nick: &str) -> Self {
+        if nick == "letter" {
+            Self::Letter
+        } else {
+            Self::A4
+        }
+    }
+    pub fn nick(self) -> &'static str {
+        match self {
+            Self::A4 => "a4",
+            Self::Letter => "letter",
+        }
+    }
+    pub fn index(self) -> u32 {
+        match self {
+            Self::A4 => 0,
+            Self::Letter => 1,
+        }
+    }
+    pub fn from_index(i: u32) -> Self {
+        if i == 1 {
+            Self::Letter
+        } else {
+            Self::A4
+        }
+    }
+    /// Nombre de papel para `gtk::PaperSize::new`.
+    pub fn paper_name(self) -> &'static str {
+        match self {
+            Self::A4 => "iso_a4",
+            Self::Letter => "na_letter",
+        }
+    }
+}
+
+/// Orientación de la página del PDF exportado.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ExportOrientation {
+    Portrait,
+    Landscape,
+}
+
+impl ExportOrientation {
+    fn from_nick(nick: &str) -> Self {
+        if nick == "landscape" {
+            Self::Landscape
+        } else {
+            Self::Portrait
+        }
+    }
+    pub fn nick(self) -> &'static str {
+        match self {
+            Self::Portrait => "portrait",
+            Self::Landscape => "landscape",
+        }
+    }
+    pub fn index(self) -> u32 {
+        match self {
+            Self::Portrait => 0,
+            Self::Landscape => 1,
+        }
+    }
+    pub fn from_index(i: u32) -> Self {
+        if i == 1 {
+            Self::Landscape
+        } else {
+            Self::Portrait
+        }
+    }
+}
+
 pub struct AppSettings {
     settings: Option<gio::Settings>,
 }
@@ -237,13 +409,6 @@ impl AppSettings {
         i32,
         30
     );
-    prop!(
-        default_template,
-        set_default_template,
-        "default-template",
-        String,
-        ""
-    );
 
     pub fn markup_visibility(&self) -> MarkupVisibility {
         MarkupVisibility::from_nick(&self.get("focus".to_string(), |s| {
@@ -323,6 +488,83 @@ impl AppSettings {
         self.set(|s| {
             if let Err(e) = s.set_strv("recent-files", Vec::<&str>::new()) {
                 log_set_error("recent-files", e);
+            }
+        });
+    }
+
+    // ------------------------------------------------------------------
+    // Ajustes de exportación a PDF: independientes de los de lectura.
+    // ------------------------------------------------------------------
+
+    prop!(
+        export_font_size,
+        set_export_font_size,
+        "export-font-size",
+        i32,
+        11
+    );
+
+    pub fn export_color_scheme(&self) -> ExportColorScheme {
+        ExportColorScheme::from_nick(&self.get("light".to_string(), |s| {
+            s.string("export-color-scheme").to_string()
+        }))
+    }
+    pub fn set_export_color_scheme(&self, v: ExportColorScheme) {
+        self.set(|s| {
+            if let Err(e) = s.set_string("export-color-scheme", v.nick()) {
+                log_set_error("export-color-scheme", e);
+            }
+        });
+    }
+
+    pub fn export_font_family(&self) -> FontFamily {
+        FontFamily::from_nick(&self.get("sans".to_string(), |s| {
+            s.string("export-font-family").to_string()
+        }))
+    }
+    pub fn set_export_font_family(&self, v: FontFamily) {
+        self.set(|s| {
+            if let Err(e) = s.set_string("export-font-family", v.nick()) {
+                log_set_error("export-font-family", e);
+            }
+        });
+    }
+
+    pub fn export_mono_font(&self) -> ExportMonoFont {
+        ExportMonoFont::from_nick(&self.get("adwaita-mono".to_string(), |s| {
+            s.string("export-mono-font").to_string()
+        }))
+    }
+    pub fn set_export_mono_font(&self, v: ExportMonoFont) {
+        self.set(|s| {
+            if let Err(e) = s.set_string("export-mono-font", v.nick()) {
+                log_set_error("export-mono-font", e);
+            }
+        });
+    }
+
+    pub fn export_page_size(&self) -> ExportPageSize {
+        ExportPageSize::from_nick(&self.get("a4".to_string(), |s| {
+            s.string("export-page-size").to_string()
+        }))
+    }
+    pub fn set_export_page_size(&self, v: ExportPageSize) {
+        self.set(|s| {
+            if let Err(e) = s.set_string("export-page-size", v.nick()) {
+                log_set_error("export-page-size", e);
+            }
+        });
+    }
+
+    pub fn export_orientation(&self) -> ExportOrientation {
+        ExportOrientation::from_nick(&self.get("portrait".to_string(), |s| {
+            s.string("export-orientation").to_string()
+        }))
+    }
+    pub fn set_export_orientation(&self, v: ExportOrientation) {
+        self.set(|s| {
+            if let Err(e) = s.set_string("export-orientation", v.nick()) {
+                log_set_error("export-orientation", e);
             }
         });
     }

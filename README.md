@@ -71,9 +71,6 @@ actually use to draft notes and docs.
   when GTK ships the fix, real hiding returns on its own.
 - **Focus mode** (Ctrl+Shift+F) dims everything except the current paragraph.
 - **Typewriter mode** (Ctrl+Shift+T) keeps the cursor vertically centered.
-- **Templates**: Markdown files in `~/.local/share/scribe/templates` with
-  `{{title}}`, `{{date}}`, `{{time}}`, `{{datetime}}` and `{{year}}` markers.
-  Four examples are seeded on first launch.
 - **Split preview** (Ctrl+Shift+P) renders the full document in a side panel
   using the same `GtkTextTag` engine.
 - **Ctrl+B/I/K** wraps the selection in `**`, `*` or backticks.
@@ -84,8 +81,13 @@ actually use to draft notes and docs.
 - **Zoom** (Ctrl +/&minus;/0) with controls in the main menu.
 - **Go to line** from the status bar.
 - **Header bar** follows GNOME Text Editor: open button with recent files
-  dropdown, new document button, centered title, main menu with zoom row.
-- **Preferences** window with three pages: Appearance, Editor and Templates.
+  dropdown, new tab button, centered title, main menu with zoom row.
+- **Preferences** window with three pages: Appearance, Editor and Export.
+- **Export to PDF** (Ctrl+P): print or export the document through the GTK
+  print pipeline, reusing the same span/ornament analysis as the editor.
+  Headings, code blocks, quotes and tables are themed, with separate export
+  settings (color scheme, fonts, page size and orientation) and careful
+  pagination (no orphan headings, `\newpage` support).
 - **Files**: open, save and save-as with `GtkFileDialog`, atomic writes,
   unsaved-changes warning, configurable autosave.
 - **Sidebar** (F9) with filterable recent files and a navigable outline.
@@ -111,16 +113,31 @@ Markers replaced by an ornament (bullets, `[x]`, `---`, `>`, fences, pipes) are
 shrunk rather than hidden: the tiny glyph stays in GTK's layout, so the
 invisible-text abort path of GNOME/gtk#8346 is unreachable by construction.
 
-## Known limits
+## Limitations
 
-- No tabs / multiple documents (`AdwTabView`), find & replace, export to
-  HTML/PDF, spell checking, or English UI translation yet.
-- Images are embedded only when alone on their line; inline images still show
-  the placeholder.
-- The image texture cache does not track file mtime: a picture edited on disk
-  is not refreshed until the document is reopened.
+- **UTF-8 only.** Files are read as UTF-8 and written back byte for byte. A
+  file in another encoding (Latin-1, UTF-16, and so on) does not open.
+- **The source is the preview.** Rendering is a set of `GtkTextTag` spans and
+  painted ornaments over the buffer, not a layout engine. HTML in the source is
+  not interpreted: it stays as dimmed text in the editor and is dropped in the
+  split preview. The result is an approximation of the Markdown, not a copy of
+  a browser rendering.
+- **No find & replace, no export to HTML, and no spell checking.**
+- **PDF export has no outline/bookmarks.** `GtkPrintOperation` does not expose
+  PDF bookmarks, so the exported PDF carries no table of contents or outline.
+- **Images are local only.** Remote URLs are never fetched (no network code is
+  linked) and show a placeholder. Only regular files up to 20 MB are painted,
+  at most 144 px tall. Inline images (not alone on their line) show the
+  placeholder too.
+- The image cache does not track file mtime: a picture edited on disk is not
+  refreshed until the document is reopened.
 - In "hide/reveal on cursor line" mode the marks are shrunk, not removed (see
   above).
+
+## Privacy
+
+Scribe makes no network requests and collects nothing. Documents and
+preferences stay on your machine. See [PRIVACY.md](PRIVACY.md).
 
 ## Screenshots
 
@@ -143,7 +160,7 @@ The interface is currently in Spanish.
 **Preferences window**
 
 <p align="center">
-  <img alt="Preferences window with Appearance, Editor and Templates pages" src="assets/screenshot-preferences-es-light.png" width="800">
+  <img alt="Preferences window with Appearance, Editor and Export pages" src="assets/screenshot-preferences-es-light.png" width="800">
 </p>
 
 **Focus mode (everything dimmed except the current paragraph)**
@@ -154,7 +171,7 @@ The interface is currently in Spanish.
 
 ## Build requirements
 
-- Rust 1.83 or later
+- Rust 1.85 or later
 - GTK4 (&ge; 4.14), libadwaita (&ge; 1.5), GtkSourceView 5 and GLib
   development files
 
@@ -176,6 +193,23 @@ Fedora:
 sudo dnf install gtk4-devel libadwaita-devel gtksourceview5-devel glib2-devel
 ```
 
+## Install
+
+Install to `~/.local` (no root) with:
+
+```sh
+make install
+```
+
+This builds the release binary and installs the binary to `~/.local/bin`, the
+GSettings schema to `~/.local/share/glib-2.0/schemas` (recompiled with
+`glib-compile-schemas`), the desktop entry and the icons. `make build` compiles
+in release mode and `make check` runs fmt, clippy and the tests.
+
+The GSettings schema is mandatory, not optional: when a release adds a new
+preference, the app aborts if the installed schema is stale (it no longer
+contains the new key). `make install` recompiles it so that does not happen.
+
 ## Build and run
 
 ```sh
@@ -183,16 +217,15 @@ cargo build --release
 cargo run
 ```
 
-GSettings schema needs to be installed for preferences to work. During
-development:
+For development you can point at the local schema instead of installing it:
 
 ```sh
 glib-compile-schemas data/
 GSETTINGS_SCHEMA_DIR=$PWD/data cargo run
 ```
 
-The application starts with defaults if the schema is not found, logging a
-warning to stderr.
+If the schema is not found at all, the app starts with defaults (preferences
+are not saved) and logs a warning to stderr.
 
 ## Flatpak
 

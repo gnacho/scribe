@@ -1,3 +1,5 @@
+use gdk_pixbuf::prelude::PixbufLoaderExt;
+use gettextrs::gettext;
 use gtk4::pango;
 use gtk4::prelude::*;
 use gtksourceview5::prelude::*;
@@ -11,11 +13,17 @@ use crate::markdown_render::{
 };
 use crate::markdown_view::{MarkdownView, OrnamentPalette};
 use crate::settings::{gtk_hides_invisible_safely, FontFamily, MarkupVisibility};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 type ChangedCallback = Rc<RefCell<Option<Box<dyn Fn(&str)>>>>;
+/// Aviso transitorio (toast) que la ventana muestra; lo conecta `window` al
+/// crear el editor, igual que `connect_changed`.
+type ToastCallback = Rc<RefCell<Option<Box<dyn Fn(&str)>>>>;
 
 const MIN_MARGIN: i32 = 24;
+/// Lado máximo (en píxeles) de una imagen pegada o soltada; si lo supera se
+/// reescala manteniendo la proporción antes de guardarla.
+const MAX_LADO_IMAGEN: u32 = 2560;
 
 thread_local! {
     /// Provider CSS único de la aplicación (D9): antes cada Editor instalaba
@@ -78,6 +86,9 @@ pub struct Editor {
     /// Vallas de código abiertas detectadas en el último `decorate`. La barra
     /// de estado de la ventana las consulta para avisar al usuario.
     unclosed_fences: Rc<RefCell<Vec<UnclosedFence>>>,
+    /// Aviso transitorio (toast) que la ventana conecta al crear el editor;
+    /// se usa para los avisos de pegado/soltado de imágenes.
+    on_toast: ToastCallback,
 }
 
 fn build_tags() -> gtk4::TextTagTable {
@@ -308,11 +319,9 @@ fn set_column_margins(tags: &gtk4::TextTagTable, base: i32) {
             tag.set_right_margin(base + right);
         }
     }
-    for name in ["fence"] {
-        if let Some(tag) = tags.lookup(name) {
-            tag.set_left_margin(base + 24);
-            tag.set_right_margin(base + 24);
-        }
+    if let Some(tag) = tags.lookup("fence") {
+        tag.set_left_margin(base + 24);
+        tag.set_right_margin(base + 24);
     }
 }
 
@@ -585,6 +594,331 @@ fn list_continuation(line: &str) -> Option<(String, bool)> {
     Some((format!("{indent}{marker}"), body.trim().is_empty()))
 }
 
+// --- pegado y soltado de imágenes -------------------------------------------
+//
+// Las imágenes se guardan en `images/`, junto al documento, y se inserta un
+// enlace relativo `![](images/…)`. Las funciones de nombre, ruta y escala son
+// puras para poder probarlas en unit tests.
+
+/// Ruta disponible para una imagen `base.png` dentro de `dir`, añadiendo
+/// sufijo `-2`, `-3`… si ya existe (evita sobrescribir una imagen anterior).
+fn nombre_disponible(dir: &Path, base: &str) -> PathBuf {
+    let mut candidato = dir.join(format!("{base}.png"));
+    let mut n = 2;
+    while candidato.exists() {
+        candidato = dir.join(format!("{base}-{n}.png"));
+        n += 1;
+    }
+    candidato
+}
+
+/// Dimensiones de una imagen reescalada para que su lado mayor no supere
+/// `max`, manteniendo la proporción. Si ya cabe (o alguna dimensión es cero),
+/// se devuelve tal cual.
+fn dimensiones_objeto(ancho: u32, alto: u32, max: u32) -> (u32, u32) {
+    let lado_largo = ancho.max(alto);
+    if lado_largo <= max || ancho == 0 || alto == 0 {
+        return (ancho, alto);
+    }
+    let factor = max as f64 / lado_largo as f64;
+    let nuevo_ancho = ((ancho as f64) * factor).round() as u32;
+    let nuevo_alto = ((alto as f64) * factor).round() as u32;
+    (nuevo_ancho.max(1), nuevo_alto.max(1))
+}
+
+/// Ruta relativa de `hacia_imagen` desde el directorio `desde_doc`. Se usa
+/// para escribir el enlace: misma carpeta -> `images/x.png`; si el documento
+/// vive en una subcarpeta -> `../images/x.png`.
+fn ruta_relativa(desde_doc: &Path, hacia_imagen: &Path) -> String {
+    let desde: Vec<_> = desde_doc.components().collect();
+    let hacia: Vec<_> = hacia_imagen.components().collect();
+    let mut comun = 0;
+    while comun < desde.len() && comun < hacia.len() && desde[comun] == hacia[comun] {
+        comun += 1;
+    }
+    let mut partes: Vec<String> = Vec::new();
+    for _ in comun..desde.len() {
+        partes.push("..".to_string());
+    }
+    for componente in &hacia[comun..] {
+        if let std::path::Component::Normal(nombre) = componente {
+            partes.push(nombre.to_string_lossy().into_owned());
+        }
+    }
+    if partes.is_empty() {
+        ".".to_string()
+    } else {
+        partes.join("/")
+    }
+}
+
+/// Decodifica `bytes` con gdk-pixbuf, reescala si el lado mayor supera
+/// `MAX_LADO_IMAGEN` y devuelve los bytes PNG resultantes.
+fn bytes_a_png(bytes: &[u8]) -> Result<Vec<u8>, String> {
+    let cargador = gdk_pixbuf::PixbufLoader::new();
+    cargador
+        .write(bytes)
+        .map_err(|e| format!("no se pudo leer la imagen: {e}"))?;
+    cargador
+        .close()
+        .map_err(|e| format!("no se pudo cerrar la imagen: {e}"))?;
+    let pixbuf = cargador
+        .pixbuf()
+        .ok_or_else(|| "no se pudo decodificar la imagen".to_string())?;
+    let (ancho, alto) = (pixbuf.width() as u32, pixbuf.height() as u32);
+    let (dest_ancho, dest_alto) = dimensiones_objeto(ancho, alto, MAX_LADO_IMAGEN);
+    let pixbuf = if (dest_ancho, dest_alto) != (ancho, alto) {
+        pixbuf
+            .scale_simple(
+                dest_ancho as i32,
+                dest_alto as i32,
+                gdk_pixbuf::InterpType::Bilinear,
+            )
+            .ok_or_else(|| "no se pudo reescalar la imagen".to_string())?
+    } else {
+        pixbuf
+    };
+    pixbuf
+        .save_to_bufferv("png", &[])
+        .map_err(|e| format!("no se pudo guardar la imagen: {e}"))
+}
+
+/// Tallo `imagen-AAAAMMDD-HHMMSS` con la fecha local actual (sin chrono).
+fn tallo_temporal() -> String {
+    let ahora = glib::DateTime::now_local().unwrap_or_else(|_| {
+        glib::DateTime::now_utc().expect("el reloj del sistema no está disponible")
+    });
+    format!(
+        "imagen-{:04}{:02}{:02}-{:02}{:02}{:02}",
+        ahora.year(),
+        ahora.month(),
+        ahora.day_of_month(),
+        ahora.hour(),
+        ahora.minute(),
+        ahora.second()
+    )
+}
+
+/// Decide si un fichero es una imagen por su extensión (formato raster que
+/// gdk-pixbuf sabe abrir).
+fn es_imagen(path: &Path) -> bool {
+    match path.extension().and_then(|e| e.to_str()) {
+        Some(ext) => matches!(
+            ext.to_ascii_lowercase().as_str(),
+            "png" | "jpg" | "jpeg" | "gif" | "bmp" | "webp" | "tiff" | "tif" | "ico"
+        ),
+        None => false,
+    }
+}
+
+/// true si el portapapeles ofrece una imagen (mime raster o textura Gdk).
+fn portapapeles_tiene_imagen(formatos: &gdk4::ContentFormats) -> bool {
+    formatos.contains_type(gdk4::Texture::static_type())
+        || [
+            "image/png",
+            "image/jpeg",
+            "image/gif",
+            "image/webp",
+            "image/bmp",
+        ]
+        .iter()
+        .any(|mime| formatos.contain_mime_type(mime))
+}
+
+fn emit_toast(on_toast: &ToastCallback, mensaje: &str) {
+    if let Some(callback) = on_toast.borrow().as_ref() {
+        callback(mensaje);
+    }
+}
+
+/// Inserta `![](relativa)` en el cursor (o en `objetivo` si se da), con el
+/// cursor colocado sobre el texto alternativo, entre `![` y `]`. Es una sola
+/// acción de usuario: se deshace de golpe con Ctrl+Z.
+fn insertar_enlace_imagen(
+    buffer: &gtksourceview5::Buffer,
+    view: &MarkdownView,
+    relativa: &str,
+    objetivo: Option<gtk4::TextIter>,
+) {
+    if let Some(iter) = objetivo.as_ref() {
+        buffer.place_cursor(iter);
+    }
+    let (mut inicio, mut fin) = match buffer.selection_bounds() {
+        Some(limites) => limites,
+        None => {
+            let iter = buffer.iter_at_offset(buffer.cursor_position());
+            (iter, iter)
+        }
+    };
+    let offset = inicio.offset();
+    let enlace = format!("![]({relativa})");
+    buffer.begin_user_action();
+    buffer.delete(&mut inicio, &mut fin);
+    let mut at = buffer.iter_at_offset(offset);
+    buffer.insert(&mut at, &enlace);
+    buffer.end_user_action();
+    let cursor = buffer.iter_at_offset(offset + 2);
+    buffer.place_cursor(&cursor);
+    view.grab_focus();
+}
+
+/// Guarda `bytes` (reescalados a PNG) en `images/` junto al documento y enlaza
+/// el fichero en el cursor (o en `objetivo` si se da). `tallo` es el nombre
+/// base sin extensión. Devuelve `true` si se insertó.
+#[allow(clippy::too_many_arguments)]
+fn guardar_e_insertar_imagen(
+    buffer: &gtksourceview5::Buffer,
+    view: &MarkdownView,
+    base_dir: &Rc<RefCell<Option<PathBuf>>>,
+    on_toast: &ToastCallback,
+    bytes: &[u8],
+    tallo: &str,
+    aviso_sin_fichero: &str,
+    objetivo: Option<gtk4::TextIter>,
+) -> bool {
+    let Some(dir) = base_dir.borrow().clone() else {
+        emit_toast(on_toast, aviso_sin_fichero);
+        return false;
+    };
+    let Ok(png) = bytes_a_png(bytes) else {
+        emit_toast(on_toast, &gettext("Could not save the image"));
+        return false;
+    };
+    let carpeta = dir.join("images");
+    if std::fs::create_dir_all(&carpeta).is_err() {
+        emit_toast(on_toast, &gettext("Could not save the image"));
+        return false;
+    }
+    let destino = nombre_disponible(&carpeta, tallo);
+    if std::fs::write(&destino, &png).is_err() {
+        emit_toast(on_toast, &gettext("Could not save the image"));
+        return false;
+    }
+    // La ruta recién escrita puede estar cacheada como fallo; se olvida para
+    // que la siguiente decoración la cargue y la imagen aparezca al momento.
+    view.invalidate_texture(&destino.to_string_lossy());
+    let relativa = ruta_relativa(&dir, &destino);
+    insertar_enlace_imagen(buffer, view, &relativa, objetivo);
+    true
+}
+
+/// Lee el portapapeles como textura y, si trae una imagen, la guarda e
+/// inserta. Se llama cuando Ctrl+V encuentra una imagen en el portapapeles.
+fn pegar_desde_portapapeles(
+    buffer: &gtksourceview5::Buffer,
+    view: &MarkdownView,
+    base_dir: &Rc<RefCell<Option<PathBuf>>>,
+    on_toast: &ToastCallback,
+) {
+    let Some(display) = gdk4::Display::default() else {
+        return;
+    };
+    let buffer = buffer.clone();
+    let view = view.clone();
+    let base_dir = base_dir.clone();
+    let on_toast = on_toast.clone();
+    display
+        .clipboard()
+        .read_texture_async(None::<&gio::Cancellable>, move |resultado| {
+            let Ok(Some(textura)) = resultado else {
+                return;
+            };
+            let bytes = textura.save_to_png_bytes();
+            guardar_e_insertar_imagen(
+                &buffer,
+                &view,
+                &base_dir,
+                &on_toast,
+                bytes.as_ref(),
+                &tallo_temporal(),
+                &gettext("Save the document before pasting images"),
+                None,
+            );
+        });
+}
+
+/// Maneja un arrastre sobre el editor: textura o lista de ficheros. Devuelve
+/// `true` si aceptó el soltado.
+fn soltar_sobre_editor(
+    view: &MarkdownView,
+    buffer: &gtksourceview5::Buffer,
+    base_dir: &Rc<RefCell<Option<PathBuf>>>,
+    on_toast: &ToastCallback,
+    value: &glib::Value,
+    x: f64,
+    y: f64,
+) -> bool {
+    let Some(dir) = base_dir.borrow().clone() else {
+        emit_toast(
+            on_toast,
+            &gettext("Save the document before dropping images"),
+        );
+        return false;
+    };
+    let objetivo = view.iter_at_location(x as i32, y as i32);
+
+    // Textura soltada (p. ej. arrastrada desde el navegador): se trata como
+    // un pegado, con tallo temporal.
+    if let Ok(textura) = value.get::<gdk4::Texture>() {
+        let bytes = textura.save_to_png_bytes();
+        return guardar_e_insertar_imagen(
+            buffer,
+            view,
+            base_dir,
+            on_toast,
+            bytes.as_ref(),
+            &tallo_temporal(),
+            &gettext("Save the document before dropping images"),
+            objetivo,
+        );
+    }
+
+    // Ficheros soltados desde el gestor de archivos.
+    if let Ok(ficheros) = value.get::<gdk4::FileList>() {
+        let mut insertado = false;
+        for fichero in ficheros.files() {
+            let Some(ruta) = fichero.path() else {
+                continue;
+            };
+            if !es_imagen(&ruta) {
+                continue;
+            }
+            // Ya dentro de la carpeta del documento: se enlaza tal cual, sin
+            // copiar ni reescalar (se respeta el fichero del usuario).
+            if ruta.starts_with(&dir) {
+                let relativa = ruta_relativa(&dir, &ruta);
+                insertar_enlace_imagen(buffer, view, &relativa, objetivo);
+                insertado = true;
+                continue;
+            }
+            // Desde fuera: se copia a images/ con la misma regla de reescalado
+            // que el pegado, conservando el nombre original.
+            let Ok(bytes) = std::fs::read(&ruta) else {
+                continue;
+            };
+            let tallo = ruta
+                .file_stem()
+                .map(|s| s.to_string_lossy().into_owned())
+                .unwrap_or_else(|| "imagen".to_string());
+            if guardar_e_insertar_imagen(
+                buffer,
+                view,
+                base_dir,
+                on_toast,
+                &bytes,
+                &tallo,
+                &gettext("Save the document before dropping images"),
+                objetivo,
+            ) {
+                insertado = true;
+            }
+        }
+        return insertado;
+    }
+
+    false
+}
+
 impl Editor {
     pub fn new() -> Self {
         let tags = build_tags();
@@ -635,6 +969,7 @@ impl Editor {
             typewriter: Rc::new(Cell::new(false)),
             base_dir: Rc::new(RefCell::new(None)),
             unclosed_fences: Rc::new(RefCell::new(Vec::new())),
+            on_toast: Rc::new(RefCell::new(None)),
         };
         editor.connect_signals();
         editor
@@ -798,6 +1133,56 @@ impl Editor {
             glib::Propagation::Stop
         });
         self.view.add_controller(controller);
+
+        // Pegar imágenes (Ctrl+V): en fase de captura para adelantarnos al
+        // pegado de texto del GtkTextView. Si el portapapeles trae una imagen,
+        // se guarda e inserta; si no, se deja pasar el evento y el widget pega
+        // el texto como siempre (no se rompe el pegado de texto).
+        let paste_buffer = self.buffer.clone();
+        let paste_view = self.view.clone();
+        let paste_base_dir = self.base_dir.clone();
+        let paste_on_toast = self.on_toast.clone();
+        let paste_controller = gtk4::EventControllerKey::new();
+        paste_controller.set_propagation_phase(gtk4::PropagationPhase::Capture);
+        paste_controller.connect_key_pressed(move |_, key, _, state| {
+            let es_pegar = key == gdk4::Key::v
+                && state.intersects(gdk4::ModifierType::CONTROL_MASK)
+                && !state.intersects(gdk4::ModifierType::SHIFT_MASK | gdk4::ModifierType::ALT_MASK);
+            if !es_pegar {
+                return glib::Propagation::Proceed;
+            }
+            let Some(display) = gdk4::Display::default() else {
+                return glib::Propagation::Proceed;
+            };
+            if !portapapeles_tiene_imagen(&display.clipboard().formats()) {
+                return glib::Propagation::Proceed;
+            }
+            pegar_desde_portapapeles(&paste_buffer, &paste_view, &paste_base_dir, &paste_on_toast);
+            glib::Propagation::Stop
+        });
+        self.view.add_controller(paste_controller);
+
+        // Soltar imágenes (arrastrar y soltar): ficheros (GdkFileList) o una
+        // textura directa (p. ej. desde el navegador).
+        let drop_buffer = self.buffer.clone();
+        let drop_view = self.view.clone();
+        let drop_base_dir = self.base_dir.clone();
+        let drop_on_toast = self.on_toast.clone();
+        let drop_target =
+            gtk4::DropTarget::new(gdk4::FileList::static_type(), gdk4::DragAction::COPY);
+        drop_target.set_types(&[gdk4::FileList::static_type(), gdk4::Texture::static_type()]);
+        drop_target.connect_drop(move |_target, value, x, y| {
+            soltar_sobre_editor(
+                &drop_view,
+                &drop_buffer,
+                &drop_base_dir,
+                &drop_on_toast,
+                value,
+                x,
+                y,
+            )
+        });
+        self.view.add_controller(drop_target);
     }
 
     // --- contenido -------------------------------------------------------
@@ -845,6 +1230,12 @@ impl Editor {
         *self.on_changed.borrow_mut() = Some(Box::new(callback));
     }
 
+    /// Conecta el aviso transitorio (toast). Lo llama la ventana al crear el
+    /// editor; se usa para avisar cuando falta un fichero al pegar imágenes.
+    pub fn connect_toast<F: Fn(&str) + 'static>(&self, callback: F) {
+        *self.on_toast.borrow_mut() = Some(Box::new(callback));
+    }
+
     pub fn connect_cursor_moved<F: Fn() + 'static>(&self, callback: F) {
         self.buffer
             .connect_cursor_position_notify(move |_| callback());
@@ -875,6 +1266,32 @@ impl Editor {
             self.view.scroll_to_iter(&mut iter, 0.0, true, 0.0, 0.3);
             self.view.grab_focus();
         }
+    }
+
+    /// Coloca el cursor en línea/columna (1-based) y lo lleva a la vista.
+    /// Si la posición excede el documento, se clampa al final de la línea o
+    /// del buffer. La usa el arranque con `fichero.md:42:7`.
+    pub fn place_cursor_at(&self, line: u32, column: u32) {
+        let line_index = line.saturating_sub(1) as i32;
+        let target = column.saturating_sub(1) as i32;
+        let mut iter = match self.buffer.iter_at_line(line_index) {
+            Some(it) => it,
+            None => self.buffer.end_iter(),
+        };
+        let mut line_end = iter;
+        if !line_end.ends_line() {
+            line_end.forward_to_line_end();
+        }
+        // Avanza dentro de la línea sin pasarse del final de la misma.
+        let disponibles = line_end.line_offset() - iter.line_offset();
+        if target < disponibles {
+            iter.forward_chars(target);
+        } else {
+            iter = line_end;
+        }
+        self.buffer.place_cursor(&iter);
+        self.view.scroll_to_iter(&mut iter, 0.0, true, 0.0, 0.3);
+        self.view.grab_focus();
     }
 
     /// Envuelve la selección con un marcador (`**`, `*`, `` ` ``…).
@@ -1003,5 +1420,60 @@ impl Editor {
             .iter_at_offset(offset.min(self.buffer.end_iter().offset()));
         self.buffer.place_cursor(&restored);
         true
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// El nombre de imagen evita colisiones añadiendo `-2`, `-3`… si el
+    /// fichero ya existe.
+    #[test]
+    fn nombre_disponible_imagen_evita_colisiones() {
+        let dir = std::env::temp_dir().join(format!("scribe-nombre-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+
+        let base = "imagen-20261007-203045";
+        let primero = nombre_disponible(&dir, base);
+        assert_eq!(
+            primero.file_name().and_then(|n| n.to_str()),
+            Some("imagen-20261007-203045.png")
+        );
+        std::fs::write(&primero, b"x").unwrap();
+
+        let segundo = nombre_disponible(&dir, base);
+        assert_eq!(
+            segundo.file_name().and_then(|n| n.to_str()),
+            Some("imagen-20261007-203045-2.png")
+        );
+
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    /// El reescalado a 2560 mantiene la proporción y no agranda lo pequeño.
+    #[test]
+    fn dimensiones_objeto_escala_a_2560() {
+        assert_eq!(dimensiones_objeto(5120, 2560, 2560), (2560, 1280));
+        assert_eq!(dimensiones_objeto(2000, 4000, 2560), (1280, 2560));
+        assert_eq!(dimensiones_objeto(2560, 2560, 2560), (2560, 2560));
+        assert_eq!(dimensiones_objeto(800, 600, 2560), (800, 600));
+    }
+
+    /// La imagen en la misma carpeta se enlaza como `images/x.png`.
+    #[test]
+    fn ruta_relativa_imagen_misma_carpeta() {
+        let desde = Path::new("/tmp/doc");
+        let hacia = Path::new("/tmp/doc/images/x.png");
+        assert_eq!(ruta_relativa(desde, hacia), "images/x.png");
+    }
+
+    /// Desde una subcarpeta del documento, la imagen sube con `../`.
+    #[test]
+    fn ruta_relativa_imagen_desde_subcarpeta() {
+        let desde = Path::new("/tmp/docs/sub");
+        let hacia = Path::new("/tmp/docs/images/x.png");
+        assert_eq!(ruta_relativa(desde, hacia), "../images/x.png");
     }
 }

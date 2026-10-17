@@ -688,6 +688,7 @@ dependencies = [
 name = "scribe"
 version = "0.3.10"
 dependencies = [
+ "gdk-pixbuf",
  "gdk4",
  "gettext-rs",
  "gio",

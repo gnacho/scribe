@@ -77,9 +77,6 @@ con GTK4 y ha terminado siendo algo que uso de verdad para borradores y notas.
 - **Modo foco** (Ctrl+Shift+F) atenúa todo salvo el párrafo actual.
 - **Máquina de escribir** (Ctrl+Shift+T) mantiene el cursor centrado
   verticalmente.
-- **Plantillas**: archivos `.md` en `~/.local/share/scribe/templates` con
-  marcadores `{{title}}`, `{{date}}`, `{{time}}`, `{{datetime}}` y `{{year}}`.
-  Cuatro ejemplos se crean la primera vez.
 - **Vista dividida** (Ctrl+Shift+P) con render completo en un panel lateral
   usando el mismo motor de `GtkTextTag`.
 - **Ctrl+B/I/K** envuelve la selección en `**`, `*` o backticks.
@@ -90,9 +87,15 @@ con GTK4 y ha terminado siendo algo que uso de verdad para borradores y notas.
 - **Zoom** (Ctrl +/&minus;/0) con controles en el menú principal.
 - **Ir a la línea** desde la barra de estado.
 - **Cabecera** al estilo de GNOME Text Editor: botón de abrir con desplegable
-  de recientes, botón de documento nuevo, título centrado y menú principal con
+  de recientes, botón de nueva pestaña, título centrado y menú principal con
   fila de zoom.
-- **Preferencias** en tres páginas: Apariencia, Editor y Plantillas.
+- **Preferencias** en tres páginas: Apariencia, Editor y Exportación.
+- **Exportar a PDF** (Ctrl+P): imprime o exporta el documento a través del
+  pipeline de impresión de GTK, reutilizando el mismo análisis de tramos y
+  adornos del editor. Las cabeceras, los bloques de código, las citas y las
+  tablas se tematizan, con ajustes de exportación separados (esquema de color,
+  fuentes, tamaño de página y orientación) y una paginación cuidadosa (sin
+  cabeceras huérfanas, soporte de `\newpage`).
 - **Archivos**: abrir, guardar y guardar como con `GtkFileDialog`, escritura
   atómica, aviso de cambios sin guardar y autoguardado configurable.
 - **Barra lateral** (F9) con documentos recientes filtrables e índice del
@@ -120,16 +123,34 @@ se encogen en vez de ocultarse: el glifo diminuto sigue en la maquetación de
 GTK, así que el camino del aborto por texto invisible de GNOME/gtk#8346 queda
 inalcanzable por construcción.
 
-## Límites conocidos
+## Limitaciones
 
-- Sin pestañas / varios documentos (`AdwTabView`), buscar y reemplazar, exportar
-  a HTML/PDF, corrección ortográfica ni traducción de la interfaz al inglés.
-- Las imágenes se incrustan solo cuando están solas en su línea; las inline
-  siguen mostrando el placeholder.
-- La caché de texturas de imagen no mira el mtime: un fichero editado en disco
-  no se refresca hasta reabrir el documento.
+- **Solo UTF-8.** Los ficheros se leen como UTF-8 y se escriben de vuelta byte
+  a byte. Un fichero en otra codificación (Latin-1, UTF-16, etc.) no se abre.
+- **El fuente es la previsualización.** El render es un conjunto de tramos
+  `GtkTextTag` y adornos pintados sobre el buffer, no un motor de maquetación.
+  El HTML del fuente no se interpreta: queda como texto atenuado en el editor y
+  se descarta en la vista dividida. El resultado es una aproximación del
+  Markdown, no una copia del render de un navegador.
+- **Sin buscar y reemplazar, sin exportar a HTML y sin corrección
+  ortográfica.**
+- **La exportación a PDF no lleva índice ni marcadores.** `GtkPrintOperation`
+  no expone marcadores de PDF, así que el PDF exportado no tiene tabla de
+  contenidos ni outline.
+- **Las imágenes son solo locales.** Las URLs remotas no se descargan (no hay
+  código de red enlazado) y muestran un placeholder. Solo se pintan ficheros
+  regulares de hasta 20 MB, como máximo 144 px de alto. Las imágenes inline (no
+  solas en su línea) también muestran el placeholder.
+- La caché de imágenes no mira el mtime: un fichero editado en disco no se
+  refresca hasta reabrir el documento.
 - En el modo «ocultar / revelar en la línea del cursor» las marcas se encogen,
   no se quitan (ver arriba).
+
+## Privacidad
+
+Scribe no hace peticiones de red y no recopila nada. Los documentos y las
+preferencias se quedan en tu equipo. Ver
+[PRIVACY.md](PRIVACY.md).
 
 ## Capturas
 
@@ -152,7 +173,7 @@ La interfaz está actualmente en español.
 **Ventana de preferencias**
 
 <p align="center">
-  <img alt="Ventana de preferencias con las páginas de Apariencia, Editor y Plantillas" src="assets/screenshot-preferences-es-light.png" width="800">
+  <img alt="Ventana de preferencias con las páginas de Apariencia, Editor y Exportación" src="assets/screenshot-preferences-es-light.png" width="800">
 </p>
 
 **Modo foco (todo atenuado salvo el párrafo actual)**
@@ -163,7 +184,7 @@ La interfaz está actualmente en español.
 
 ## Requisitos de compilación
 
-- Rust 1.83 o superior
+- Rust 1.85 o superior
 - GTK4 (&ge; 4.14), libadwaita (&ge; 1.5), GtkSourceView 5 y GLib con sus
   ficheros de desarrollo
 
@@ -185,6 +206,24 @@ Fedora:
 sudo dnf install gtk4-devel libadwaita-devel gtksourceview5-devel glib2-devel
 ```
 
+## Instalar
+
+Instala en `~/.local` (sin root) con:
+
+```sh
+make install
+```
+
+Esto compila el binario en modo release e instala el binario en `~/.local/bin`,
+el esquema GSettings en `~/.local/share/glib-2.0/schemas` (recompilado con
+`glib-compile-schemas`), el fichero .desktop y los iconos. `make build` compila
+en modo release y `make check` ejecuta fmt, clippy y los tests.
+
+El esquema GSettings es obligatorio, no opcional: cuando una versión añade una
+preferencia nueva, la aplicación aborta si el esquema instalado está
+desactualizado (ya no contiene la clave nueva). `make install` lo recompila
+para que eso no ocurra.
+
 ## Compilar y ejecutar
 
 ```sh
@@ -192,8 +231,7 @@ cargo build --release
 cargo run
 ```
 
-Para que las preferencias funcionen hace falta instalar el esquema GSettings.
-En desarrollo:
+En desarrollo puedes apuntar al esquema local en vez de instalarlo:
 
 ```sh
 glib-compile-schemas data/
@@ -201,7 +239,7 @@ GSETTINGS_SCHEMA_DIR=$PWD/data cargo run
 ```
 
 Si el esquema no está disponible, la aplicación arranca igual con los valores
-por defecto y avisa por stderr.
+por defecto (no guarda preferencias) y avisa por stderr.
 
 ## Flatpak
 

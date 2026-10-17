@@ -13,8 +13,12 @@
 
 #[path = "../src/editor.rs"]
 mod editor;
+#[path = "../src/export_pdf.rs"]
+mod export_pdf;
 #[path = "../src/file_manager.rs"]
 mod file_manager;
+#[path = "../src/guardado.rs"]
+mod guardado;
 #[path = "../src/markdown_render.rs"]
 mod markdown_render;
 #[path = "../src/markdown_view.rs"]
@@ -23,10 +27,10 @@ mod markdown_view;
 mod preferences;
 #[path = "../src/preview.rs"]
 mod preview;
+#[path = "../src/recovery.rs"]
+mod recovery;
 #[path = "../src/settings.rs"]
 mod settings;
-#[path = "../src/templates.rs"]
-mod templates;
 #[path = "../src/window.rs"]
 mod window;
 
