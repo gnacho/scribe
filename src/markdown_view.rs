@@ -28,6 +28,8 @@
 //! [`crate::markdown_render`]); aquí se dibujan los separadores verticales
 //! continuos y el filete bajo la cabecera, y el editor recoloca cada celda con
 //! los tags de relleno (`letter-spacing` sobre el `|` que precede a la celda).
+//! La fila donde está el cursor se revela: el editor deja su fuente crudo y el
+//! widget no dibuja la rejilla sobre ella, porque es la que se está editando.
 
 use gtk4::prelude::*;
 use gtk4::subclass::prelude::*;
@@ -236,6 +238,28 @@ mod imp {
         /// Segmentos verticales de una rejilla: el rango visible del bloque,
         /// partido por la línea del cursor (donde el fuente se ve crudo y la
         /// rejilla estorbaría).
+        fn grid_segments(&self, first: i32, last: i32, top: f32, bottom: f32) -> Vec<(f32, f32)> {
+            let cursor_line = {
+                let view = self.obj();
+                let buffer = view.buffer();
+                buffer.iter_at_offset(buffer.cursor_position()).line()
+            };
+            let segments = if (first..=last).contains(&cursor_line) {
+                match self.line_extent(cursor_line) {
+                    Some((y, height)) => {
+                        vec![(top, y.max(top)), ((y + height).min(bottom), bottom)]
+                    }
+                    None => vec![(top, bottom)],
+                }
+            } else {
+                vec![(top, bottom)]
+            };
+            segments
+                .into_iter()
+                .filter(|(y0, y1)| y1 - y0 > 0.5)
+                .collect()
+        }
+
         /// `(x_inicio, x_fin)` del contenido real de una tabla: la X del
         /// primer carácter de la fila menos sangrada y la X tras el último
         /// carácter de la fila más ancha. Como los pipes están encogidos,
@@ -457,10 +481,7 @@ mod imp {
                 let Some((bottom_y, bottom_h)) = self.line_extent(anchor_bottom) else {
                     continue;
                 };
-                let bottom = bottom_y + bottom_h;
-                if bottom - top <= 0.5 {
-                    continue;
-                }
+                let segments = self.grid_segments(first, last, top, bottom_y + bottom_h);
                 // Solo las fronteras interiores: los bordes exteriores los
                 // dibuja la caja del bloque.
                 let interior = &bounds[1..bounds.len().saturating_sub(1)];
@@ -469,13 +490,15 @@ mod imp {
                     if x < left || x > right {
                         continue;
                     }
-                    let bar = graphene::Rect::new(
-                        x - TABLE_GRID_THICKNESS / 2.0,
-                        top,
-                        TABLE_GRID_THICKNESS,
-                        (bottom - top).max(0.0),
-                    );
-                    snapshot.append_color(&palette.muted, &bar);
+                    for (y0, y1) in &segments {
+                        let bar = graphene::Rect::new(
+                            x - TABLE_GRID_THICKNESS / 2.0,
+                            *y0,
+                            TABLE_GRID_THICKNESS,
+                            (y1 - y0).max(0.0),
+                        );
+                        snapshot.append_color(&palette.muted, &bar);
+                    }
                 }
             }
         }
@@ -873,6 +896,15 @@ impl MarkdownView {
     /// calcula en celdas de carácter.
     pub fn cell_advance(&self) -> f32 {
         self.imp().cell_advance()
+    }
+
+    /// ¿Cae esta línea dentro de una tabla? El editor lo consulta para
+    /// re-decorar solo cuando el cursor entra, sale o cambia de fila dentro de
+    /// una tabla: es lo único del marcado que se revela en la línea del cursor.
+    pub fn line_in_table(&self, line: i32) -> bool {
+        self.imp().ornaments.borrow().iter().any(|o| {
+            matches!(o, Ornament::Table { first, last } if *first as i32 <= line && line <= *last as i32)
+        })
     }
 
     /// Tag de relleno de tabla para un avance en unidades Pango; el editor lo

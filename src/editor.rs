@@ -9,7 +9,7 @@ use std::rc::Rc;
 use std::time::Duration;
 
 use crate::markdown_render::{
-    analyze, ornaments_for, pad_units, Ornament, SpanKind, UnclosedFence, MAX_LIVE_BYTES,
+    analyze, ornaments_for, pad_units, Ornament, Span, SpanKind, UnclosedFence, MAX_LIVE_BYTES,
 };
 use crate::markdown_view::{MarkdownView, OrnamentPalette};
 use crate::settings::{gtk_hides_invisible_safely, FontFamily, MarkupVisibility};
@@ -469,6 +469,33 @@ fn decorate(
     let gate = gtk_hides_invisible_safely();
     let dim = config.markup == MarkupVisibility::Dim;
 
+    // En la línea del cursor el fuente se ve crudo: los adornos que sustituyen
+    // a una marca (los pipes de una tabla, su fila de guiones) quedan detrás de
+    // lo que el usuario está editando. Fuera de las tablas no se revela nada,
+    // que es la política que ya tenía la vista.
+    let (cursor_table, cursor_from, cursor_to) = {
+        let line = cursor_line as usize;
+        let in_table = analysis.ornaments.iter().any(
+            |o| matches!(o, Ornament::Table { first, last } if *first <= line && line <= *last),
+        );
+        if in_table {
+            let mut starts = vec![0usize];
+            for (i, b) in text.bytes().enumerate() {
+                if b == b'\n' {
+                    starts.push(i + 1);
+                }
+            }
+            let from = starts.get(line).copied().unwrap_or(text.len());
+            let to = starts.get(line + 1).copied().unwrap_or(text.len());
+            (true, from, to)
+        } else {
+            (false, 0, 0)
+        }
+    };
+    let revealed = |span: &Span| -> bool {
+        !dim && cursor_table && span.start >= cursor_from && span.end <= cursor_to
+    };
+
     for span in &analysis.spans {
         // Los rangos del parser deberían estar siempre dentro del texto, pero
         // un cambio en pulldown-cmark o en analyze no debe convertirse en un
@@ -479,6 +506,11 @@ fn decorate(
             _ => continue,
         };
         if from >= to {
+            continue;
+        }
+        if span.tag == "tablerule" && revealed(span) {
+            // La fila de guiones se está editando: sin encoger y sin filete,
+            // para que se vea el fuente.
             continue;
         }
         let start_iter = buffer.iter_at_offset(from);
@@ -498,7 +530,7 @@ fn decorate(
                 // Las marcas sustituidas por un adorno se encogen (nunca se
                 // ocultan sin la puerta): encoger no excluye texto del layout
                 // y por eso es seguro donde `invisible` no lo es.
-                if dim {
+                if dim || revealed(span) {
                     "syn_shown"
                 } else if gate {
                     "syn_hidden"
@@ -539,6 +571,9 @@ fn decorate(
                     continue;
                 }
                 let start_iter = buffer.iter_at_offset(from);
+                if start_iter.line() == cursor_line {
+                    continue;
+                }
                 let end_iter = buffer.iter_at_offset(to);
                 let name = view.pad_tag(units);
                 buffer.apply_tag_by_name(&name, &start_iter, &end_iter);
@@ -1110,6 +1145,9 @@ impl Editor {
 
         let last_line = self.last_line.clone();
         let decoration = self.decoration.clone();
+        let generation = self.generation.clone();
+        let base_dir = self.base_dir.clone();
+        let unclosed_fences = self.unclosed_fences.clone();
         let typewriter = self.typewriter.clone();
         let view = self.view.downgrade();
         self.buffer.connect_cursor_position_notify(move |buf| {
@@ -1125,7 +1163,28 @@ impl Editor {
             if last_line.get() == line {
                 return;
             }
+            let previous = last_line.get();
             last_line.set(line);
+            // La visibilidad del marcado ya no depende del cursor (solo el
+            // atenuado del modo foco lo sigue, y se re-aplica en el acto porque
+            // es barato). La excepción son las tablas: sin ver los `|` crudos
+            // no hay forma de editar sus filas, así que la fila del cursor se
+            // revela. Se re-decora solo al entrar, salir o cambiar de fila
+            // dentro de una tabla; fuera de ellas `decorate()` sigue siendo
+            // O(n) y no se toca.
+            if let Some(view) = view.upgrade() {
+                if view.line_in_table(line) || view.line_in_table(previous) {
+                    schedule_decoration(
+                        &view,
+                        buf,
+                        &decoration,
+                        &generation,
+                        &base_dir,
+                        &unclosed_fences,
+                        Duration::from_millis(45),
+                    );
+                }
+            }
             if decoration.get().focus_mode {
                 apply_focus_shade(buf, line);
             }
