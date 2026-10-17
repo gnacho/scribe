@@ -321,6 +321,32 @@ fn apply_theme(tags: &gtk4::TextTagTable, view: &MarkdownView, dark: bool) {
     }
 }
 
+/// Aplica el ancho de columna **fuera** del ciclo de validación del
+/// `GtkTextView`.
+///
+/// El aviso `page-size` que dispara el recolocado se emite desde dentro de
+/// `gtk_text_view_validate_onscreen` (`set_hadjustment_values`, llamado por
+/// `update_adjustments`). Cambiar ahí los márgenes invalida el layout, de modo
+/// que el `g_assert (priv->onscreen_validated)` que va justo después encuentra
+/// el flag en FALSE y aborta la aplicación (GTK >= 4.22.5, `gtktextview.c:4924`).
+/// Por eso el cambio se programa en un idle: cuando corre, la validación ya
+/// terminó y su invalidación solo pide otra, que es el camino previsto por GTK.
+fn apply_column_margins_deferred(view: &MarkdownView, tags: &gtk4::TextTagTable, margin: i32) {
+    if view.left_margin() == margin {
+        return;
+    }
+    let view = view.clone();
+    let tags = tags.clone();
+    glib::idle_add_local_once(move || {
+        if view.left_margin() == margin {
+            return;
+        }
+        view.set_left_margin(margin);
+        view.set_right_margin(margin);
+        set_column_margins(&tags, margin);
+    });
+}
+
 fn set_column_margins(tags: &gtk4::TextTagTable, base: i32) {
     for (name, left, right) in BLOCK_INDENTS {
         if let Some(tag) = tags.lookup(name) {
@@ -1066,11 +1092,7 @@ impl Editor {
                     return;
                 }
                 let margin = ((width - column_width.get()) / 2).max(MIN_MARGIN);
-                if view.left_margin() != margin {
-                    view.set_left_margin(margin);
-                    view.set_right_margin(margin);
-                    set_column_margins(&tags, margin);
-                }
+                apply_column_margins_deferred(&view, &tags, margin);
             });
         }
 
@@ -1442,9 +1464,7 @@ impl Editor {
         if let Some(hadj) = self.view.hadjustment() {
             let available = hadj.page_size() as i32;
             let margin = ((available - self.column_width.get()) / 2).max(MIN_MARGIN);
-            self.view.set_left_margin(margin);
-            self.view.set_right_margin(margin);
-            set_column_margins(&self.tags, margin);
+            apply_column_margins_deferred(&self.view, &self.tags, margin);
         }
     }
 
