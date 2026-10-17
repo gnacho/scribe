@@ -217,8 +217,12 @@ fn ciclo_de_vida_de_pestanas() {
         .title()
         .map(|t| t.to_string())
         .unwrap_or_default();
+    // El titulo del borrador pasa por gettext desde el issue #14: se compara
+    // con el mismo msgid que usa la ventana, para no depender de que el
+    // catalogo este instalado (aqui no lo esta: el dominio y el idioma solo los
+    // fija main).
     assert!(
-        title.contains("Sin título"),
+        title.contains(gettextrs::gettext("Untitled").as_str()),
         "la pestaña nueva es un borrador: {title}"
     );
 
