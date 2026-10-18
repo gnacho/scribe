@@ -9,7 +9,7 @@ use std::rc::Rc;
 use std::time::Duration;
 
 use crate::markdown_render::{
-    analyze, ornaments_for, Ornament, SpanKind, UnclosedFence, MAX_LIVE_BYTES,
+    analyze, ornaments_for, pad_units, Ornament, Span, SpanKind, UnclosedFence, MAX_LIVE_BYTES,
 };
 use crate::markdown_view::{MarkdownView, OrnamentPalette};
 use crate::settings::{gtk_hides_invisible_safely, FontFamily, MarkupVisibility};
@@ -181,6 +181,13 @@ fn build_tags() -> gtk4::TextTagTable {
         .family("monospace")
         .scale(0.9)
         .build());
+    // Código en línea dentro de una tabla: monoespaciado y a escala 1.0, para
+    // que todos los tramos de la fila avancen lo mismo. La rejilla de la
+    // tabla se calcula en celdas de carácter y una escala distinta la tuerce.
+    add(gtk4::TextTag::builder()
+        .name("tablecode")
+        .family("monospace")
+        .build());
     add(gtk4::TextTag::builder()
         .name("link")
         .underline(pango::Underline::Single)
@@ -267,6 +274,7 @@ fn apply_theme(tags: &gtk4::TextTagTable, view: &MarkdownView, dark: bool) {
     // y su barra se dibujan, que permite esquinas redondeadas y márgenes.
     if dark {
         set("code", Some("#f0a868"), None);
+        set("tablecode", Some("#f0a868"), None);
         set("codeblock", Some("#e4e4e4"), None);
         set("table", Some("#e0e0e0"), None);
         set("tablehead", Some("#e0e0e0"), None);
@@ -289,6 +297,7 @@ fn apply_theme(tags: &gtk4::TextTagTable, view: &MarkdownView, dark: bool) {
         });
     } else {
         set("code", Some("#a34a00"), None);
+        set("tablecode", Some("#a34a00"), None);
         set("codeblock", Some("#1f1f1f"), None);
         set("table", Some("#1f1f1f"), None);
         set("tablehead", Some("#1f1f1f"), None);
@@ -310,6 +319,32 @@ fn apply_theme(tags: &gtk4::TextTagTable, view: &MarkdownView, dark: bool) {
             on_accent: rgba(0xffffff, 1.0),
         });
     }
+}
+
+/// Aplica el ancho de columna **fuera** del ciclo de validación del
+/// `GtkTextView`.
+///
+/// El aviso `page-size` que dispara el recolocado se emite desde dentro de
+/// `gtk_text_view_validate_onscreen` (`set_hadjustment_values`, llamado por
+/// `update_adjustments`). Cambiar ahí los márgenes invalida el layout, de modo
+/// que el `g_assert (priv->onscreen_validated)` que va justo después encuentra
+/// el flag en FALSE y aborta la aplicación (GTK >= 4.22.5, `gtktextview.c:4924`).
+/// Por eso el cambio se programa en un idle: cuando corre, la validación ya
+/// terminó y su invalidación solo pide otra, que es el camino previsto por GTK.
+fn apply_column_margins_deferred(view: &MarkdownView, tags: &gtk4::TextTagTable, margin: i32) {
+    if view.left_margin() == margin {
+        return;
+    }
+    let view = view.clone();
+    let tags = tags.clone();
+    glib::idle_add_local_once(move || {
+        if view.left_margin() == margin {
+            return;
+        }
+        view.set_left_margin(margin);
+        view.set_right_margin(margin);
+        set_column_margins(&tags, margin);
+    });
 }
 
 fn set_column_margins(tags: &gtk4::TextTagTable, base: i32) {
@@ -460,6 +495,33 @@ fn decorate(
     let gate = gtk_hides_invisible_safely();
     let dim = config.markup == MarkupVisibility::Dim;
 
+    // En la línea del cursor el fuente se ve crudo: los adornos que sustituyen
+    // a una marca (los pipes de una tabla, su fila de guiones) quedan detrás de
+    // lo que el usuario está editando. Fuera de las tablas no se revela nada,
+    // que es la política que ya tenía la vista.
+    let (cursor_table, cursor_from, cursor_to) = {
+        let line = cursor_line as usize;
+        let in_table = analysis.ornaments.iter().any(
+            |o| matches!(o, Ornament::Table { first, last } if *first <= line && line <= *last),
+        );
+        if in_table {
+            let mut starts = vec![0usize];
+            for (i, b) in text.bytes().enumerate() {
+                if b == b'\n' {
+                    starts.push(i + 1);
+                }
+            }
+            let from = starts.get(line).copied().unwrap_or(text.len());
+            let to = starts.get(line + 1).copied().unwrap_or(text.len());
+            (true, from, to)
+        } else {
+            (false, 0, 0)
+        }
+    };
+    let revealed = |span: &Span| -> bool {
+        !dim && cursor_table && span.start >= cursor_from && span.end <= cursor_to
+    };
+
     for span in &analysis.spans {
         // Los rangos del parser deberían estar siempre dentro del texto, pero
         // un cambio en pulldown-cmark o en analyze no debe convertirse en un
@@ -470,6 +532,11 @@ fn decorate(
             _ => continue,
         };
         if from >= to {
+            continue;
+        }
+        if span.tag == "tablerule" && revealed(span) {
+            // La fila de guiones se está editando: sin encoger y sin filete,
+            // para que se vea el fuente.
             continue;
         }
         let start_iter = buffer.iter_at_offset(from);
@@ -489,7 +556,7 @@ fn decorate(
                 // Las marcas sustituidas por un adorno se encogen (nunca se
                 // ocultan sin la puerta): encoger no excluye texto del layout
                 // y por eso es seguro donde `invisible` no lo es.
-                if dim {
+                if dim || revealed(span) {
                     "syn_shown"
                 } else if gate {
                     "syn_hidden"
@@ -501,16 +568,55 @@ fn decorate(
         buffer.apply_tag_by_name(name, &start_iter, &end_iter);
     }
 
+    // Relleno de las celdas de tabla: `letter-spacing` sobre el `|` que
+    // precede a cada celda, para que su contenido caiga en la columna que marca
+    // la fila de guiones y no en la X que le deja el relleno del fuente. El
+    // avance de celda se mide del widget (Pango); GTK no expone el del tag.
+    let advance = view.cell_advance();
+    if advance > 0.0 {
+        for ornament in &analysis.ornaments {
+            let Ornament::TableGrid { pads, .. } = ornament else {
+                continue;
+            };
+            for pad in pads {
+                // El ancla que abre su línea (el `|` inicial de la celda 0)
+                // recibe la mitad del desplazamiento: `pad_units` lo compensa.
+                let opens_line =
+                    pad.offset == 0 || text.as_bytes().get(pad.offset - 1) == Some(&b'\n');
+                let units = pad_units(pad.cells, advance, opens_line);
+                if units <= 0 {
+                    continue;
+                }
+                let (Some(&from), Some(&to)) = (
+                    byte_to_char.get(pad.offset),
+                    byte_to_char.get(pad.offset + 1),
+                ) else {
+                    continue;
+                };
+                if from >= to {
+                    continue;
+                }
+                let start_iter = buffer.iter_at_offset(from);
+                if start_iter.line() == cursor_line {
+                    continue;
+                }
+                let end_iter = buffer.iter_at_offset(to);
+                let name = view.pad_tag(units);
+                buffer.apply_tag_by_name(&name, &start_iter, &end_iter);
+            }
+        }
+    }
+
     // Los adornos se filtran por familia según la preferencia (véase
     // `ornaments_for`): en «Atenuar» solo ambientales y aditivos; en los
     // modos WYSIWYG todos, con las marcas sustituidas encogidas u ocultas.
     let mut ornaments = ornaments_for(&analysis.ornaments, config.markup);
-    // Los adornos van por número de línea salvo `Break` y `CellSeparator`, que
-    // guardan byte offsets: el widget indexa por caracteres, así que convertimos.
+    // Los adornos van por número de línea salvo `Break`, que guarda un byte
+    // offset: el widget indexa por caracteres, así que lo convertimos.
     for o in &mut ornaments {
         let cap = byte_to_char.len().saturating_sub(1);
         match o {
-            Ornament::Break { offset } | Ornament::CellSeparator { offset } => {
+            Ornament::Break { offset } => {
                 let at = (*offset).min(cap);
                 *offset = byte_to_char[at] as usize;
             }
@@ -986,11 +1092,7 @@ impl Editor {
                     return;
                 }
                 let margin = ((width - column_width.get()) / 2).max(MIN_MARGIN);
-                if view.left_margin() != margin {
-                    view.set_left_margin(margin);
-                    view.set_right_margin(margin);
-                    set_column_margins(&tags, margin);
-                }
+                apply_column_margins_deferred(&view, &tags, margin);
             });
         }
 
@@ -1065,6 +1167,9 @@ impl Editor {
 
         let last_line = self.last_line.clone();
         let decoration = self.decoration.clone();
+        let generation = self.generation.clone();
+        let base_dir = self.base_dir.clone();
+        let unclosed_fences = self.unclosed_fences.clone();
         let typewriter = self.typewriter.clone();
         let view = self.view.downgrade();
         self.buffer.connect_cursor_position_notify(move |buf| {
@@ -1080,10 +1185,28 @@ impl Editor {
             if last_line.get() == line {
                 return;
             }
+            let previous = last_line.get();
             last_line.set(line);
-            // La visibilidad del marcado ya no depende del cursor: lo único
-            // que lo sigue es el atenuado del modo foco, que se re-aplica en
-            // el acto (barato) en vez de programar un decorate() O(n) entero.
+            // La visibilidad del marcado ya no depende del cursor (solo el
+            // atenuado del modo foco lo sigue, y se re-aplica en el acto porque
+            // es barato). La excepción son las tablas: sin ver los `|` crudos
+            // no hay forma de editar sus filas, así que la fila del cursor se
+            // revela. Se re-decora solo al entrar, salir o cambiar de fila
+            // dentro de una tabla; fuera de ellas `decorate()` sigue siendo
+            // O(n) y no se toca.
+            if let Some(view) = view.upgrade() {
+                if view.line_in_table(line) || view.line_in_table(previous) {
+                    schedule_decoration(
+                        &view,
+                        buf,
+                        &decoration,
+                        &generation,
+                        &base_dir,
+                        &unclosed_fences,
+                        Duration::from_millis(45),
+                    );
+                }
+            }
             if decoration.get().focus_mode {
                 apply_focus_shade(buf, line);
             }
@@ -1341,9 +1464,7 @@ impl Editor {
         if let Some(hadj) = self.view.hadjustment() {
             let available = hadj.page_size() as i32;
             let margin = ((available - self.column_width.get()) / 2).max(MIN_MARGIN);
-            self.view.set_left_margin(margin);
-            self.view.set_right_margin(margin);
-            set_column_margins(&self.tags, margin);
+            apply_column_margins_deferred(&self.view, &self.tags, margin);
         }
     }
 
