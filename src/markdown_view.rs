@@ -192,7 +192,7 @@ mod imp {
 
         /// `(x, y, alto)` de la primera línea de pantalla: `x` es el margen
         /// izquierdo del párrafo, que depende del tag y no del widget.
-        fn line_origin(&self, line: i32) -> Option<(f32, f32, f32)> {
+        pub(super) fn line_origin(&self, line: i32) -> Option<(f32, f32, f32)> {
             let view = self.obj();
             let iter = view.buffer().iter_at_line(line)?;
             let rect = view.iter_location(&iter);
@@ -418,7 +418,7 @@ mod imp {
         /// Los adornos van por numero de linea. Si el buffer ha cambiado desde
         /// que se calcularon, dibujarlos pondria cajas y vinetas en sitios
         /// equivocados; se salta el fotograma y ya llegara la decoracion nueva.
-        fn stale(&self) -> bool {
+        pub(super) fn stale(&self) -> bool {
             self.line_count.get() != self.obj().buffer().end_iter().line() + 1
         }
 
@@ -1371,6 +1371,75 @@ impl MarkdownView {
         let (bx, by) =
             self.window_to_buffer_coords(gtk4::TextWindowType::Widget, x as i32, y as i32);
         self.imp().youtube_card_at(bx as f64, by as f64)
+    }
+
+    /// Línea cuya casilla de tarea hay bajo un punto del widget (las
+    /// coordenadas de un gesto), con una zona de acierto algo generosa.
+    /// `None` si el punto no cae sobre ninguna casilla.
+    pub fn checkbox_at_position(&self, x: f64, y: f64) -> Option<i32> {
+        let (bx, by) =
+            self.window_to_buffer_coords(gtk4::TextWindowType::Widget, x as i32, y as i32);
+        let (bx, by) = (bx as f32, by as f32);
+        let imp = self.imp();
+        if imp.stale() {
+            return None;
+        }
+        // La caja de cada casilla se deduce de la geometría de su línea (la
+        // misma que usa el pintado): acierta el punto que caiga dentro, con
+        // un margen de golpe algo generoso.
+        let margen = 6.0;
+        let mut linea = None;
+        for ornamento in imp.ornaments.borrow().iter() {
+            let Ornament::Checkbox { line, .. } = ornamento else {
+                continue;
+            };
+            let line = *line as i32;
+            let Some((origin_x, origin_y, height)) = imp.line_origin(line) else {
+                continue;
+            };
+            let casilla_x = origin_x - CHECKBOX_OFFSET;
+            let casilla_y = origin_y + height / 2.0 - CHECKBOX_SIZE / 2.0;
+            if bx >= casilla_x - margen
+                && bx <= casilla_x + CHECKBOX_SIZE + margen
+                && by >= casilla_y - margen
+                && by <= casilla_y + CHECKBOX_SIZE + margen
+            {
+                linea = Some(line);
+                break;
+            }
+        }
+        linea
+    }
+
+    /// Alterna la casilla de tarea de una línea entre `[ ]` y `[x]` editando
+    /// el fuente. La re-decoración refresca el glifo.
+    pub fn toggle_checkbox(&self, line: i32) {
+        let buffer = self.buffer();
+        let Some(inicio) = buffer.iter_at_line(line) else {
+            return;
+        };
+        let mut fin = inicio.clone();
+        if !fin.forward_to_line_end() {
+            return;
+        }
+        let texto = inicio.slice(&fin);
+        let Some(corchete) = texto.find('[') else {
+            return;
+        };
+        if !texto[corchete + 1..].starts_with(|c: char| c == ' ' || c == 'x' || c == 'X') {
+            return;
+        }
+        // El corchete es un byte del texto de la línea; el iterador trabaja
+        // con offsets de carácter.
+        let pos = inicio.offset() + texto[..corchete].chars().count() as i32 + 1;
+        let mut interior = buffer.iter_at_offset(pos);
+        let nuevo = match interior.char() {
+            'x' | 'X' => ' ',
+            _ => 'x',
+        };
+        let mut fin_char = buffer.iter_at_offset(pos + 1);
+        buffer.delete(&mut interior, &mut fin_char);
+        buffer.insert(&mut interior, &nuevo.to_string());
     }
 
     /// Destino que hay que abrir al hacer clic en un punto: la tarjeta de vídeo
