@@ -1418,7 +1418,7 @@ impl MarkdownView {
         let Some(inicio) = buffer.iter_at_line(line) else {
             return;
         };
-        let mut fin = inicio.clone();
+        let mut fin = inicio;
         if !fin.forward_to_line_end() {
             return;
         }
@@ -1426,7 +1426,7 @@ impl MarkdownView {
         let Some(corchete) = texto.find('[') else {
             return;
         };
-        if !texto[corchete + 1..].starts_with(|c: char| c == ' ' || c == 'x' || c == 'X') {
+        if !texto[corchete + 1..].starts_with([' ', 'x', 'X']) {
             return;
         }
         // El corchete es un byte del texto de la línea; el iterador trabaja
