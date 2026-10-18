@@ -589,108 +589,184 @@ fn is_delimiter_row(line: &str) -> bool {
 /// `SHRUNK_CELLS` (véase `syn_shrink` en editor.rs).
 const SHRUNK_CELLS: f32 = 0.05;
 
-/// Quita las marcas de markdown inline de un texto de celda para pintarlo:
-/// `**negrita**`, `*cursiva*`, `` `código` ``, `~~tachado~~`, `[texto](url)`
-/// e `![alt](url)` dejan su texto, y `<br>` becomes un espacio. Lo que no
-/// reconoce se deja tal cual: mejor una marca suelta que perder texto.
-pub fn strip_inline_marks(texto: &str) -> String {
-    let mut out = String::with_capacity(texto.len());
+/// Partes el texto de una celda en tramos con estilo para pintarlo:
+/// `**negrita**` deja tramos en negrita; `*cursiva*`, `` `código` `` y
+/// `~~tachado~~` dejan su texto sin marca (de momento sin estilo propio);
+/// `[texto](url)` e `![alt](url)` dejan su texto; `<br>` es un espacio.
+/// Lo que no se reconoce se deja tal cual: mejor una marca suelta que perder
+/// texto. Los espacios viven al final de cada tramo: el envoltorio (`wrap_
+/// segments`) recompone la separación entre palabras al repartir líneas.
+pub fn parse_cell_segments(texto: &str) -> Vec<Run> {
+    let mut tramos: Vec<Run> = vec![Run::plain("")];
     let mut rest = texto;
     while !rest.is_empty() {
         let car = rest.chars().next().unwrap();
         let avance = car.len_utf8();
-        let tail = rest;
-        if tail.starts_with("**") || tail.starts_with("~~") {
-            let marca = &tail[..2];
-            if let Some(fin) = tail[2..].find(marca) {
-                out.push_str(&tail[2..2 + fin]);
-                rest = &tail[2 + fin + 2..];
-                continue;
+        let mut consumido = false;
+        if rest.starts_with("**") {
+            if let Some(fin) = rest[2..].find("**") {
+                let palabras: Vec<&str> = rest[2..2 + fin].split_whitespace().collect();
+                if !palabras.is_empty() {
+                    let sep = if tramos.last().is_some_and(|t| !t.text.is_empty()) {
+                        " "
+                    } else {
+                        ""
+                    };
+                    tramos.push(Run {
+                        text: format!("{sep}{}", palabras.join(" ")),
+                        bold: true,
+                    });
+                }
+                rest = &rest[2 + fin + 2..];
+                consumido = true;
+                // El texto suelto posterior no hereda la negrita: se abre un
+                // tramo plano (si queda vacio, el retain final lo suelta).
+                tramos.push(Run::plain(""));
             }
-        }
-        if tail.starts_with('*') || tail.starts_with('`') {
-            let marca = &tail[..1];
-            if let Some(fin) = tail[1..].find(marca) {
-                out.push_str(&tail[1..1 + fin]);
-                rest = &tail[1 + fin + 1..];
-                continue;
+        } else if rest.starts_with("~~") || rest.starts_with('*') || rest.starts_with('`') {
+            let marca = if rest.starts_with("~~") { 2 } else { 1 };
+            if let Some(fin) = rest[marca..].find(&rest[..marca]) {
+                empuja_texto(&mut tramos, &rest[marca..marca + fin]);
+                rest = &rest[marca + fin + marca..];
+                consumido = true;
             }
-        }
-        if tail.starts_with("![") || tail.starts_with('[') {
-            let abre = if tail.starts_with("![") { 2 } else { 1 };
-            if let Some(cierre) = tail[abre..].find(']').map(|p| p + abre) {
-                out.push_str(&tail[abre..cierre]);
-                let mut resto = &tail[cierre + 1..];
-                // Saltar el destino entre paréntesis, si lo hay.
+        } else if rest.starts_with("![") || rest.starts_with('[') {
+            let abre = if rest.starts_with("![") { 2 } else { 1 };
+            if let Some(cierre) = rest[abre..].find(']').map(|p| p + abre) {
+                empuja_texto(&mut tramos, &rest[abre..cierre]);
+                let mut resto = &rest[cierre + 1..];
                 if resto.starts_with('(') {
                     if let Some(fin) = resto.find(')') {
                         resto = &resto[fin + 1..];
                     }
                 }
                 rest = resto;
-                continue;
+                consumido = true;
             }
+        } else if rest.starts_with("<br") {
+            empuja_espacio(&mut tramos);
+            rest = &rest[rest.find('>').map(|g| g + 1).unwrap_or(3)..];
+            consumido = true;
         }
-        if tail.starts_with("<br") {
-            out.push(' ');
-            rest = &tail[tail.find('>').map(|g| g + 1).unwrap_or(3)..];
-            continue;
+        if !consumido {
+            if car.is_whitespace() {
+                empuja_espacio(&mut tramos);
+            } else {
+                tramos.last_mut().unwrap().text.push(car);
+            }
+            rest = &rest[avance..];
         }
-        out.push(car);
-        rest = &tail[avance..];
     }
-    out.split_whitespace().collect::<Vec<_>>().join(" ")
+    tramos.retain(|t| !t.text.is_empty());
+    tramos
 }
 
-/// Layout de un lienzo de tabla: anchos de columna en celdas (los pesos del
-/// delimitador normalizados al ancho disponible), y por fila el texto de cada
-/// celda ya envuelto en líneas junto con su número de líneas. Pura: el editor
-/// la usa para los huecos de las filas colapsadas y la vista para pintar, con
-/// las mismas entradas, así ambas coinciden al carácter.
+/// Añade un espacio al final del último tramo. El envoltorio parte por
+/// palabras, así que los espacios dobles no llegan a verse.
+fn empuja_espacio(tramos: &mut [Run]) {
+    let ultimo = tramos.last_mut().unwrap();
+    // El envoltorio parte por palabras (los espacios dobles no se ven), pero
+    // se colapsan aqui mismo para que el texto plano de los tests y de la
+    // vista no arrastre ristras de espacios del fuente.
+    if !ultimo.text.ends_with(' ') {
+        ultimo.text.push(' ');
+    }
+}
+
+/// Añade texto al final del último tramo, separado con un espacio si pinta
+/// algo.
+fn empuja_texto(tramos: &mut [Run], texto: &str) {
+    let palabras: Vec<&str> = texto.split_whitespace().collect();
+    if palabras.is_empty() {
+        return;
+    }
+    let ultimo = tramos.last_mut().unwrap();
+    let sep = if ultimo.text.is_empty() || ultimo.text.ends_with(' ') {
+        ""
+    } else {
+        " "
+    };
+    ultimo.text.push_str(sep);
+    ultimo.text.push_str(&palabras.join(" "));
+}
+
+/// Layout de un lienzo de tabla:/// Layout de un lienzo de tabla: anchos de columna en celdas (los pesos del
+/// delimitador y el contenido normalizados al ancho disponible), y por fila
+/// las celdas envueltas en líneas de tramos junto con su número de líneas.
+/// Pura: el editor la usa para los huecos de las filas colapsadas y la vista
+/// para pintar, con las mismas entradas, así ambas coinciden al carácter.
 #[derive(Debug, Clone, PartialEq)]
 pub struct CanvasLayout {
     /// Ancho de cada columna, en celdas.
     pub col_widths: Vec<f32>,
-    /// Por fila: por celda: líneas de texto envueltas.
-    pub cells: Vec<Vec<Vec<String>>>,
+    /// Por fila: por celda: líneas, cada una partida en tramos con estilo.
+    pub cells: Vec<Vec<Vec<Vec<Run>>>>,
     /// Por fila: líneas que ocupa (el máximo entre sus celdas).
     pub row_lines: Vec<usize>,
 }
 
-/// Envuelve `texto` en líneas de como mucho `ancho` celdas, sin partir
-/// palabras. Una palabra más larga que el ancho se corta: mejor cortar que
-/// desbordar la columna.
-pub fn wrap_cells(texto: &str, ancho: usize) -> Vec<String> {
+/// Envuelve los tramos de una celda en líneas de como mucho `ancho` celdas,
+/// sin partir palabras. Una palabra más larga que el ancho se corta: mejor
+/// cortar que desbordar la columna.
+pub fn wrap_segments(tramos: &[Run], ancho: usize) -> Vec<Vec<Run>> {
     let ancho = ancho.max(1);
-    let mut lineas = Vec::new();
-    let mut actual = String::new();
-    for palabra in texto.split_whitespace() {
+    // Palabras con estilo: (texto, negrita).
+    let mut palabras: Vec<(String, bool)> = Vec::new();
+    for tramo in tramos {
+        for palabra in tramo.text.split_whitespace() {
+            palabras.push((palabra.to_string(), tramo.bold));
+        }
+    }
+    let mut lineas: Vec<Vec<Run>> = Vec::new();
+    let mut actual: Vec<Run> = Vec::new();
+    let mut usadas = 0usize;
+    for (palabra, bold) in palabras {
         let largo = palabra.chars().count();
-        let usadas = actual.chars().count();
+        if largo > ancho {
+            // Palabra imposible: cerrar la linea actual y partirla dura.
+            if !actual.is_empty() {
+                lineas.push(std::mem::take(&mut actual));
+                usadas = 0;
+            }
+            let mut texto = palabra;
+            while texto.chars().count() > ancho {
+                let corte = texto
+                    .chars()
+                    .take(ancho)
+                    .map(|c| c.len_utf8())
+                    .sum::<usize>();
+                actual.push(Run {
+                    text: texto[..corte].to_string(),
+                    bold,
+                });
+                lineas.push(std::mem::take(&mut actual));
+                texto = texto[corte..].to_string();
+            }
+            if !texto.is_empty() {
+                actual.push(Run { text: texto, bold });
+                usadas = ancho + 1; // fuerza salto antes de la siguiente palabra
+            }
+            continue;
+        }
         if usadas > 0 && usadas + 1 + largo > ancho {
             lineas.push(std::mem::take(&mut actual));
+            usadas = 0;
         }
-        if largo > ancho {
-            // Palabra imposible: partirla dura.
-            let mut resto = palabra;
-            while !resto.is_empty() {
-                let mut fin = resto.len();
-                for (n, (i, ch)) in resto.char_indices().enumerate() {
-                    if n >= ancho {
-                        fin = i;
-                        break;
-                    }
-                    fin = i + ch.len_utf8();
-                }
-                lineas.push(resto[..fin].to_string());
-                resto = &resto[fin..];
+        let sep = if usadas > 0 { " " } else { "" };
+        let largo_run = sep.chars().count() + largo;
+        match actual.last_mut() {
+            Some(ultimo) if ultimo.bold == bold => {
+                ultimo.text.push_str(sep);
+                ultimo.text.push_str(&palabra);
             }
-        } else {
-            if !actual.is_empty() {
-                actual.push(' ');
+            _ => {
+                actual.push(Run {
+                    text: format!("{sep}{palabra}"),
+                    bold,
+                });
             }
-            actual.push_str(palabra);
         }
+        usadas += largo_run;
     }
     if !actual.is_empty() {
         lineas.push(actual);
@@ -708,31 +784,15 @@ pub fn canvas_layout(
     if rows.is_empty() || columns.is_empty() {
         return None;
     }
-    // Pesos: el mayor entre el ancho del delimitador y el ancho de la celda
+    // Pesos: el mayor entre el ancho del delimitador y el largo de la celda
     // más larga de la columna (con tope, para que una celda gigante no se coma
     // la tabla). Se normalizan al ancho disponible en celdas.
     let mut pesos: Vec<f32> = columns.iter().map(|(_, w)| (*w).max(3) as f32).collect();
     for row in rows {
         for (i, celda) in row.cells.iter().enumerate() {
             if let Some(p) = pesos.get_mut(i) {
-                let largo = celda.chars().count() as f32;
+                let largo = celda.iter().map(|t| t.text.chars().count()).sum::<usize>() as f32;
                 *p = p.max(largo.min(48.0));
-            }
-        }
-    }
-    // Suelo por columna: su palabra más larga más el padding de celda (2 ×
-    // CANVAS_CELL_PAD ≈ 4 celdas), para que ninguna palabra se parta por
-    // estrecha que quede la columna tras normalizar.
-    let mut suelos = vec![6.0f32; columns.len()];
-    for row in rows {
-        for (i, celda) in row.cells.iter().enumerate() {
-            if let Some(s) = suelos.get_mut(i) {
-                let palabra = celda
-                    .split_whitespace()
-                    .map(|w| w.chars().count())
-                    .max()
-                    .unwrap_or(0) as f32;
-                *s = (*s).max(palabra + 4.0);
             }
         }
     }
@@ -751,9 +811,23 @@ pub fn canvas_layout(
     // CANVAS_CELL_PAD ≈ 4 celdas), para que ninguna palabra se parta por
     // estrecha que quede la columna tras normalizar. Si los suelos desbordan
     // el ancho disponible, reparto proporcional a los suelos.
+    let mut suelos = vec![6.0f32; columns.len()];
+    for row in rows {
+        for (i, celda) in row.cells.iter().enumerate() {
+            if let Some(s) = suelos.get_mut(i) {
+                let palabra = celda
+                    .iter()
+                    .flat_map(|t| t.text.split_whitespace())
+                    .map(|w| w.chars().count())
+                    .max()
+                    .unwrap_or(0) as f32;
+                *s = (*s).max(palabra + 4.0);
+            }
+        }
+    }
     for (i, suelo) in suelos.iter().enumerate() {
         if let Some(w) = col_widths.get_mut(i) {
-            *w = w.max(*suelo);
+            *w = (*w).max(*suelo);
         }
     }
     let suma: f32 = col_widths.iter().sum();
@@ -772,7 +846,7 @@ pub fn canvas_layout(
         let mut alto = 1usize;
         for (i, celda) in row.cells.iter().enumerate() {
             let ancho = col_widths.get(i).copied().unwrap_or(8.0) as usize;
-            let lineas = wrap_cells(celda, ancho);
+            let lineas = wrap_segments(celda, ancho);
             alto = alto.max(lineas.len());
             fila.push(lineas);
         }
@@ -787,6 +861,7 @@ pub fn canvas_layout(
 }
 
 /// Geometría de una columna, en celdas de carácter desde el inicio de la fila
+/// delimitadora./// Geometría de una columna, en celdas de carácter desde el inicio de la fila
 /// delimitadora.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct ColumnGeom {
@@ -799,13 +874,31 @@ struct ColumnGeom {
     align: Align,
 }
 
-/// Fila de un lienzo de tabla pintado: la línea fuente que la origina y el
-/// texto plano de cada celda (marcas inline quitadas, espacios colapsados).
+/// Tramo de texto de una celda pintada, con su estilo. El texto ya viene sin
+/// marcas; `bold` marca los tramos que iban entre `**`.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Run {
+    pub text: String,
+    pub bold: bool,
+}
+
+impl Run {
+    pub fn plain(texto: &str) -> Self {
+        Self {
+            text: texto.to_string(),
+            bold: false,
+        }
+    }
+}
+
+/// Fila de un lienzo de tabla pintado: la línea fuente que la origina y las
+/// celdas de cada una, partidas en tramos con estilo (marcas inline ya
+/// aplicadas, espacios colapsados).
 #[derive(Debug, Clone, PartialEq)]
 pub struct CanvasRow {
     pub line: usize,
     pub header: bool,
-    pub cells: Vec<String>,
+    pub cells: Vec<Vec<Run>>,
 }
 
 /// Celda de una fila de tabla, con el ancla de su relleno.
@@ -1061,7 +1154,7 @@ impl TablePlan {
                 cells: cells
                     .iter()
                     .map(|cell| {
-                        strip_inline_marks(&text[row_start + cell.start..row_start + cell.end])
+                        parse_cell_segments(&text[row_start + cell.start..row_start + cell.end])
                     })
                     .collect(),
             })
@@ -2665,42 +2758,69 @@ mod tests {
         assert_eq!(columns.len(), 2, "dos columnas");
         assert_eq!(rows.len(), 2, "cabecera y una fila de contenido");
         assert!(rows[0].header, "la primera fila es la cabecera");
-        assert_eq!(rows[0].cells, vec!["Informe", "Archivo"]);
+        let texto = |celda: &[Run]| {
+            celda
+                .iter()
+                .map(|t| t.text.as_str())
+                .collect::<Vec<_>>()
+                .join("")
+        };
+        assert_eq!(texto(&rows[0].cells[0]), "Informe");
+        assert_eq!(texto(&rows[0].cells[1]), "Archivo");
         assert!(!rows[1].header);
-        assert_eq!(rows[1].cells[0], "Nutri (Test)", "marca ** quitada");
-        assert_eq!(rows[1].cells[1], "G000952966_Nutri.pdf");
+        assert_eq!(texto(&rows[1].cells[0]), "Nutri (Test)", "marca ** quitada");
+        // Y la negrita del fuente se conserva como estilo del tramo.
+        assert!(
+            rows[1].cells[0].iter().any(|t| t.bold && t.text == "Nutri"),
+            "el tramo **Nutri** pinta en negrita"
+        );
+        assert_eq!(texto(&rows[1].cells[1]), "G000952966_Nutri.pdf");
     }
 
     #[test]
-    fn strip_marcas_deja_el_texto_y_los_enlaces() {
-        assert_eq!(
-            strip_inline_marks("**Dieta** y *peso* con `código` y ~~nada~~"),
-            "Dieta y peso con código y nada"
+    fn parse_marcas_deja_el_texto_y_marca_la_negrita() {
+        let plano = |tramos: &[Run]| {
+            tramos
+                .iter()
+                .map(|t| t.text.as_str())
+                .collect::<Vec<_>>()
+                .join("")
+        };
+        let tramos = parse_cell_segments("**Dieta** y *peso* con `código` y ~~nada~~");
+        assert_eq!(plano(&tramos), "Dieta y peso con código y nada");
+        assert!(
+            tramos.iter().any(|t| t.bold && t.text == "Dieta"),
+            "**Dieta** es tramo en negrita"
         );
-        assert_eq!(
-            strip_inline_marks("[enlace](https://ejemplo.com) e ![alt](img.png)"),
-            "enlace e alt"
+        assert!(
+            tramos.iter().all(|t| t.text != "peso" || !t.bold),
+            "*peso* se pinta sin negrita (de momento sin cursiva)"
         );
-        assert_eq!(
-            strip_inline_marks("texto <br> con   muchos   espacios"),
-            "texto con muchos espacios"
-        );
+        let tramos = parse_cell_segments("[enlace](https://ejemplo.com) e ![alt](img.png)");
+        assert_eq!(plano(&tramos), "enlace e alt");
+        let tramos = parse_cell_segments("texto <br> con   muchos   espacios");
+        let texto = plano(&tramos);
+        eprintln!("DEBUG plano: {texto:?}");
+        assert_eq!(texto, "texto con muchos espacios");
     }
 
     #[test]
     fn lienzo_normaliza_pesos_y_envuelve_por_palabras() {
-        use super::{canvas_layout, wrap_cells, Align, CanvasRow};
+        use super::{canvas_layout, wrap_segments, Align, CanvasRow, Run};
         let columns = vec![(Align::Left, 3), (Align::Right, 6)];
         let rows = vec![
             CanvasRow {
                 line: 0,
                 header: true,
-                cells: vec!["Día".into(), "Tarea".into()],
+                cells: vec![vec![Run::plain("Día")], vec![Run::plain("Tarea")]],
             },
             CanvasRow {
                 line: 1,
                 header: false,
-                cells: vec!["Lunes".into(), "redactar el informe completo".into()],
+                cells: vec![
+                    vec![Run::plain("Lunes")],
+                    vec![Run::plain("redactar el informe completo")],
+                ],
             },
         ];
         let layout = canvas_layout(&columns, &rows, 20.0).expect("layout");
@@ -2724,9 +2844,34 @@ mod tests {
         assert_eq!(layout.row_lines, vec![1, 3]);
         assert_eq!(layout.cells[1][1].len(), 3);
         // Envoltura simple: no parte palabras.
-        assert_eq!(wrap_cells("aa bb cc", 5), vec!["aa bb", "cc"]);
+        let lineas = wrap_segments(&[Run::plain("aa bb cc")], 5);
+        let texto = |l: &[Run]| {
+            l.iter()
+                .map(|t| t.text.as_str())
+                .collect::<Vec<_>>()
+                .join(" ")
+        };
+        assert_eq!(texto(&lineas[0]), "aa bb");
+        assert_eq!(texto(&lineas[1]), "cc");
         // Palabra imposible: la parte sin desbordar.
-        assert_eq!(wrap_cells("abcdefgh", 3), vec!["abc", "def", "gh"]);
+        let lineas = wrap_segments(&[Run::plain("abcdefgh")], 3);
+        let texto = |l: &[Vec<Run>]| {
+            l.iter()
+                .map(|l2| l2.iter().map(|t| t.text.as_str()).collect::<String>())
+                .collect::<Vec<_>>()
+                .join("|")
+        };
+        assert_eq!(texto(&lineas), "abc|def|gh");
+        assert_eq!(lineas.len(), 3);
+        // La negrita sobrevive a la envoltura.
+        let lineas = wrap_segments(
+            &[Run {
+                text: "aa bb".into(),
+                bold: true,
+            }],
+            3,
+        );
+        assert!(lineas[0].iter().all(|t| t.bold));
     }
 
     #[test]

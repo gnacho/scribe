@@ -929,28 +929,40 @@ mod imp {
                     if row.line as i32 == cursor_line {
                         continue;
                     }
-                    // El mismo alto (con el mismo redondeo) que el editor
-                    // reservó con `pixels_below_lines`: la pintura va dentro
-                    // del hueco, no debajo de la línea.
-                    let fila_px =
-                        (layout.row_lines[ri] as f32 * line_height + 2.0 * CANVAS_ROW_PAD).ceil();
+                    // La fila pinta su caja de línea completa (el editor
+                    // reservó el hueco dentro de ella): sombreado continuo sin
+                    // franjas blancas entre filas.
                     if row.line as i32 + 1 < first_visible || row.line as i32 > last_visible + 1 {
                         continue;
                     }
-                    let Some((line_y, line_h)) = self.line_extent(row.line as i32) else {
+                    let Some((top, alto)) = self.line_extent(row.line as i32) else {
                         continue;
                     };
-                    let top = line_y + line_h - fila_px;
                     let stroke = gsk::Stroke::new(1.0);
-                    // Sombreado de la fila, a todo el ancho del lienzo.
+                    // Sombreado de la fila a todo el ancho del lienzo, con
+                    // velo gris en las filas alternas (zebra).
                     let fondo = gsk::PathBuilder::new();
                     fondo.add_rect(&graphene::Rect::new(
                         xs[0],
                         top,
                         xs.last().unwrap() - xs[0],
-                        fila_px,
+                        alto,
                     ));
                     snapshot.append_fill(&fondo.to_path(), gsk::FillRule::Winding, &palette.table);
+                    if ri % 2 == 1 {
+                        let velo = gsk::PathBuilder::new();
+                        velo.add_rect(&graphene::Rect::new(
+                            xs[0],
+                            top,
+                            xs.last().unwrap() - xs[0],
+                            alto,
+                        ));
+                        snapshot.append_fill(
+                            &velo.to_path(),
+                            gsk::FillRule::Winding,
+                            &gdk::RGBA::new(0.5, 0.5, 0.5, 0.07),
+                        );
+                    }
                     if ri == 0 {
                         // Borde superior: sobre la cabecera.
                         let borde = gsk::PathBuilder::new();
@@ -960,46 +972,67 @@ mod imp {
                     }
                     let base = top + CANVAS_ROW_PAD;
                     // Celdas: línea a línea, con la alineación de su columna.
+                    // La cabecera se centra (como en las tablas HTML); el resto
+                    // usa la alineación de su columna. Los tramos en negrita
+                    // (****) del fuente pintan con peso bold.
                     for (ci, cell_lines) in layout.cells[ri].iter().enumerate() {
                         let col_w = layout.col_widths[ci] * advance;
                         let disponible = col_w - 2.0 * CANVAS_CELL_PAD;
-                        for (li, texto) in cell_lines.iter().enumerate() {
-                            let pango = view.create_pango_layout(Some(texto));
-                            if let Some(desc) = view.pango_context().font_description() {
-                                let mut mono =
-                                    gtk4::pango::FontDescription::from_string(&desc.to_string());
-                                mono.set_family("monospace");
-                                if row.header {
-                                    mono.set_weight(gtk4::pango::Weight::Bold);
+                        let centrar = row.header;
+                        for (li, lineas) in cell_lines.iter().enumerate() {
+                            let mut ancho_linea = 0.0f32;
+                            let mut layouts: Vec<(gtk4::pango::Layout, f32, bool)> = Vec::new();
+                            for tramo in lineas {
+                                let pango = view.create_pango_layout(Some(&tramo.text));
+                                if let Some(desc) = view.pango_context().font_description() {
+                                    let mut mono = gtk4::pango::FontDescription::from_string(
+                                        &desc.to_string(),
+                                    );
+                                    mono.set_family("monospace");
+                                    if row.header || tramo.bold {
+                                        mono.set_weight(gtk4::pango::Weight::Bold);
+                                    }
+                                    pango.set_font_description(Some(&mono));
                                 }
-                                pango.set_font_description(Some(&mono));
+                                let (lw, _) = pango.pixel_size();
+                                layouts.push((pango, lw as f32, tramo.bold));
+                                ancho_linea += lw as f32;
                             }
-                            let (lw, _) = pango.pixel_size();
-                            let dx = match columns.get(ci).map(|(a, _)| a).copied() {
-                                Some(Align::Right) => (disponible - lw as f32).max(0.0),
-                                Some(Align::Center) => ((disponible - lw as f32) / 2.0).max(0.0),
-                                _ => 0.0,
+                            let dx = if centrar {
+                                ((disponible - ancho_linea) / 2.0).max(0.0)
+                            } else {
+                                match columns.get(ci).map(|(a, _)| a).copied() {
+                                    Some(Align::Right) => (disponible - ancho_linea).max(0.0),
+                                    Some(Align::Center) => {
+                                        ((disponible - ancho_linea) / 2.0).max(0.0)
+                                    }
+                                    _ => 0.0,
+                                }
                             };
-                            snapshot.save();
-                            snapshot.translate(&graphene::Point::new(
-                                xs[ci] + CANVAS_CELL_PAD + dx,
-                                base + li as f32 * line_height,
-                            ));
-                            snapshot.append_layout(&pango, &view.color());
-                            snapshot.restore();
+                            let mut x = xs[ci] + CANVAS_CELL_PAD + dx;
+                            for (pango, lw, _bold) in layouts {
+                                snapshot.save();
+                                snapshot.translate(&graphene::Point::new(
+                                    x,
+                                    base + li as f32 * line_height,
+                                ));
+                                snapshot.append_layout(&pango, &view.color());
+                                snapshot.restore();
+                                x += lw;
+                            }
                         }
                     }
                     // Filete bajo la cabecera y separadores de fila.
                     let rule = gsk::PathBuilder::new();
-                    rule.move_to(xs[0], top + fila_px);
-                    rule.line_to(*xs.last().unwrap(), top + fila_px);
+                    rule.move_to(xs[0], top + alto);
+                    rule.line_to(*xs.last().unwrap(), top + alto);
                     snapshot.append_stroke(&rule.to_path(), &stroke, &palette.muted);
                     // Fronteras verticales: se alargan un píxel arriba y abajo
                     // para coserse con la fila vecina.
                     for fx in &xs {
                         let linea = gsk::PathBuilder::new();
                         linea.move_to(*fx, top - 1.0);
-                        linea.line_to(*fx, top + fila_px + 1.0);
+                        linea.line_to(*fx, top + alto + 1.0);
                         snapshot.append_stroke(&linea.to_path(), &stroke, &palette.muted);
                     }
                 }
