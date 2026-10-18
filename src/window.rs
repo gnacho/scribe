@@ -726,83 +726,9 @@ impl ScribeWindow {
         let popover = gtk4::PopoverMenu::from_model(Some(&menu));
         menu_button.set_popover(Some(&popover));
 
-        // ============================ BARRA DE ESTADO ==========================
-        let words_label = gtk4::Label::builder()
-            .css_classes(vec!["caption".to_string(), "dim-label".to_string()])
-            .build();
-
-        // Aviso de vallas de código sin cerrar: aparece cuando el documento
-        // activo tiene alguna y al pulsarlo se cierran con la heurística.
-        let fence_warning = gtk4::Button::builder()
-            .css_classes(vec![
-                "caption".to_string(),
-                "flat".to_string(),
-                "error".to_string(),
-            ])
-            .action_name("win.close-fences")
-            .visible(false)
-            .tooltip_text(gettext("Close the unterminated code fences"))
-            .build();
-        let goto_spin = gtk4::SpinButton::with_range(1.0, 1.0, 1.0);
-        goto_spin.set_numeric(true);
-        let goto_button = gtk4::Button::builder()
-            .label(gettext("_Go"))
-            .use_underline(true)
-            .css_classes(vec!["suggested-action".to_string()])
-            .build();
-        let goto_box = gtk4::Box::builder()
-            .orientation(gtk4::Orientation::Horizontal)
-            .spacing(6)
-            .margin_top(10)
-            .margin_bottom(10)
-            .margin_start(10)
-            .margin_end(10)
-            .build();
-        goto_box.append(&gtk4::Label::new(Some(&gettext("Line"))));
-        goto_box.append(&goto_spin);
-        goto_box.append(&goto_button);
-        let goto_popover = gtk4::Popover::builder().child(&goto_box).build();
-
-        let position_button = gtk4::MenuButton::builder()
-            .label("Ln 1, Col 1")
-            .tooltip_text(gettext("Go to line"))
-            .css_classes(vec!["flat".to_string()])
-            .popover(&goto_popover)
-            .build();
-
-        let props_label = gtk4::Label::builder()
-            .halign(gtk4::Align::Start)
-            .margin_top(12)
-            .margin_bottom(12)
-            .margin_start(12)
-            .margin_end(12)
-            .build();
-        let props_button = gtk4::MenuButton::builder()
-            .label("Markdown")
-            .tooltip_text(gettext("Document properties"))
-            .css_classes(vec!["flat".to_string()])
-            .popover(&gtk4::Popover::builder().child(&props_label).build())
-            .build();
-
-        let status_end = gtk4::Box::new(gtk4::Orientation::Horizontal, 0);
-        status_end.append(&position_button);
-        status_end.append(&props_button);
-
-        let status_bar = gtk4::CenterBox::builder()
-            .css_classes(vec!["toolbar".to_string()])
-            .margin_start(12)
-            .margin_end(6)
-            .build();
-        let status_start = gtk4::Box::new(gtk4::Orientation::Horizontal, 8);
-        status_start.append(&words_label);
-        status_start.append(&fence_warning);
-        status_bar.set_start_widget(Some(&status_start));
-        status_bar.set_end_widget(Some(&status_end));
-
         let toolbar_view = adw::ToolbarView::new();
         toolbar_view.add_top_bar(&header);
         toolbar_view.add_top_bar(&tab_bar);
-        toolbar_view.add_bottom_bar(&status_bar);
         toolbar_view.set_content(Some(&paned));
 
         let toasts = adw::ToastOverlay::new();
@@ -836,7 +762,7 @@ impl ScribeWindow {
         // ventana y en fuerte sería un ciclo (R3).
         let active_document: Rc<dyn Fn() -> Option<Rc<Document>>> = {
             let documents = Rc::downgrade(&documents);
-            // Debil: update_status/update_counts lo capturan y estan
+            // Debil: los refrescos de la pestaña activa lo capturan y están
             // registrados en el propio TabView y en los buffers (R3).
             let tab_view = tab_view.downgrade();
             Rc::new(move || {
@@ -1022,75 +948,6 @@ impl ScribeWindow {
             })
         };
 
-        // Lo barato (posición del cursor) se actualiza en cada evento; los
-        // contadores de palabras/caracteres son O(n) y se calculan dentro del
-        // timeout ya debounced de connect_changed, reutilizando la copia del
-        // texto que se hace para la vista previa y el índice.
-        let update_counts: Rc<dyn Fn(&str)> = {
-            let active_document = active_document.clone();
-            let words_label = words_label.clone();
-            let props_label = props_label.clone();
-            Rc::new(move |text: &str| {
-                let Some(doc) = active_document() else {
-                    return;
-                };
-                let words = text.split_whitespace().count();
-                let chars = text.chars().count();
-                let lines = doc.editor.line_count();
-                words_label
-                    .set_label(&gettext("{words} words").replace("{words}", &words.to_string()));
-                let minutes = (words as f64 / 200.0).ceil().max(1.0) as usize;
-                props_label.set_label(
-                    &gettext("Words: {words}\nCharacters: {chars}\nLines: {lines}\nReading time: ~{minutes} min")
-                        .replace("{words}", &words.to_string())
-                        .replace("{chars}", &chars.to_string())
-                        .replace("{lines}", &lines.to_string())
-                        .replace("{minutes}", &minutes.to_string()),
-                );
-            })
-        };
-
-        let update_status: Rc<dyn Fn()> = {
-            let active_document = active_document.clone();
-            let position_button = position_button.clone();
-            let goto_spin = goto_spin.clone();
-            let goto_popover = goto_popover.clone();
-            let fence_warning = fence_warning.clone();
-            Rc::new(move || {
-                let Some(doc) = active_document() else {
-                    return;
-                };
-                let lines = doc.editor.line_count();
-                let (line, column) = doc.editor.cursor_position();
-                position_button.set_label(&format!("Ln {line}, Col {column}"));
-                // Aviso de vallas de código sin cerrar (issue #11): solo se
-                // muestra si el documento activo tiene alguna.
-                let fences = doc.editor.unclosed_fences();
-                if fences.is_empty() {
-                    fence_warning.set_visible(false);
-                } else {
-                    let first = fences[0].line;
-                    let extra = if fences.len() > 1 {
-                        format!(" (+{})", fences.len() - 1)
-                    } else {
-                        String::new()
-                    };
-                    fence_warning.set_label(
-                        &gettext("Unclosed fence (line {first}){extra}")
-                            .replace("{first}", &first.to_string())
-                            .replace("{extra}", &extra),
-                    );
-                    fence_warning.set_visible(true);
-                }
-                // Con el popover «Ir a la línea» abierto el spin es del
-                // usuario: no pisar lo que está escribiendo.
-                if !goto_popover.is_visible() {
-                    goto_spin.set_range(1.0, lines.max(1) as f64);
-                    goto_spin.set_value(line as f64);
-                }
-            })
-        };
-
         let refresh_recents: Rc<dyn Fn(&str)> = {
             let settings = settings.clone();
             let recents_list = recents_list.clone();
@@ -1202,8 +1059,6 @@ impl ScribeWindow {
             let toc_list = toc_list.clone();
             let toc_lines = toc_lines.clone();
             let refresh_tabs = refresh_tabs.clone();
-            let update_status = update_status.clone();
-            let update_counts = update_counts.clone();
             let toast = toast.clone();
             let update_find_count = update_find_count.clone();
             Rc::new(move |body: String, file: Option<PathBuf>| {
@@ -1270,8 +1125,6 @@ impl ScribeWindow {
                     // propio TabView; en fuerte seria un ciclo (R3).
                     let tab_view = tab_view.downgrade();
                     let refresh_tabs = refresh_tabs.clone();
-                    let update_status = update_status.clone();
-                    let update_counts = update_counts.clone();
                     let preview = preview.clone();
                     let preview_visible = preview_visible.clone();
                     let toc_list = toc_list.clone();
@@ -1313,7 +1166,6 @@ impl ScribeWindow {
                         if tab_view.selected_page().as_ref() != Some(&doc.page) {
                             return;
                         }
-                        update_status();
 
                         let current = generation.get().wrapping_add(1);
                         generation.set(current);
@@ -1325,7 +1177,6 @@ impl ScribeWindow {
                         let preview_visible = preview_visible.clone();
                         let toc_list = toc_list.clone();
                         let toc_lines = toc_lines.clone();
-                        let update_counts = update_counts.clone();
                         glib::timeout_add_local_once(Duration::from_millis(120), move || {
                             if generation.get() != current {
                                 return;
@@ -1338,7 +1189,6 @@ impl ScribeWindow {
                             if tab_view.selected_page().as_ref() != Some(&doc.page) {
                                 return;
                             }
-                            update_counts(&text);
                             if preview_visible.get() {
                                 preview.update(&text);
                             }
@@ -1346,19 +1196,12 @@ impl ScribeWindow {
                         });
                     });
                 }
-                {
-                    let update_status = update_status.clone();
-                    doc.editor.connect_cursor_moved(move || update_status());
-                }
-
                 if let Some(docs) = documents.upgrade() {
                     docs.borrow_mut().push(doc.clone());
                 }
                 tab_view.set_selected_page(&doc.page);
                 refresh_tabs();
-                update_status();
                 let text = doc.editor.text();
-                update_counts(&text);
                 if preview_visible.get() {
                     preview.update(&text);
                 }
@@ -1377,7 +1220,6 @@ impl ScribeWindow {
             let create_document = create_document.clone();
             let refresh_recents = refresh_recents.clone();
             let refresh_tabs = refresh_tabs.clone();
-            let update_status = update_status.clone();
             Rc::new(move |path: PathBuf, content: String| {
                 let Some(docs) = documents.upgrade() else {
                     return;
@@ -1428,7 +1270,6 @@ impl ScribeWindow {
                 settings.push_recent_file(&path.to_string_lossy());
                 refresh_recents("");
                 refresh_tabs();
-                update_status();
             })
         };
 
@@ -1463,7 +1304,6 @@ impl ScribeWindow {
             let tab_view = tab_view.clone();
             let create_document = create_document.clone();
             let refresh_tabs = refresh_tabs.clone();
-            let update_status = update_status.clone();
             Rc::new(move |texto: String| {
                 let Some(docs) = documents.upgrade() else {
                     return;
@@ -1489,7 +1329,6 @@ impl ScribeWindow {
                     doc.is_modified.set(true);
                 }
                 refresh_tabs();
-                update_status();
             })
         };
 
@@ -1503,7 +1342,6 @@ impl ScribeWindow {
             let tab_view = tab_view.clone();
             let create_document = create_document.clone();
             let refresh_tabs = refresh_tabs.clone();
-            let update_status = update_status.clone();
             Rc::new(move |texto: String, ruta: Option<PathBuf>| {
                 let Some(docs) = documents.upgrade() else {
                     return;
@@ -1539,7 +1377,6 @@ impl ScribeWindow {
                     doc.is_modified.set(true);
                 }
                 refresh_tabs();
-                update_status();
             })
         };
 
@@ -2148,13 +1985,11 @@ impl ScribeWindow {
         }
 
         // ============================== SEÑALES ================================
-        // ---- cambio de pestaña: refresca título, contadores, posición,
-        // TOC, vista previa y quita el needs_attention de la nueva activa ----
+        // ---- cambio de pestaña: refresca título, TOC y vista previa, y quita
+        // el needs_attention de la nueva activa ----
         {
             let documents = Rc::downgrade(&documents);
             let refresh_tabs = refresh_tabs.clone();
-            let update_status = update_status.clone();
-            let update_counts = update_counts.clone();
             let preview = preview.clone();
             let preview_visible = preview_visible.clone();
             let toc_list = toc_list.clone();
@@ -2164,7 +1999,6 @@ impl ScribeWindow {
             let update_find_count = update_find_count.clone();
             tab_view.connect_selected_page_notify(move |tv| {
                 refresh_tabs();
-                update_status();
                 let (Some(docs), Some(page)) = (documents.upgrade(), tv.selected_page()) else {
                     return;
                 };
@@ -2172,7 +2006,6 @@ impl ScribeWindow {
                     return;
                 };
                 let text = doc.editor.text();
-                update_counts(&text);
                 if preview_visible.get() {
                     preview.update(&text);
                 }
@@ -2354,17 +2187,6 @@ impl ScribeWindow {
             let refresh_recents = refresh_recents.clone();
             search_entry
                 .connect_search_changed(move |entry| refresh_recents(entry.text().as_str()));
-        }
-        {
-            let active_document = active_document.clone();
-            let goto_spin = goto_spin.clone();
-            let goto_popover = goto_popover.clone();
-            goto_button.connect_clicked(move |_| {
-                if let Some(doc) = active_document() {
-                    doc.editor.go_to_line(goto_spin.value() as i32);
-                }
-                goto_popover.popdown();
-            });
         }
 
         // ---- autoguardado (D4/R1): UN temporizador de ventana que itera

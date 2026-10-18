@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PACKAGE VERSION\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-18 13:41+0200\n"
+"POT-Creation-Date: 2026-10-18 14:06+0200\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -33,7 +33,7 @@ msgstr ""
 msgid "Decide Later"
 msgstr ""
 
-#: src/window.rs:261 src/window.rs:657 src/window.rs:1244 src/window.rs:1533
+#: src/window.rs:261 src/window.rs:657 src/window.rs:1099 src/window.rs:1371
 msgid "Untitled"
 msgstr ""
 
@@ -45,28 +45,28 @@ msgstr ""
 msgid "Unsaved draft"
 msgstr ""
 
-#: src/window.rs:397 src/window.rs:2252
+#: src/window.rs:397 src/window.rs:2085
 #, rust-format
 msgid "Save changes to “{name}”?"
 msgstr ""
 
-#: src/window.rs:399 src/window.rs:2254
+#: src/window.rs:399 src/window.rs:2087
 msgid "If you close without saving, you will lose what you have written."
 msgstr ""
 
-#: src/window.rs:402 src/window.rs:1002 src/window.rs:2257
+#: src/window.rs:402 src/window.rs:928 src/window.rs:2090
 msgid "_Cancel"
 msgstr ""
 
-#: src/window.rs:403 src/window.rs:2258
+#: src/window.rs:403 src/window.rs:2091
 msgid "_Discard"
 msgstr ""
 
-#: src/window.rs:404 src/window.rs:703 src/window.rs:2259
+#: src/window.rs:404 src/window.rs:703 src/window.rs:2092
 msgid "_Save"
 msgstr ""
 
-#: src/window.rs:433 src/window.rs:467 src/window.rs:2289 src/window.rs:2317
+#: src/window.rs:433 src/window.rs:467 src/window.rs:2122 src/window.rs:2150
 #, rust-format
 msgid "Could not save: {e}"
 msgstr ""
@@ -155,106 +155,67 @@ msgstr ""
 msgid "_About Scribe"
 msgstr ""
 
-#: src/window.rs:744
-msgid "Close the unterminated code fences"
-msgstr ""
-
-#: src/window.rs:749
-msgid "_Go"
-msgstr ""
-
-#: src/window.rs:761
-msgid "Line"
-msgstr ""
-
-#: src/window.rs:768
-msgid "Go to line"
-msgstr ""
-
-#: src/window.rs:782
-msgid "Document properties"
-msgstr ""
-
-#: src/window.rs:871
+#: src/window.rs:797
 #, rust-format
 msgid "{0} of {1}"
 msgstr ""
 
-#: src/window.rs:938 src/window.rs:982 src/window.rs:1019
+#: src/window.rs:864 src/window.rs:908 src/window.rs:945
 #, rust-format
 msgid "Could not reload: {e}"
 msgstr ""
 
-#: src/window.rs:945 src/window.rs:975
+#: src/window.rs:871 src/window.rs:901
 msgid "File deleted on disk; save to recreate it"
 msgstr ""
 
-#: src/window.rs:967
+#: src/window.rs:893
 msgid "This document is not linked to a file"
 msgstr ""
 
-#: src/window.rs:997
+#: src/window.rs:923
 #, rust-format
 msgid "Reload “{name}” and discard changes?"
 msgstr ""
 
-#: src/window.rs:999
+#: src/window.rs:925
 msgid "The file changed on disk. Reloading discards your unsaved edits."
 msgstr ""
 
-#: src/window.rs:1003
+#: src/window.rs:929
 msgid "_Reload"
 msgstr ""
 
-#: src/window.rs:1041
-#, rust-format
-msgid "{words} words"
-msgstr ""
-
-#: src/window.rs:1044
-#, rust-format
-msgid ""
-"Words: {words}\n"
-"Characters: {chars}\n"
-"Lines: {lines}\n"
-"Reading time: ~{minutes} min"
-msgstr ""
-
-#: src/window.rs:1079
-#, rust-format
-msgid "Unclosed fence (line {first}){extra}"
-msgstr ""
-
-#: src/window.rs:1124
+#: src/window.rs:981
 msgid "Not found"
 msgstr ""
 
-#: src/window.rs:1142
+#: src/window.rs:999
 msgid "No recent documents"
 msgstr ""
 
-#: src/window.rs:1144
+#: src/window.rs:1001
 msgid "No results"
 msgstr ""
 
-#: src/window.rs:1440
+#: src/window.rs:1281
 #, rust-format
 msgid "Could not open: {e}"
 msgstr ""
 
-#: src/window.rs:1710
+#: src/window.rs:1547
 msgid "Code fences closed"
 msgstr ""
 
-#: src/window.rs:1712
+#: src/window.rs:1549
 msgid "No unclosed fences"
 msgstr ""
 
-#: src/window.rs:1927
+#: src/window.rs:1764
 msgid "That file is already open in another tab"
 msgstr ""
 
-#: src/window.rs:2419
+#: src/window.rs:2241
 #, rust-format
 msgid "Could not autosave: {e}"
 msgstr ""
