@@ -28,6 +28,10 @@ pub enum MarkupVisibility {
 /// `gtk4::major_version()`/`minor_version()`/`micro_version()` contra la
 /// primera versión que lo incluya.
 pub fn gtk_hides_invisible_safely() -> bool {
+    // SIGUE CERRADA (19-Oct-2026): con la puerta abierta sobre GTK 4.24.1 la
+    // bateria de display aborta (SIGABRT, gtk#8346: texto invisible + indices
+    // de linea visibles). El ocultado seguro es `syn_shrink` (escala minima),
+    // que no excluye texto del layout.
     false
 }
 

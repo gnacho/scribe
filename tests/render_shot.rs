@@ -356,3 +356,81 @@ fn casillas_de_tarea_clicables() {
         "la otra casilla no se toca"
     );
 }
+
+/// Modo foco: las marcas de sintaxis solo se muestran en la línea del cursor;
+/// el resto quedan encogidas (syn_shrink; sin invisible por gtk#8346). Al
+/// mover el cursor se conmutan.
+#[test]
+#[ignore = "requiere display"]
+fn marcas_solo_en_la_linea_del_cursor() {
+    gtk4::init().expect("GTK necesita un display");
+    libadwaita::init().expect("libadwaita init");
+    let ctx = gtk4::glib::MainContext::default();
+    let editor = Editor::new();
+    let win = gtk4::Window::builder()
+        .default_width(760)
+        .default_height(400)
+        .build();
+    win.set_child(Some(&editor.widget));
+    win.present();
+    let doc = "# Titulo\n\n- **negrita** en lista\n";
+    editor.set_text(doc);
+    // Cursor en el titulo (linea 1 en base 1): su marca visible, la de la
+    // lista encogida.
+    editor.place_cursor_at(1, 2);
+    pump(&ctx, 1200);
+    let buffer = editor.view.buffer();
+    let nombre_en = |offset: i32| -> String {
+        buffer
+            .iter_at_offset(offset)
+            .tags()
+            .iter()
+            .filter_map(|t| t.name().map(|n| n.as_str().to_string()))
+            .find(|n| n.starts_with("syn_"))
+            .unwrap_or_else(|| "NINGUNO".to_string())
+    };
+    assert_eq!(
+        nombre_en(1),
+        "syn_shown",
+        "la marca del titulo del cursor se muestra"
+    );
+    assert_eq!(
+        nombre_en(11),
+        "syn_shrink",
+        "el guion de la lista (otra linea) queda encogido"
+    );
+    for off in 0..20 {
+        let it = buffer.iter_at_offset(off);
+        let nombres: Vec<String> = it
+            .tags()
+            .iter()
+            .filter_map(|t| t.name().map(|n| n.as_str().to_string()))
+            .collect();
+        println!("DUMP off={off} char={:?} tags={nombres:?}", it.char());
+    }
+    println!("DUMP cursor_offset={}", buffer.cursor_position());
+    assert_eq!(
+        nombre_en(13),
+        "syn_shrink",
+        "los asteriscos de la lista quedan encogidos"
+    );
+
+    // Cursor en la lista (linea 3 en base 1): se conmutan.
+    editor.place_cursor_at(3, 5);
+    pump(&ctx, 1200);
+    assert_eq!(
+        nombre_en(1),
+        "syn_shrink",
+        "al salir del titulo, su marca queda encogida"
+    );
+    assert_eq!(
+        nombre_en(11),
+        "syn_shown",
+        "la marca de la linea del cursor se muestra"
+    );
+    assert_eq!(
+        nombre_en(13),
+        "syn_shown",
+        "los asteriscos de la linea del cursor se muestran"
+    );
+}
