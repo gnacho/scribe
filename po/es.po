@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: scribe\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-18 13:21+0200\n"
+"POT-Creation-Date: 2026-10-18 14:06+0200\n"
 "PO-Revision-Date: 2026-09-19 19:58+0200\n"
 "Last-Translator: Automatically generated\n"
 "Language-Team: none\n"
@@ -33,7 +33,7 @@ msgstr "_Descartar todo"
 msgid "Decide Later"
 msgstr "Decidir más tarde"
 
-#: src/window.rs:261 src/window.rs:657 src/window.rs:1158 src/window.rs:1430
+#: src/window.rs:261 src/window.rs:657 src/window.rs:1099 src/window.rs:1371
 msgid "Untitled"
 msgstr "Sin título"
 
@@ -45,28 +45,28 @@ msgstr "Borrador"
 msgid "Unsaved draft"
 msgstr "Borrador sin guardar"
 
-#: src/window.rs:397 src/window.rs:2144
+#: src/window.rs:397 src/window.rs:2085
 #, rust-format
 msgid "Save changes to “{name}”?"
 msgstr "¿Guardar los cambios en «{name}»?"
 
-#: src/window.rs:399 src/window.rs:2146
+#: src/window.rs:399 src/window.rs:2087
 msgid "If you close without saving, you will lose what you have written."
 msgstr "Si cierras sin guardar, perderás lo que hayas escrito."
 
-#: src/window.rs:402 src/window.rs:985 src/window.rs:2149
+#: src/window.rs:402 src/window.rs:928 src/window.rs:2090
 msgid "_Cancel"
 msgstr "_Cancelar"
 
-#: src/window.rs:403 src/window.rs:2150
+#: src/window.rs:403 src/window.rs:2091
 msgid "_Discard"
 msgstr "_Descartar"
 
-#: src/window.rs:404 src/window.rs:709 src/window.rs:2151
+#: src/window.rs:404 src/window.rs:703 src/window.rs:2092
 msgid "_Save"
 msgstr "_Guardar"
 
-#: src/window.rs:433 src/window.rs:467 src/window.rs:2181 src/window.rs:2209
+#: src/window.rs:433 src/window.rs:467 src/window.rs:2122 src/window.rs:2150
 #, rust-format
 msgid "Could not save: {e}"
 msgstr "No se pudo guardar: {e}"
@@ -119,139 +119,103 @@ msgstr "Menú principal"
 msgid "Find in the document (Ctrl+F)"
 msgstr "Buscar en el documento (Ctrl+F)"
 
-#: src/window.rs:694 src/window.rs:724 src/shortcuts.ui:160
+#: src/window.rs:694 src/shortcuts.ui:160
 msgid "Split View"
 msgstr "Vista dividida"
 
-#: src/window.rs:710
+#: src/window.rs:704
 msgid "Save _As…"
 msgstr "Guardar _como…"
 
-#: src/window.rs:711
+#: src/window.rs:705
 msgid "Export to _PDF…"
 msgstr "Exportar a _PDF…"
 
-#: src/window.rs:715 src/shortcuts.ui:137
-msgid "Align Tables"
-msgstr "Alinear tablas"
-
-#: src/window.rs:717
-msgid "Close Unclosed Code Fences"
-msgstr "Cerrar vallas de código abiertas"
-
-#: src/window.rs:723 src/shortcuts.ui:154
+#: src/window.rs:709 src/shortcuts.ui:154
 msgid "Sidebar"
 msgstr "Barra lateral"
 
-#: src/window.rs:725 src/shortcuts.ui:166
+#: src/window.rs:710 src/shortcuts.ui:166
 msgid "Focus Mode"
 msgstr "Modo foco"
 
-#: src/window.rs:727 src/shortcuts.ui:172
+#: src/window.rs:712 src/shortcuts.ui:172
 msgid "Typewriter Mode"
 msgstr "Máquina de escribir"
 
-#: src/window.rs:736
-msgid "Follow System Style"
-msgstr "Seguir el estilo del sistema"
-
-#: src/window.rs:737
-msgid "Light Style"
-msgstr "Estilo claro"
-
-#: src/window.rs:738
-msgid "Dark Style"
-msgstr "Estilo oscuro"
-
-#: src/window.rs:744
-msgid "Style"
-msgstr "Estilo"
-
-#: src/window.rs:747
+#: src/window.rs:718
 msgid "_Preferences"
 msgstr "_Preferencias"
 
-#: src/window.rs:749
+#: src/window.rs:720
 msgid "_Keyboard Shortcuts"
 msgstr "_Atajos de teclado"
 
-#: src/window.rs:752
+#: src/window.rs:723
 msgid "_About Scribe"
 msgstr "_Acerca de Scribe"
 
-#: src/window.rs:766
-msgid "Zoom Out"
-msgstr "Reducir"
-
-#: src/window.rs:771
-msgid "Zoom Reset"
-msgstr "Restablecer"
-
-#: src/window.rs:776
-msgid "Zoom In"
-msgstr "Ampliar"
-
-#: src/window.rs:854
+#: src/window.rs:797
 #, rust-format
 msgid "{0} of {1}"
 msgstr "{0} de {1}"
 
-#: src/window.rs:921 src/window.rs:965 src/window.rs:1002
+#: src/window.rs:864 src/window.rs:908 src/window.rs:945
 #, rust-format
 msgid "Could not reload: {e}"
 msgstr "No se pudo recargar: {e}"
 
-#: src/window.rs:928 src/window.rs:958
+#: src/window.rs:871 src/window.rs:901
 msgid "File deleted on disk; save to recreate it"
 msgstr "El fichero se borró en disco; guárdalo para recrearlo"
 
-#: src/window.rs:950
+#: src/window.rs:893
 msgid "This document is not linked to a file"
 msgstr "Este documento no está asociado a un fichero"
 
-#: src/window.rs:980
+#: src/window.rs:923
 #, rust-format
 msgid "Reload “{name}” and discard changes?"
 msgstr "¿Recargar «{name}» y descartar los cambios?"
 
-#: src/window.rs:982
+#: src/window.rs:925
 msgid "The file changed on disk. Reloading discards your unsaved edits."
 msgstr "El fichero cambió en disco. Recargar descarta tus cambios sin guardar."
 
-#: src/window.rs:986
+#: src/window.rs:929
 msgid "_Reload"
 msgstr "_Recargar"
 
-#: src/window.rs:1038
+#: src/window.rs:981
 msgid "Not found"
 msgstr "No encontrado"
 
-#: src/window.rs:1056
+#: src/window.rs:999
 msgid "No recent documents"
 msgstr "Sin documentos recientes"
 
-#: src/window.rs:1058
+#: src/window.rs:1001
 msgid "No results"
 msgstr "Ningún resultado"
 
-#: src/window.rs:1340
+#: src/window.rs:1281
 #, rust-format
 msgid "Could not open: {e}"
 msgstr "No se pudo abrir: {e}"
 
-#: src/window.rs:1606
+#: src/window.rs:1547
 msgid "Code fences closed"
 msgstr "Vallas de código cerradas"
 
-#: src/window.rs:1608
+#: src/window.rs:1549
 msgid "No unclosed fences"
 msgstr "No hay vallas abiertas"
 
-#: src/window.rs:1823
+#: src/window.rs:1764
 msgid "That file is already open in another tab"
 msgstr "Ese fichero ya está abierto en otra pestaña"
 
-#: src/window.rs:2300
+#: src/window.rs:2241
 #, rust-format
 msgid "Could not autosave: {e}"
 msgstr "No se pudo autoguardar: {e}"
@@ -625,6 +589,10 @@ msgstr "Cursiva"
 msgid "Code"
 msgstr "Código"
 
+#: src/shortcuts.ui:137
+msgid "Align Tables"
+msgstr "Alinear tablas"
+
 #: src/shortcuts.ui:143
 msgid "Close Unclosed Fences"
 msgstr "Cerrar vallas abiertas"
@@ -675,6 +643,30 @@ msgstr "Preferencias"
 #, rust-format
 #~ msgid "Unclosed fence (line {first}){extra}"
 #~ msgstr "Valla abierta (línea {first}){extra}"
+
+#~ msgid "Close Unclosed Code Fences"
+#~ msgstr "Cerrar vallas de código abiertas"
+
+#~ msgid "Follow System Style"
+#~ msgstr "Seguir el estilo del sistema"
+
+#~ msgid "Light Style"
+#~ msgstr "Estilo claro"
+
+#~ msgid "Dark Style"
+#~ msgstr "Estilo oscuro"
+
+#~ msgid "Style"
+#~ msgstr "Estilo"
+
+#~ msgid "Zoom Out"
+#~ msgstr "Reducir"
+
+#~ msgid "Zoom Reset"
+#~ msgstr "Restablecer"
+
+#~ msgid "Zoom In"
+#~ msgstr "Ampliar"
 
 #~ msgid "_Open…"
 #~ msgstr "_Abrir…"

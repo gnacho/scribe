@@ -102,10 +102,10 @@ con GTK4 y ha terminado siendo algo que uso de verdad para borradores y notas.
   para que las columnas cuadren en el fuente.
 - **Continuación de listas**: al pulsar Intro se crea el siguiente elemento y
   se renumeran las listas ordenadas. Dejar un elemento vacío cierra la lista.
-- **Zoom** (Ctrl +/&minus;/0) con controles en el menú principal.
+- **Zoom** (Ctrl +/&minus;/0).
 - **Cabecera** al estilo de GNOME Text Editor: botón de abrir con desplegable
   de recientes, botón de nueva pestaña, título centrado, botón de vista
-  dividida y menú principal con los esquemas de color y la fila de zoom.
+  dividida y menú principal.
 - **Preferencias** en tres páginas: Apariencia, Editor y Exportación.
 - **Exportar a PDF** (Ctrl+P): imprime o exporta el documento a través del
   pipeline de impresión de GTK, reutilizando el mismo análisis de tramos y
@@ -117,9 +117,9 @@ con GTK4 y ha terminado siendo algo que uso de verdad para borradores y notas.
   atómica, aviso de cambios sin guardar y autoguardado configurable.
 - **Barra lateral** (F9) con documentos recientes filtrables e índice del
   documento navegable.
-- **Tema claro y oscuro** que sigue el style scheme de GtkSourceView; el menú
-  principal elige el esquema de color explícitamente (seguir el sistema, claro,
-  oscuro).
+- **Tema claro y oscuro** que sigue el style scheme de GtkSourceView; las
+  Preferencias eligen el esquema de color explícitamente (seguir el sistema,
+  claro, oscuro).
 - **Integración**: `scribe fichero.md` y "Abrir con" del gestor de archivos.
 - **Interfaz traducida** (gettext): inglés y español. Nuevas traducciones en
   `po/` (ver `po/update-pot.sh`).

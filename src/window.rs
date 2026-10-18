@@ -688,7 +688,7 @@ impl ScribeWindow {
         header.pack_end(&search_button);
 
         // Botón de vista dividida (issue #35), como el de Typesetter: el icono
-        // dice qué se va a ver y comparte estado con la entrada del menú.
+        // dice qué se va a ver y comparte estado con la acción (Ctrl+Shift+P).
         let preview_button = gtk4::ToggleButton::builder()
             .icon_name("scribe-preview-off-symbolic")
             .tooltip_text(gettext("Split View"))
@@ -696,14 +696,8 @@ impl ScribeWindow {
             .build();
         header.pack_end(&preview_button);
 
-        // ---- menú principal, con la fila de zoom como en las apps de GNOME ----
+        // ---- menú principal ----
         let menu = gio::Menu::new();
-
-        let zoom_section = gio::Menu::new();
-        let zoom_item = gio::MenuItem::new(None, None);
-        zoom_item.set_attribute_value("custom", Some(&"zoom".to_variant()));
-        zoom_section.append_item(&zoom_item);
-        menu.append_section(None, &zoom_section);
 
         let file_section = gio::Menu::new();
         file_section.append(Some(&gettext("_Save")), Some("win.save"));
@@ -711,37 +705,14 @@ impl ScribeWindow {
         file_section.append(Some(&gettext("Export to _PDF…")), Some("win.export-pdf"));
         menu.append_section(None, &file_section);
 
-        let edit_section = gio::Menu::new();
-        edit_section.append(Some(&gettext("Align Tables")), Some("win.format-tables"));
-        edit_section.append(
-            Some(&gettext("Close Unclosed Code Fences")),
-            Some("win.close-fences"),
-        );
-        menu.append_section(None, &edit_section);
-
         let view_section = gio::Menu::new();
         view_section.append(Some(&gettext("Sidebar")), Some("win.toggle-sidebar"));
-        view_section.append(Some(&gettext("Split View")), Some("win.toggle-preview"));
         view_section.append(Some(&gettext("Focus Mode")), Some("win.focus-mode"));
         view_section.append(
             Some(&gettext("Typewriter Mode")),
             Some("win.typewriter-mode"),
         );
         menu.append_section(None, &view_section);
-
-        // Estilos (issue #36): una acción con estado de cadena y un ítem por
-        // valor; GTK los pinta como opciones excluyentes.
-        let style_section = gio::Menu::new();
-        for (label, nick) in [
-            (gettext("Follow System Style"), "system"),
-            (gettext("Light Style"), "light"),
-            (gettext("Dark Style"), "dark"),
-        ] {
-            let item = gio::MenuItem::new(Some(&label), Some("win.color-scheme"));
-            item.set_attribute_value("target", Some(&nick.to_variant()));
-            style_section.append_item(&item);
-        }
-        menu.append_section(Some(&gettext("Style")), &style_section);
 
         let app_section = gio::Menu::new();
         app_section.append(Some(&gettext("_Preferences")), Some("win.preferences"));
@@ -752,35 +723,7 @@ impl ScribeWindow {
         app_section.append(Some(&gettext("_About Scribe")), Some("win.about"));
         menu.append_section(None, &app_section);
 
-        let zoom_box = gtk4::Box::builder()
-            .orientation(gtk4::Orientation::Horizontal)
-            .css_classes(vec!["linked".to_string()])
-            .margin_top(6)
-            .margin_bottom(6)
-            .margin_start(12)
-            .margin_end(12)
-            .build();
-        let zoom_out = gtk4::Button::builder()
-            .icon_name("zoom-out-symbolic")
-            .action_name("win.zoom-out")
-            .tooltip_text(gettext("Zoom Out"))
-            .build();
-        let zoom_label = gtk4::Button::builder()
-            .action_name("win.zoom-reset")
-            .hexpand(true)
-            .tooltip_text(gettext("Zoom Reset"))
-            .build();
-        let zoom_in = gtk4::Button::builder()
-            .icon_name("zoom-in-symbolic")
-            .action_name("win.zoom-in")
-            .tooltip_text(gettext("Zoom In"))
-            .build();
-        zoom_box.append(&zoom_out);
-        zoom_box.append(&zoom_label);
-        zoom_box.append(&zoom_in);
-
         let popover = gtk4::PopoverMenu::from_model(Some(&menu));
-        popover.add_child(&zoom_box, "zoom");
         menu_button.set_popover(Some(&popover));
 
         let toolbar_view = adw::ToolbarView::new();
@@ -1075,7 +1018,6 @@ impl ScribeWindow {
             let settings = settings.clone();
             let documents = Rc::downgrade(&documents);
             let preview = preview.clone();
-            let zoom_label = zoom_label.clone();
             let refresh_recents = refresh_recents.clone();
             let action_color_scheme_slot = action_color_scheme_slot.clone();
             Rc::new(move || {
@@ -1096,7 +1038,6 @@ impl ScribeWindow {
                     }
                 }
                 preview.set_font_size(settings.font_size());
-                zoom_label.set_label(&format!("{}px", settings.font_size()));
                 refresh_recents("");
             })
         };
