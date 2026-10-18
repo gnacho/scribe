@@ -22,7 +22,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            libgtk-4-dev libadwaita-1-dev libgtksourceview-5-dev libglib2.0-dev
+            libgtk-4-dev libadwaita-1-dev libgtksourceview-5-dev libglib2.0-dev libspelling-dev
 
       - uses: dtolnay/rust-toolchain@stable
         with:
@@ -52,7 +52,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            libgtk-4-dev libadwaita-1-dev libgtksourceview-5-dev libglib2.0-dev
+            libgtk-4-dev libadwaita-1-dev libgtksourceview-5-dev libglib2.0-dev libspelling-dev
 
       - uses: dtolnay/rust-toolchain@1.85
 

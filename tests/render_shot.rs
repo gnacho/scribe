@@ -143,41 +143,14 @@ fn lienzo_colapsa_filas_y_revela_la_del_cursor() {
     win.present();
     editor.set_text(doc);
     pump(&ctx, 1200);
-    eprintln!(
-        "DEBUG analisis: {:?}",
-        markdown_render::analyze(doc)
-            .ornaments
-            .iter()
-            .map(|o| format!("{o:?}"))
-            .collect::<Vec<_>>()
-    );
 
     let buffer = editor.view.buffer();
     let colapsado = buffer
         .tag_table()
         .lookup("tcanvas_src")
         .expect("tag de colapso creado");
-    eprintln!(
-        "DEBUG tags linea0: {:?}",
-        buffer.iter_at_line(0).expect("l0").tags().len()
-    );
-    eprintln!(
-        "DEBUG tags offset5: {:?}",
-        buffer.iter_at_offset(5).tags().len()
-    );
     // Fila de contenido (línea 2): colapsada y con hueco.
     let iter = buffer.iter_at_line(2).expect("línea 2");
-    eprintln!("DEBUG tags linea2:");
-    buffer.tag_table().foreach(|t| {
-        if iter.has_tag(t) {
-            eprintln!("  tag: {:?}", t.name());
-        }
-    });
-    eprintln!(
-        "DEBUG view.width={} advance={}",
-        editor.view.width(),
-        editor.view.cell_advance()
-    );
     assert!(
         iter.has_tag(&colapsado),
         "la fila de contenido lleva el colapso"
@@ -201,4 +174,274 @@ fn lienzo_colapsa_filas_y_revela_la_del_cursor() {
         !iter.has_tag(&colapsado),
         "la fila del cursor se revela sin colapso"
     );
+}
+
+/// Corrector ortográfico (issue #51): encendido marca la palabra mal escrita
+/// con el tag de libspelling; apagado la deja limpia.
+#[test]
+#[ignore = "requiere display y diccionario del sistema (es_ES)"]
+fn ortografia_subraya_y_se_apaga() {
+    gtk4::init().expect("GTK necesita un display");
+    libadwaita::init().expect("libadwaita init");
+    libspelling::init();
+    let ctx = gtk4::glib::MainContext::default();
+    let editor = Editor::new();
+    // SIN ventana (bisect): la vista vive sin present.
+    editor.set_text("holaa mundo\n");
+    // libspelling no marca la palabra que solapa con el cursor: el cursor va
+    // al final del documento (como dejara el usuario al terminar de escribir).
+    editor.place_cursor_at(1, 1);
+    // libspelling no marca el rango que solapa con el cursor (no subraya lo
+    // que estas tecleando): el cursor va al final del documento.
+    // SIN cursor movido (variante de depuracion)
+    let tabla = editor.view.buffer().tag_table();
+    tabla.connect_tag_added(|_t, tag| {
+        eprintln!(
+            "TAG-ADDED: name={:?} anon={}",
+            tag.name(),
+            tag.name().is_none()
+        );
+    });
+    tabla.connect_tag_removed(|_t, tag| {
+        eprintln!(
+            "TAG-REMOVED: name={:?} anon={}",
+            tag.name(),
+            tag.name().is_none()
+        );
+    });
+    editor.set_spellcheck(true);
+    pump(&ctx, 2500);
+
+    let buffer = editor.view.buffer();
+    let tag = buffer
+        .tag_table()
+        .lookup("ortografia")
+        .expect("el tag de ortografia existe en la tabla");
+    let marcada = |buffer: &gtk4::TextBuffer, tag: &gtk4::TextTag| {
+        let ultimo = buffer.end_iter().offset();
+        (0..ultimo).any(|off| buffer.iter_at_offset(off).has_tag(tag))
+    };
+    pump(&ctx, 4000);
+    assert!(
+        marcada(&buffer, &tag),
+        "la palabra mal escrita queda marcada por el corrector"
+    );
+    assert_eq!(
+        tag.underline(),
+        gtk4::pango::Underline::Single,
+        "con el corrector encendido, la marca subraya"
+    );
+
+    // Al apagarlo la marca permanece aplicada (apagarla del todo rompe
+    // libspelling 0.4) pero deja de subrayar.
+    editor.set_spellcheck(false);
+    assert_eq!(
+        tag.underline(),
+        gtk4::pango::Underline::None,
+        "sin subrayado"
+    );
+    editor.set_spellcheck(true);
+    assert_eq!(
+        tag.underline(),
+        gtk4::pango::Underline::Single,
+        "vuelve a subrayar"
+    );
+}
+
+/// Prueba directa de libspelling (sin el Editor): buffer + checker + adapter.
+#[test]
+#[ignore = "requiere display"]
+fn prueba_directa_libspelling() {
+    gtk4::init().expect("GTK");
+    libspelling::init();
+    let buffer = gtksourceview5::Buffer::new(None::<&gtk4::TextTagTable>);
+    let checker = libspelling::Checker::default();
+    let adapter = libspelling::TextBufferAdapter::new(&buffer, &checker);
+    buffer.set_text("holaa mundo\n");
+
+    // CON ventana y vista (variante de bisect): igual que el flujo del Editor.
+    let vista = gtksourceview5::View::with_buffer(&buffer);
+    let win = gtk4::Window::builder()
+        .default_width(700)
+        .default_height(400)
+        .build();
+    win.set_child(Some(&vista));
+    win.present();
+
+    // CON libadwaita (como el test de ortografia).
+    let _ = libadwaita::init();
+
+    // CON menu extra (como el flujo del Editor).
+    let vista = gtksourceview5::View::with_buffer(&buffer);
+    vista.set_extra_menu(Some(&adapter.menu_model()));
+
+    // CON cursor movido (como el flujo del Editor).
+    let mut fin = buffer.start_iter();
+    fin.forward_to_end();
+    buffer.place_cursor(&fin);
+
+    adapter.set_enabled(true);
+
+    let ctx = gtk4::glib::MainContext::default();
+    let inicio = std::time::Instant::now();
+    let mut marcada = false;
+    while inicio.elapsed().as_millis() < 3000 && !marcada {
+        while ctx.iteration(false) {}
+        std::thread::sleep(std::time::Duration::from_millis(20));
+        if let Some(tag) = adapter.tag() {
+            let ultimo = buffer.end_iter().offset();
+            marcada = (0..ultimo).any(|off| buffer.iter_at_offset(off).has_tag(&tag));
+        }
+    }
+    eprintln!(
+        "DEBUG directa: marcada={marcada} idioma={:?}",
+        adapter.language()
+    );
+    assert!(marcada, "libspelling no marca en la prueba directa");
+}
+
+/// Bisect del marcado: cada paso anade una diferencia respecto a la prueba
+/// directa que SI funciona.
+#[test]
+#[ignore = "requiere display"]
+fn bisect_libspelling() {
+    gtk4::init().expect("GTK");
+    libspelling::init();
+    let ctx = gtk4::glib::MainContext::default();
+    let marca = |buffer: &gtksourceview5::Buffer, adapter: &libspelling::TextBufferAdapter| {
+        let inicio = std::time::Instant::now();
+        let mut marcada = false;
+        while inicio.elapsed().as_millis() < 2000 && !marcada {
+            while ctx.iteration(false) {}
+            std::thread::sleep(std::time::Duration::from_millis(20));
+            if let Some(tag) = adapter.tag() {
+                let ultimo = buffer.end_iter().offset();
+                marcada = (0..ultimo).any(|off| buffer.iter_at_offset(off).has_tag(&tag));
+            }
+        }
+        marcada
+    };
+
+    // B: buffer CON tabla de tags.
+    let tags = gtk4::TextTagTable::new();
+    let buffer = gtksourceview5::Buffer::new(Some(&tags));
+    let checker = libspelling::Checker::default();
+    let adapter = libspelling::TextBufferAdapter::new(&buffer, &checker);
+    buffer.set_text("holaa mundo\n");
+    // B4: menu extra ANTES de encender.
+    let vista = gtksourceview5::View::with_buffer(&buffer);
+    vista.set_extra_menu(Some(&adapter.menu_model()));
+    adapter.set_enabled(true);
+    let ok = marca(&buffer, &adapter);
+    eprintln!("B (tabla de tags + menu): {ok}");
+
+    // C: apagado al crear y encendido despues.
+    let tags = gtk4::TextTagTable::new();
+    let buffer = gtksourceview5::Buffer::new(Some(&tags));
+    let checker = libspelling::Checker::default();
+    let adapter = libspelling::TextBufferAdapter::new(&buffer, &checker);
+    adapter.set_enabled(false);
+    buffer.set_text("holaa mundo\n");
+    adapter.set_enabled(true);
+    let ok = marca(&buffer, &adapter);
+    eprintln!("C (apagado y encendido): {ok}");
+
+    // D: como C pero moviendo el cursor al final.
+    let tags = gtk4::TextTagTable::new();
+    let buffer = gtksourceview5::Buffer::new(Some(&tags));
+    let checker = libspelling::Checker::default();
+    let adapter = libspelling::TextBufferAdapter::new(&buffer, &checker);
+    adapter.set_enabled(false);
+    buffer.set_text("holaa mundo\n");
+    let mut fin = buffer.start_iter();
+    fin.forward_to_end();
+    buffer.place_cursor(&fin);
+    adapter.set_enabled(true);
+    let ok = marca(&buffer, &adapter);
+    eprintln!("D (cursor al final): {ok}");
+
+    // B2: buffer CON la tabla de tags del Editor (build_tags).
+    let editor2 = Editor::new();
+    let tabla = editor2.view.buffer().tag_table();
+    let buffer = gtksourceview5::Buffer::new(Some(&tabla));
+    let checker = libspelling::Checker::default();
+    let adapter = libspelling::TextBufferAdapter::new(&buffer, &checker);
+    buffer.set_text("holaa mundo\n");
+    adapter.set_enabled(true);
+    let ok = {
+        let inicio = std::time::Instant::now();
+        let mut m = false;
+        while inicio.elapsed().as_millis() < 2000 && !m {
+            while ctx.iteration(false) {}
+            std::thread::sleep(std::time::Duration::from_millis(20));
+            if let Some(tag) = adapter.tag() {
+                let ultimo = buffer.end_iter().offset();
+                m = (0..ultimo).any(|off| buffer.iter_at_offset(off).has_tag(&tag));
+            }
+        }
+        m
+    };
+    eprintln!("B2 (tabla del editor): {ok}");
+
+    // B3: buffer del editor EN VIVO (con decorate corriendo al editar).
+    let buffer = editor2
+        .view
+        .buffer()
+        .downcast::<gtksourceview5::Buffer>()
+        .expect("buffer del editor");
+    let checker = libspelling::Checker::default();
+    let adapter = libspelling::TextBufferAdapter::new(&buffer, &checker);
+    buffer.set_text("holaa mundo\n");
+
+    // B3b: CON ventana presentada (bisect).
+    let win3 = gtk4::Window::builder()
+        .default_width(700)
+        .default_height(400)
+        .build();
+    win3.set_child(Some(&editor2.widget));
+    win3.present();
+    pump(&ctx, 400);
+    let ok3 = {
+        let inicio = std::time::Instant::now();
+        let mut m = false;
+        while inicio.elapsed().as_millis() < 2000 && !m {
+            while ctx.iteration(false) {}
+            std::thread::sleep(std::time::Duration::from_millis(20));
+            if let Some(tag) = adapter.tag() {
+                let ultimo = buffer.end_iter().offset();
+                m = (0..ultimo).any(|off| buffer.iter_at_offset(off).has_tag(&tag));
+            }
+        }
+        m
+    };
+    eprintln!("B3b (con ventana): {ok3}");
+    let ok = {
+        let inicio = std::time::Instant::now();
+        let mut m = false;
+        while inicio.elapsed().as_millis() < 2000 && !m {
+            while ctx.iteration(false) {}
+            std::thread::sleep(std::time::Duration::from_millis(20));
+            if let Some(tag) = adapter.tag() {
+                let ultimo = buffer.end_iter().offset();
+                m = (0..ultimo).any(|off| buffer.iter_at_offset(off).has_tag(&tag));
+            }
+        }
+        m
+    };
+    eprintln!("B3 (buffer del editor en vivo): {ok}");
+
+    // E: como D mas el menu extra.
+    let tags = gtk4::TextTagTable::new();
+    let buffer = gtksourceview5::Buffer::new(Some(&tags));
+    let checker = libspelling::Checker::default();
+    let adapter = libspelling::TextBufferAdapter::new(&buffer, &checker);
+    adapter.set_enabled(false);
+    buffer.set_text("holaa mundo\n");
+    let mut fin = buffer.start_iter();
+    fin.forward_to_end();
+    buffer.place_cursor(&fin);
+    let menu = adapter.menu_model();
+    adapter.set_enabled(true);
+    let ok = marca(&buffer, &adapter);
+    eprintln!("E (con menu): {ok} menu={}", menu.n_items());
 }

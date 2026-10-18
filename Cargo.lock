@@ -499,6 +499,35 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3eaf3ede3fee6db1a4c2ee091bf8a8b4dccdc6d17f656fb07896ee72867612f2"
 
 [[package]]
+name = "libspelling"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ea569bc46e8fdd62ef4533b88467d6db5ab2be88dc6c883ce4cef090b986aeff"
+dependencies = [
+ "gio",
+ "glib",
+ "gtk4",
+ "libc",
+ "libspelling-sys",
+ "sourceview5",
+]
+
+[[package]]
+name = "libspelling-sys"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3d90a26bd4fdb3502347f3fb5f2498469bb83fe90e2f794a646857c8918243c3"
+dependencies = [
+ "gio-sys",
+ "glib-sys",
+ "gobject-sys",
+ "gtk4-sys",
+ "libc",
+ "sourceview5-sys",
+ "system-deps",
+]
+
+[[package]]
 name = "locale_config"
 version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -695,6 +724,7 @@ dependencies = [
  "glib",
  "gtk4",
  "libadwaita",
+ "libspelling",
  "pulldown-cmark",
  "sourceview5",
 ]

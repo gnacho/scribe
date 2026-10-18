@@ -282,6 +282,7 @@ fn apply_editor_settings(settings: &AppSettings, editor: &Editor) {
     editor.set_typewriter_mode(settings.typewriter_mode());
     editor.set_continue_lists(settings.continue_lists());
     editor.set_tab_width(settings.tab_width());
+    editor.set_spellcheck(settings.spellcheck());
 }
 
 /// Refresca título y tooltip de la pestaña de `doc` (D3: «• » si está

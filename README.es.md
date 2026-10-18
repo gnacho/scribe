@@ -63,6 +63,9 @@ con GTK4 y ha terminado siendo algo que uso de verdad para borradores y notas.
   filete bajo H1/H2, barra lateral de citas, viñetas dibujadas por nivel,
   casillas de tarea marcables y reglas horizontales. La marca que sustituye un
   adorno se **encoge** en vez de ocultarse.
+- **Corrector ortográfico**: las palabras mal escritas se subrayan al
+  escribir, con sugerencias e «ignorar/añadir al diccionario» en el menú
+  contextual; el idioma sigue al sistema y se puede apagar en Preferencias.
 - **Tablas de prosa como tablas de verdad**: cuando las celdas de prosa no
   caben en la geometría del delimitador (la tabla larga de toda la vida), las
   filas fuente colapsan y la tabla se pinta como lienzo: cada celda envuelve
