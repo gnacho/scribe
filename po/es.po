@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: scribe\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-18 09:34+0200\n"
+"POT-Creation-Date: 2026-10-18 10:34+0200\n"
 "PO-Revision-Date: 2026-09-19 19:58+0200\n"
 "Last-Translator: Automatically generated\n"
 "Language-Team: none\n"
@@ -45,28 +45,28 @@ msgstr "Borrador"
 msgid "Unsaved draft"
 msgstr "Borrador sin guardar"
 
-#: src/window.rs:397 src/window.rs:2312
+#: src/window.rs:397 src/window.rs:2311
 #, rust-format
 msgid "Save changes to “{name}”?"
 msgstr "¿Guardar los cambios en «{name}»?"
 
-#: src/window.rs:399 src/window.rs:2314
+#: src/window.rs:399 src/window.rs:2313
 msgid "If you close without saving, you will lose what you have written."
 msgstr "Si cierras sin guardar, perderás lo que hayas escrito."
 
-#: src/window.rs:402 src/window.rs:1059 src/window.rs:2317
+#: src/window.rs:402 src/window.rs:1059 src/window.rs:2316
 msgid "_Cancel"
 msgstr "_Cancelar"
 
-#: src/window.rs:403 src/window.rs:2318
+#: src/window.rs:403 src/window.rs:2317
 msgid "_Discard"
 msgstr "_Descartar"
 
-#: src/window.rs:404 src/window.rs:709 src/window.rs:2319
+#: src/window.rs:404 src/window.rs:709 src/window.rs:2318
 msgid "_Save"
 msgstr "_Guardar"
 
-#: src/window.rs:433 src/window.rs:467 src/window.rs:2349 src/window.rs:2377
+#: src/window.rs:433 src/window.rs:467 src/window.rs:2348 src/window.rs:2376
 #, rust-format
 msgid "Could not save: {e}"
 msgstr "No se pudo guardar: {e}"
@@ -294,22 +294,27 @@ msgstr "No hay vallas abiertas"
 msgid "That file is already open in another tab"
 msgstr "Ese fichero ya está abierto en otra pestaña"
 
-#: src/window.rs:2479
+#: src/window.rs:2478
 #, rust-format
 msgid "Could not autosave: {e}"
 msgstr "No se pudo autoguardar: {e}"
 
-#: src/editor.rs:895 src/editor.rs:900 src/editor.rs:905
+#: src/editor.rs:939 src/editor.rs:944 src/editor.rs:949
 msgid "Could not save the image"
 msgstr "No se pudo guardar la imagen"
 
-#: src/editor.rs:945
+#: src/editor.rs:989
 msgid "Save the document before pasting images"
 msgstr "Guarda el documento antes de pegar imágenes"
 
-#: src/editor.rs:965 src/editor.rs:982 src/editor.rs:1021
+#: src/editor.rs:1009 src/editor.rs:1026 src/editor.rs:1065
 msgid "Save the document before dropping images"
 msgstr "Guarda el documento antes de soltar imágenes"
+
+#: src/editor.rs:1427
+#, rust-format
+msgid "Ctrl+click to open {url}"
+msgstr "Ctrl+clic para abrir {url}"
 
 #: src/preferences.rs:50
 msgid "Appearance"

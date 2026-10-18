@@ -9,7 +9,8 @@ use std::rc::Rc;
 use std::time::Duration;
 
 use crate::markdown_render::{
-    analyze, ornaments_for, pad_units, Ornament, Span, SpanKind, UnclosedFence, MAX_LIVE_BYTES,
+    analyze, ornaments_for, pad_units, LinkRef, Ornament, Span, SpanKind, UnclosedFence,
+    MAX_LIVE_BYTES,
 };
 use crate::markdown_view::{MarkdownView, OrnamentPalette};
 use crate::settings::{gtk_hides_invisible_safely, FontFamily, MarkupVisibility};
@@ -151,6 +152,11 @@ fn build_tags() -> gtk4::TextTagTable {
     add(gtk4::TextTag::builder()
         .name("imagegap")
         .pixels_below_lines(crate::markdown_render::IMAGE_GAP_HEIGHT)
+        .build());
+    // Y el de una tarjeta de vídeo, más alto porque va en 16:9.
+    add(gtk4::TextTag::builder()
+        .name("youtubegap")
+        .pixels_below_lines(crate::markdown_render::YOUTUBE_GAP_HEIGHT)
         .build());
 
     // Nota: GtkTextTag:letter-spacing no admite valores negativos, así que el
@@ -433,6 +439,26 @@ fn schedule_decoration(
 }
 
 /// Resuelve el destino de una imagen contra el directorio del documento.
+/// Abre una URL en la aplicación predeterminada del escritorio (el navegador,
+/// el cliente de correo...). El `UriLauncher` de GTK respeta el portal de
+/// escritorio; si no hay nadie que atienda el esquema, se avisa por la salida
+/// de error y no se rompe nada.
+fn abrir_en_navegador(widget: &impl IsA<gtk4::Widget>, url: &str) {
+    let ventana = widget
+        .root()
+        .and_then(|root| root.downcast::<gtk4::Window>().ok());
+    let uri = url.to_string();
+    gtk4::UriLauncher::new(url).launch(
+        ventana.as_ref(),
+        gio::Cancellable::NONE,
+        move |resultado| {
+            if let Err(error) = resultado {
+                eprintln!("no se pudo abrir {uri}: {error}");
+            }
+        },
+    );
+}
+
 /// Las URLs y las rutas absolutas se devuelven tal cual; sin directorio base,
 /// la relativa se devuelve sin resolver (el widget pintará el placeholder).
 /// `~` no se expande.
@@ -462,7 +488,7 @@ fn decorate(
     let text = buffer.text(&start, &end, true).to_string();
     if text.is_empty() || text.len() > MAX_LIVE_BYTES {
         unclosed_fences.borrow_mut().clear();
-        view.set_ornaments(Vec::new(), line_count);
+        view.set_ornaments(Vec::new(), Vec::new(), line_count);
         return;
     }
 
@@ -634,7 +660,25 @@ fn decorate(
             _ => {}
         }
     }
-    view.set_ornaments(ornaments, line_count);
+    // Los enlaces vienen en bytes (pulldown-cmark) y el widget indexa por
+    // caracteres: se traducen con la misma tabla que los tramos, o los enlaces
+    // de un texto con acentos apuntarían a otro sitio.
+    let links: Vec<LinkRef> = analysis
+        .links
+        .iter()
+        .filter_map(|link| {
+            let (from, to) = (
+                byte_to_char.get(link.start).copied()?,
+                byte_to_char.get(link.end).copied()?,
+            );
+            (from < to).then(|| LinkRef {
+                start: from as usize,
+                end: to as usize,
+                dest: link.dest.clone(),
+            })
+        })
+        .collect();
+    view.set_ornaments(ornaments, links, line_count);
 
     if config.focus_mode {
         apply_focus_shade(buffer, cursor_line);
@@ -1322,6 +1366,72 @@ impl Editor {
             )
         });
         self.view.add_controller(drop_target);
+
+        // Ctrl+clic sobre un enlace lo abre en el navegador; el clic normal
+        // sigue siendo del texto (colocar el cursor, seleccionar). Va en fase
+        // de captura para ver el evento antes que los controladores propios del
+        // GtkTextView, y se rechaza explícitamente (`Denied`) cuando no hay nada
+        // que abrir, para no quitarle el clic.
+        let click = gtk4::GestureClick::new();
+        click.set_button(gdk4::BUTTON_PRIMARY);
+        click.set_propagation_phase(gtk4::PropagationPhase::Capture);
+        let click_view = self.view.clone();
+        click.connect_pressed(move |gesture, _, x, y| {
+            // El clic sobre una tarjeta de vídeo la abre; con Ctrl, además,
+            // cualquier enlace del texto.
+            let ctrl = gesture
+                .current_event_state()
+                .contains(gdk4::ModifierType::CONTROL_MASK);
+            match click_view.dest_under_pointer(x, y, ctrl) {
+                Some(url) => {
+                    gesture.set_state(gtk4::EventSequenceState::Claimed);
+                    abrir_en_navegador(&click_view, &url);
+                }
+                None => {
+                    gesture.set_state(gtk4::EventSequenceState::Denied);
+                }
+            }
+        });
+        self.view.add_controller(click);
+
+        // El globo de ayuda con el destino solo sale con Ctrl pulsado, como en
+        // el editor de texto de GNOME: sin Ctrl el puntero está escribiendo, no
+        // navegando.
+        let ctrl = Rc::new(Cell::new(false));
+        let teclas_ctrl = gtk4::EventControllerKey::new();
+        teclas_ctrl.set_propagation_phase(gtk4::PropagationPhase::Capture);
+        let ctrl_pulsado = ctrl.clone();
+        teclas_ctrl.connect_key_pressed(move |_, key, _, _| {
+            if matches!(key, gdk4::Key::Control_L | gdk4::Key::Control_R) {
+                ctrl_pulsado.set(true);
+            }
+            glib::Propagation::Proceed
+        });
+        let ctrl_soltado = ctrl.clone();
+        teclas_ctrl.connect_key_released(move |_, key, _, _| {
+            if matches!(key, gdk4::Key::Control_L | gdk4::Key::Control_R) {
+                ctrl_soltado.set(false);
+            }
+        });
+        self.view.add_controller(teclas_ctrl);
+
+        let motion = gtk4::EventControllerMotion::new();
+        let hover_view = self.view.clone();
+        let ultimo: Rc<RefCell<Option<String>>> = Rc::new(RefCell::new(None));
+        motion.connect_motion(move |_, x, y| {
+            let destino = ctrl
+                .get()
+                .then(|| hover_view.link_at_position(x, y))
+                .flatten();
+            let texto =
+                destino.map(|url| gettext("Ctrl+click to open {url}").replace("{url}", &url));
+            let mut ultimo = ultimo.borrow_mut();
+            if *ultimo != texto {
+                hover_view.set_tooltip_text(texto.as_deref());
+                *ultimo = texto;
+            }
+        });
+        self.view.add_controller(motion);
     }
 
     // --- contenido -------------------------------------------------------
