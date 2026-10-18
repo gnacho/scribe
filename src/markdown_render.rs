@@ -31,6 +31,11 @@ pub const MAX_LIVE_BYTES: usize = 400_000;
 /// tag (editor.rs) y el pintado (markdown_view.rs).
 pub const IMAGE_GAP_HEIGHT: i32 = 150;
 
+/// Alto (px) del hueco que el tag `youtubegap` reserva bajo la línea de una
+/// tarjeta de YouTube. Más alto que el de las imágenes porque la tarjeta va en
+/// 16:9 (la miniatura de YouTube lo es).
+pub const YOUTUBE_GAP_HEIGHT: i32 = 260;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SpanKind {
     /// Estilo permanente: negrita, cabecera, color…
@@ -144,6 +149,19 @@ pub enum Ornament {
         dest: String,
         alt: String,
     },
+    /// Referencia a un vídeo de YouTube que es el único contenido de su línea
+    /// (enlace de markdown, URL suelta o `<iframe>`): se pinta como tarjeta con
+    /// la miniatura del vídeo en el hueco que reserva el span `youtubegap`.
+    /// Aditiva: el enlace sigue visible y editable en todos los modos.
+    Youtube {
+        line: usize,
+        /// URL del vídeo tal y como aparece en el documento (así se conserva,
+        /// por ejemplo, el minuto de inicio). Si el documento solo traía la
+        /// miniatura, es la URL canónica del vídeo.
+        url: String,
+        /// Id del vídeo (11 caracteres).
+        id: String,
+    },
 }
 
 /// Familia de un adorno, según cómo convive con el texto del buffer.
@@ -173,7 +191,9 @@ impl Ornament {
             | Ornament::TableRule { .. }
             | Ornament::Break { .. }
             | Ornament::TableGrid { .. } => OrnamentFamily::Substitute,
-            Ornament::HeadingRule { .. } | Ornament::Image { .. } => OrnamentFamily::Additive,
+            Ornament::HeadingRule { .. } | Ornament::Image { .. } | Ornament::Youtube { .. } => {
+                OrnamentFamily::Additive
+            }
         }
     }
 }
@@ -213,6 +233,157 @@ pub struct UnclosedFence {
     pub offset: usize,
 }
 
+/// Enlace detectado en el fuente. `start`/`end` son offsets en bytes y cubren
+/// el constructo entero tal y como aparece en el texto (`[texto](destino)`
+/// incluidos los corchetes, o la URL y sus ángulos en un autolink). `dest` es
+/// el destino ya resuelto por pulldown-cmark.
+#[derive(Debug, Clone, PartialEq)]
+pub struct LinkRef {
+    pub start: usize,
+    pub end: usize,
+    pub dest: String,
+}
+
+/// Enlace de [`Analysis::links`] cuyo rango contiene `offset`.
+pub fn link_at(links: &[LinkRef], offset: usize) -> Option<&LinkRef> {
+    links.iter().find(|l| offset >= l.start && offset < l.end)
+}
+
+/// ¿Es un destino que la app puede abrir en el navegador? Solo http(s) y
+/// mailto: un documento no debe poder lanzar `file:`, `javascript:` ni nada con
+/// espacios o caracteres de control.
+pub fn is_openable_link(dest: &str) -> bool {
+    let dest = dest.trim();
+    if dest.is_empty() || dest.chars().any(|c| c.is_control() || c == ' ') {
+        return false;
+    }
+    let lower = dest.to_ascii_lowercase();
+    lower.starts_with("http://") || lower.starts_with("https://") || lower.starts_with("mailto:")
+}
+
+/// Id de vídeo de YouTube si `url` apunta a un vídeo o a su miniatura: enlaces
+/// `youtu.be/ID`, `youtube.com/watch?v=ID`, `/embed/ID`, `/shorts/ID`, `/live/ID`
+/// y las miniaturas de `i.ytimg.com` e `img.youtube.com`. En otro caso, `None`.
+pub fn youtube_video_id(url: &str) -> Option<String> {
+    let rest = url
+        .strip_prefix("https://")
+        .or_else(|| url.strip_prefix("http://"))?;
+    let (host, tail) = match rest.find(['/', '?', '#']) {
+        Some(i) => (&rest[..i], &rest[i..]),
+        None => (rest, ""),
+    };
+    let host = host
+        .strip_prefix("www.")
+        .unwrap_or(host)
+        .to_ascii_lowercase();
+    let path = tail.split(['?', '#']).next().unwrap_or("");
+    let query = tail
+        .split_once('?')
+        .map(|(_, q)| q.split('#').next().unwrap_or(""))
+        .unwrap_or("");
+    let id = match host.as_str() {
+        "youtu.be" => path.trim_start_matches('/').split('/').next().unwrap_or(""),
+        "youtube.com" | "m.youtube.com" | "music.youtube.com" | "youtube-nocookie.com" => {
+            let mut segmentos = path.trim_start_matches('/').split('/');
+            match segmentos.next().unwrap_or("") {
+                "watch" => query_param(query, "v").unwrap_or(""),
+                "embed" | "shorts" | "v" | "live" => segmentos.next().unwrap_or(""),
+                _ => "",
+            }
+        }
+        "i.ytimg.com" | "img.youtube.com" => {
+            let mut segmentos = path.trim_start_matches('/').split('/');
+            match (
+                segmentos.next().unwrap_or(""),
+                segmentos.next().unwrap_or(""),
+            ) {
+                ("vi", id) => id,
+                _ => "",
+            }
+        }
+        _ => "",
+    };
+    if is_video_id(id) {
+        Some(id.to_string())
+    } else {
+        None
+    }
+}
+
+/// Un id de vídeo de YouTube son 11 caracteres de `[A-Za-z0-9_-]`. La
+/// validación descarta además los marcadores de plantilla de la documentación
+/// de ejemplo (`YOUTUBE_VIDEO_ID_HERE`), que no son vídeos reales.
+fn is_video_id(id: &str) -> bool {
+    id.len() == 11
+        && id
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-')
+}
+
+/// Valor de un parámetro de query (`v=ID` en `watch?v=ID&t=30`).
+fn query_param<'a>(query: &'a str, name: &str) -> Option<&'a str> {
+    query.split('&').find_map(|par| {
+        let (clave, valor) = par.split_once('=')?;
+        (clave == name).then_some(valor)
+    })
+}
+
+/// URL de la miniatura de un vídeo (calidad media, ya en 16:9).
+pub fn youtube_thumbnail(id: &str) -> String {
+    format!("https://i.ytimg.com/vi/{id}/hqdefault.jpg")
+}
+
+/// URL canónica de un vídeo, para cuando el documento solo traía la miniatura.
+pub fn youtube_watch_url(id: &str) -> String {
+    format!("https://www.youtube.com/watch?v={id}")
+}
+
+/// Id de vídeo del `src` de un `<iframe>` de YouTube. `None` si el fragmento no
+/// es un iframe o no apunta a YouTube.
+fn iframe_video_id(html: &str) -> Option<String> {
+    let trimmed = html.trim_start();
+    if !trimmed.to_ascii_lowercase().starts_with("<iframe") {
+        return None;
+    }
+    trimmed.split_ascii_whitespace().find_map(|token| {
+        let (clave, valor) = token.split_once('=')?;
+        if !clave.eq_ignore_ascii_case("src") {
+            return None;
+        }
+        youtube_video_id(valor.trim_matches(['"', '\'', '>']))
+    })
+}
+
+/// ¿La línea que contiene `start..end` está ocupada solo por ese rango (aparte
+/// de espacios)?
+fn alone_in_line(text: &str, start: usize, end: usize) -> bool {
+    let line_start = text[..start].rfind('\n').map(|i| i + 1).unwrap_or(0);
+    let line_end = text[end..]
+        .find('\n')
+        .map(|i| end + i)
+        .unwrap_or(text.len());
+    text[line_start..start].trim().is_empty() && text[end..line_end].trim().is_empty()
+}
+
+/// Tramo de estilo del hueco que un adorno reserva bajo su línea: cubre la
+/// línea entera, porque es el tag el que añade el alto.
+fn gap_span(text: &str, start: usize, tag: &'static str) -> Span {
+    let line_start = text[..start].rfind('\n').map(|i| i + 1).unwrap_or(0);
+    let line_end = text[start..]
+        .find('\n')
+        .map(|i| start + i)
+        .unwrap_or(text.len());
+    style(line_start, trim_nl(text, line_end), tag)
+}
+
+/// Fichero de la caché en disco de una imagen remota: `sha256` de la URL.
+pub fn remote_image_cache_name(url: &str) -> String {
+    let hash = glib::compute_checksum_for_string(glib::ChecksumType::Sha256, url)
+        .map(|h| h.to_string())
+        .unwrap_or_else(|| url.to_string());
+    format!("{hash}.img")
+}
+
 #[derive(Debug, Default)]
 pub struct Analysis {
     pub spans: Vec<Span>,
@@ -226,6 +397,9 @@ pub struct Analysis {
     /// acción `win.close-fences` se apoyan en esto para avisar y ofrecer
     /// recuperación.
     pub unclosed_fences: Vec<UnclosedFence>,
+    /// Enlaces del documento, con su destino resuelto. El editor los usa para
+    /// abrir el destino con Ctrl+clic y para el globo de ayuda del puntero.
+    pub links: Vec<LinkRef>,
 }
 
 fn style(start: usize, end: usize, tag: &'static str) -> Span {
@@ -295,6 +469,15 @@ impl LineIndex {
             Ok(i) => i,
             Err(i) => i.saturating_sub(1),
         }
+    }
+
+    /// Offset del final de una línea: el `\n` que la cierra o el final del
+    /// texto.
+    fn end_of_line(&self, text: &str, line: usize) -> usize {
+        self.starts
+            .get(line + 1)
+            .map(|start| start - 1)
+            .unwrap_or(text.len())
     }
 }
 
@@ -909,6 +1092,7 @@ pub fn analyze(text: &str) -> Analysis {
     let mut spans: Vec<Span> = Vec::new();
     let mut ornaments: Vec<Ornament> = Vec::new();
     let mut images: Vec<ImageRef> = Vec::new();
+    let mut links: Vec<LinkRef> = Vec::new();
     let mut unclosed_fences: Vec<UnclosedFence> = Vec::new();
     let mut list_depth = 0usize;
     let mut table_depth = 0usize;
@@ -978,9 +1162,33 @@ pub fn analyze(text: &str) -> Analysis {
                 mark_delims(&mut spans, range.start, range.end, ticks, table_depth > 0);
             }
 
-            Event::Start(Tag::Link { link_type, .. }) => {
+            Event::Start(Tag::Link {
+                link_type,
+                dest_url,
+                ..
+            }) => {
                 spans.push(style(range.start, range.end, "link"));
+                let dest = dest_url.to_string();
+                links.push(LinkRef {
+                    start: range.start,
+                    end: range.end,
+                    dest: dest.clone(),
+                });
                 let src = &text[range.start..range.end];
+                // Enlace a un vídeo de YouTube que ocupa su línea entero: se
+                // pinta como tarjeta bajo ella. En el texto con más contenido
+                // alrededor no se genera nada: la tarjeta taparía el párrafo.
+                if let Some(id) = youtube_video_id(&dest) {
+                    if alone_in_line(text, range.start, range.end) {
+                        let line = lines.line_of(range.start);
+                        ornaments.push(Ornament::Youtube {
+                            line,
+                            url: dest.clone(),
+                            id,
+                        });
+                        spans.push(gap_span(text, range.start, "youtubegap"));
+                    }
+                }
                 match link_type {
                     LinkType::Autolink | LinkType::Email => {
                         if src.starts_with('<') && src.ends_with('>') && src.len() > 2 {
@@ -1011,13 +1219,7 @@ pub fn analyze(text: &str) -> Analysis {
                     // alrededor no se genera nada nuevo. La marca `![alt](src)`
                     // sigue visible y editable en todos los modos (la imagen
                     // pintada es aditiva, no sustituye).
-                    let line_start = text[..range.start].rfind('\n').map(|i| i + 1).unwrap_or(0);
-                    let line_end = text[range.end..]
-                        .find('\n')
-                        .map(|i| range.end + i)
-                        .unwrap_or(text.len());
-                    let sola = text[line_start..range.start].trim().is_empty()
-                        && text[range.end..line_end].trim().is_empty();
+                    let sola = alone_in_line(text, range.start, range.end);
                     if sola {
                         let alt = src
                             .find(']')
@@ -1034,9 +1236,18 @@ pub fn analyze(text: &str) -> Analysis {
                             dest: dest.clone(),
                             alt: alt.clone(),
                         });
-                        ornaments.push(Ornament::Image { line, dest, alt });
+                        // Una miniatura de YouTube en bloque no es una imagen
+                        // cualquiera: es la tarjeta del vídeo.
+                        match youtube_video_id(&dest) {
+                            Some(id) => ornaments.push(Ornament::Youtube {
+                                line,
+                                url: youtube_watch_url(&id),
+                                id,
+                            }),
+                            None => ornaments.push(Ornament::Image { line, dest, alt }),
+                        }
                         // Reserva bajo la línea el hueco donde se pinta.
-                        spans.push(style(line_start, line_end, "imagegap"));
+                        spans.push(gap_span(text, range.start, "imagegap"));
                     }
                 }
             }
@@ -1231,7 +1442,18 @@ pub fn analyze(text: &str) -> Analysis {
                         offset: range.start,
                     });
                 } else {
-                    spans.push(style(range.start, trim_nl(text, range.end), "html"))
+                    spans.push(style(range.start, trim_nl(text, range.end), "html"));
+                    // `<iframe src="…/embed/ID">`: lo que hay dentro es una
+                    // tarjeta de vídeo, no HTML suelto.
+                    if let Some(id) = iframe_video_id(&text[range.start..range.end]) {
+                        let line = lines.line_of(range.start);
+                        ornaments.push(Ornament::Youtube {
+                            line,
+                            url: youtube_watch_url(&id),
+                            id,
+                        });
+                        spans.push(gap_span(text, range.start, "youtubegap"));
+                    }
                 }
             }
             Event::FootnoteReference(_) => {
@@ -1285,11 +1507,66 @@ pub fn analyze(text: &str) -> Analysis {
         _ => true,
     });
 
+    // Tarjetas de YouTube. Además del enlace y del iframe que ya reconoce el
+    // parser, una línea que solo contenga una URL de YouTube suelta también es
+    // una tarjeta: sin `ENABLE_GFM` pulldown no crea enlace a partir de una URL
+    // desnuda, así que hay que mirarlo aparte.
+    let mut tarjetas: Vec<usize> = ornaments
+        .iter()
+        .filter_map(|o| match o {
+            Ornament::Youtube { line, .. } => Some(*line),
+            _ => None,
+        })
+        .collect();
+    tarjetas.sort_unstable();
+    tarjetas.dedup();
+    for line in 0..lines.starts.len() {
+        if tarjetas.contains(&line) {
+            continue;
+        }
+        let raw = text[lines.starts[line]..lines.end_of_line(text, line)].trim();
+        let raw = raw
+            .strip_prefix('<')
+            .and_then(|s| s.strip_suffix('>'))
+            .unwrap_or(raw);
+        let Some(id) = youtube_video_id(raw) else {
+            continue;
+        };
+        tarjetas.push(line);
+        ornaments.push(Ornament::Youtube {
+            line,
+            url: youtube_watch_url(&id),
+            id,
+        });
+        spans.push(gap_span(text, lines.starts[line], "youtubegap"));
+    }
+
+    // Una línea lleva una sola tarjeta (un enlace con miniatura dentro genera
+    // dos detecciones: la del enlace y la de la imagen) y, si la lleva, no
+    // pinta además la imagen en bloque: la tarjeta ya la representa.
+    if !tarjetas.is_empty() {
+        let mut vistas: Vec<usize> = Vec::new();
+        ornaments.retain(|o| match o {
+            Ornament::Youtube { line, .. } => {
+                if vistas.contains(line) {
+                    false
+                } else {
+                    vistas.push(*line);
+                    true
+                }
+            }
+            Ornament::Image { line, .. } => !tarjetas.contains(line),
+            _ => true,
+        });
+        spans.retain(|s| !(s.tag == "imagegap" && tarjetas.contains(&lines.line_of(s.start))));
+    }
+
     Analysis {
         spans,
         ornaments,
         images,
         unclosed_fences,
+        links,
     }
 }
 
@@ -1779,7 +2056,8 @@ mod tests {
                 | Ornament::Rule { line }
                 | Ornament::TableRule { line }
                 | Ornament::HeadingRule { line }
-                | Ornament::Image { line, .. } => line,
+                | Ornament::Image { line, .. }
+                | Ornament::Youtube { line, .. } => line,
                 Ornament::Quote { last, .. }
                 | Ornament::CodeBlock { last, .. }
                 | Ornament::Table { last, .. }
@@ -2325,6 +2603,168 @@ mod tests {
             .ornaments
             .iter()
             .any(|o| matches!(o, Ornament::Image { dest, .. } if dest == "/tmp/g.png")));
+    }
+
+    #[test]
+    fn los_enlaces_quedan_registrados_con_su_destino() {
+        let text = "ver [la web](https://example.com) y <https://gnome.org>\n";
+        let a = analyze(text);
+        assert_eq!(a.links.len(), 2);
+        assert_eq!(a.links[0].dest, "https://example.com");
+        // El rango cubre el constructo entero, corchetes incluidos.
+        assert_eq!(
+            &text[a.links[0].start..a.links[0].end],
+            "[la web](https://example.com)"
+        );
+        assert_eq!(a.links[1].dest, "https://gnome.org");
+        // Cualquier offset del constructo cae en el enlace.
+        let dentro = a.links[0].start + 4;
+        assert_eq!(
+            link_at(&a.links, dentro).map(|l| l.dest.as_str()),
+            Some("https://example.com")
+        );
+        assert!(link_at(&a.links, 0).is_none());
+    }
+
+    #[test]
+    fn solo_se_abren_destinos_http_https_y_mailto() {
+        for (dest, esperado) in [
+            ("https://example.com", true),
+            ("http://example.com", true),
+            ("HTTPS://Example.com/x", true),
+            ("mailto:alguien@example.com", true),
+            ("javascript:alert(1)", false),
+            ("file:///etc/passwd", false),
+            ("data:text/html,<b>x</b>", false),
+            ("/tmp/g.png", false),
+            ("https://example.com/dos palabras", false),
+            ("", false),
+        ] {
+            assert_eq!(is_openable_link(dest), esperado, "{dest}");
+        }
+    }
+
+    #[test]
+    fn el_id_de_video_se_extrae_de_todas_las_formas_conocidas() {
+        for url in [
+            "https://www.youtube.com/watch?v=ciawICBvQoE",
+            "http://youtube.com/watch?v=ciawICBvQoE&t=30s",
+            "https://youtu.be/ciawICBvQoE",
+            "https://youtu.be/ciawICBvQoE?t=30",
+            "https://www.youtube.com/embed/ciawICBvQoE",
+            "https://www.youtube-nocookie.com/embed/ciawICBvQoE",
+            "https://m.youtube.com/shorts/ciawICBvQoE",
+            "https://i.ytimg.com/vi/ciawICBvQoE/hqdefault.jpg",
+            "http://img.youtube.com/vi/ciawICBvQoE/0.jpg",
+        ] {
+            assert_eq!(
+                youtube_video_id(url).as_deref(),
+                Some("ciawICBvQoE"),
+                "{url}"
+            );
+        }
+        for url in [
+            "https://example.com/video",
+            "https://www.youtube.com/",
+            "https://www.youtube.com/watch?v=corto",
+            "https://www.youtube.com/watch?v=",
+            "https://img.youtube.com/vi/YOUTUBE_VIDEO_ID_HERE/0.jpg",
+            "https://www.youtube.com/watch?list=PL123",
+        ] {
+            assert_eq!(youtube_video_id(url), None, "{url}");
+        }
+    }
+
+    #[test]
+    fn una_url_de_youtube_sola_en_su_linea_genera_tarjeta() {
+        let text = "https://youtu.be/ciawICBvQoE\n";
+        let a = analyze(text);
+        assert!(a.ornaments.contains(&Ornament::Youtube {
+            line: 0,
+            url: "https://www.youtube.com/watch?v=ciawICBvQoE".to_string(),
+            id: "ciawICBvQoE".to_string(),
+        }));
+        assert_eq!(find(&a.spans, "youtubegap").len(), 1);
+    }
+
+    #[test]
+    fn un_enlace_de_youtube_con_texto_alrededor_no_genera_tarjeta() {
+        let text = "mira este vídeo https://youtu.be/ciawICBvQoE que está bien\n";
+        let a = analyze(text);
+        assert!(!a
+            .ornaments
+            .iter()
+            .any(|o| matches!(o, Ornament::Youtube { .. })));
+        assert!(find(&a.spans, "youtubegap").is_empty());
+    }
+
+    #[test]
+    fn un_enlace_con_miniatura_dentro_genera_una_sola_tarjeta() {
+        let text = "[![miniatura](https://img.youtube.com/vi/ciawICBvQoE/0.jpg)](https://www.youtube.com/watch?v=ciawICBvQoE&t=30s)\n";
+        let a = analyze(text);
+        let tarjetas: Vec<&Ornament> = a
+            .ornaments
+            .iter()
+            .filter(|o| matches!(o, Ornament::Youtube { .. }))
+            .collect();
+        assert_eq!(tarjetas.len(), 1);
+        // Manda la URL del documento: el minuto de inicio se conserva.
+        assert!(matches!(
+            tarjetas[0],
+            Ornament::Youtube { url, .. } if url == "https://www.youtube.com/watch?v=ciawICBvQoE&t=30s"
+        ));
+        // Y no se pinta además la miniatura como imagen en bloque.
+        assert!(!a
+            .ornaments
+            .iter()
+            .any(|o| matches!(o, Ornament::Image { .. })));
+        assert!(find(&a.spans, "imagegap").is_empty());
+        assert_eq!(find(&a.spans, "youtubegap").len(), 1);
+    }
+
+    #[test]
+    fn una_miniatura_sola_genera_la_tarjeta_de_su_video() {
+        let text = "![](https://img.youtube.com/vi/ciawICBvQoE/0.jpg)\n";
+        let a = analyze(text);
+        assert!(a.ornaments.iter().any(
+            |o| matches!(o, Ornament::Youtube { url, .. } if url == "https://www.youtube.com/watch?v=ciawICBvQoE")
+        ));
+        assert!(!a
+            .ornaments
+            .iter()
+            .any(|o| matches!(o, Ornament::Image { .. })));
+    }
+
+    #[test]
+    fn un_iframe_de_youtube_genera_tarjeta() {
+        let text = "<iframe width=\"560\" height=\"315\" src=\"https://www.youtube.com/embed/ciawICBvQoE\" allowfullscreen></iframe>\n";
+        let a = analyze(text);
+        assert!(a
+            .ornaments
+            .iter()
+            .any(|o| matches!(o, Ornament::Youtube { id, .. } if id == "ciawICBvQoE")));
+        assert_eq!(find(&a.spans, "youtubegap").len(), 1);
+    }
+
+    #[test]
+    fn una_plantilla_de_youtube_no_genera_tarjeta() {
+        // La documentación de ejemplo trae marcadores en vez de vídeos: no son
+        // vídeos reales y no deben pintarse como tales.
+        let text = "[![IMAGE ALT TEXT HERE](http://img.youtube.com/vi/YOUTUBE_VIDEO_ID_HERE/0.jpg)](http://www.youtube.com/watch?v=YOUTUBE_VIDEO_ID_HERE)\n";
+        let a = analyze(text);
+        assert!(!a
+            .ornaments
+            .iter()
+            .any(|o| matches!(o, Ornament::Youtube { .. })));
+        assert!(find(&a.spans, "youtubegap").is_empty());
+    }
+
+    #[test]
+    fn el_nombre_de_la_cache_remota_depende_solo_de_la_url() {
+        let uno = remote_image_cache_name("https://example.com/a.png");
+        assert_eq!(uno, remote_image_cache_name("https://example.com/a.png"));
+        assert_ne!(uno, remote_image_cache_name("https://example.com/b.png"));
+        assert!(uno.ends_with(".img") && !uno.contains("example.com"));
     }
 
     #[test]

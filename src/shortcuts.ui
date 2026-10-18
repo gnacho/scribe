@@ -90,6 +90,29 @@
         </child>
         <child>
           <object class="GtkShortcutsGroup">
+            <property name="title" translatable="yes">Find</property>
+            <child>
+              <object class="GtkShortcutsShortcut">
+                <property name="title" translatable="yes">Find in the Document</property>
+                <property name="accelerator">&lt;Control&gt;f</property>
+              </object>
+            </child>
+            <child>
+              <object class="GtkShortcutsShortcut">
+                <property name="title" translatable="yes">Find Next</property>
+                <property name="accelerator">&lt;Control&gt;g</property>
+              </object>
+            </child>
+            <child>
+              <object class="GtkShortcutsShortcut">
+                <property name="title" translatable="yes">Find Previous</property>
+                <property name="accelerator">&lt;Control&gt;&lt;Shift&gt;g</property>
+              </object>
+            </child>
+          </object>
+        </child>
+        <child>
+          <object class="GtkShortcutsGroup">
             <property name="title" translatable="yes">Format</property>
             <child>
               <object class="GtkShortcutsShortcut">

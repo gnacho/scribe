@@ -100,7 +100,14 @@ fn captura_vista_enriquecida() {
 
     let ctx = gtk4::glib::MainContext::default();
     editor.set_text(&doc);
-    pump(&ctx, 800); // drena el debounce de decoración y el layout
+    // Drena el debounce de decoración y el layout. Con imágenes remotas hay que
+    // dar más margen (SCRIBE_WAIT_MS) para que lleguen las descargas; la segunda
+    // pasada las lee ya de la caché de disco.
+    let espera = std::env::var("SCRIBE_WAIT_MS")
+        .ok()
+        .and_then(|ms| ms.parse().ok())
+        .unwrap_or(800);
+    pump(&ctx, espera);
 
     let total = editor.line_count().max(1);
     // Filas de texto por página (~1000 px de ventana): paginar con solape de

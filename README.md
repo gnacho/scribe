@@ -61,9 +61,21 @@ actually use to draft notes and docs.
   The mark a decoration replaces is **shrunk** instead of hidden.
 - **Local images in block**: when an `![alt](path)` is alone on its line and
   the file exists (relative to the document), it is painted scaled below the
-  mark (max 144 px, 20 MB limit, cache of 64). Remote URLs and missing files
-  show a discreet placeholder. The buffer is never modified: no widgets, no
-  characters inserted.
+  mark (max 144 px, 20 MB limit, cache of 64). Missing files show a discreet
+  placeholder. The buffer is never modified: no widgets, no characters
+  inserted.
+- **Remote images**: when the destination is a URL, Scribe asks for its size
+  first (20 MB limit), downloads it and caches it on disk under
+  `~/.cache/scribe/images`, so later runs paint it without going out again. A
+  URL that fails keeps the placeholder and is not retried on every redraw.
+- **YouTube cards**: a video that is alone on its line, written as a Markdown
+  link, a bare URL or an `<iframe>`, is drawn below the line as a 16:9 card
+  with its thumbnail and a play badge. The line stays visible and editable, and
+  there is no embedded player: clicking the card opens your browser.
+- **Ctrl+click a link** opens the destination with the default application;
+  holding Ctrl over one shows where it goes. Only `http`, `https` and `mailto`
+  are offered, so the click stays a text click (cursor, selection) when there is
+  nothing to open.
 - **Configurable markup visibility**: dim the syntax markers (`**`, `#`,
   backticks) everywhere, hide them, or reveal them on the cursor line. Because
   of a GTK bug ([gtk#8346](https://gitlab.gnome.org/GNOME/gtk/-/issues/8346)),
@@ -71,8 +83,11 @@ actually use to draft notes and docs.
   when GTK ships the fix, real hiding returns on its own.
 - **Focus mode** (Ctrl+Shift+F) dims everything except the current paragraph.
 - **Typewriter mode** (Ctrl+Shift+T) keeps the cursor vertically centered.
-- **Split preview** (Ctrl+Shift+P) renders the full document in a side panel
-  using the same `GtkTextTag` engine.
+- **Split preview on the right** (Ctrl+Shift+P, or the header icon) renders the
+  full document in a side panel using the same `GtkTextTag` engine, so you can
+  keep an eye on the outline while you write.
+- **Find in the document** (Ctrl+F): a search bar inside the editor pane, with a
+  match counter, next/previous buttons and Enter/Shift+Enter.
 - **Ctrl+B/I/K** wraps the selection in `**`, `*` or backticks.
 - **Align tables** (Ctrl+Alt+T) reformats all tables in the document so their
   columns line up in the source.
@@ -81,7 +96,8 @@ actually use to draft notes and docs.
 - **Zoom** (Ctrl +/&minus;/0) with controls in the main menu.
 - **Go to line** from the status bar.
 - **Header bar** follows GNOME Text Editor: open button with recent files
-  dropdown, new tab button, centered title, main menu with zoom row.
+  dropdown, new tab button, centered title, split preview toggle and main menu
+  with the colour schemes and zoom row.
 - **Preferences** window with three pages: Appearance, Editor and Export.
 - **Export to PDF** (Ctrl+P): print or export the document through the GTK
   print pipeline, reusing the same span/ornament analysis as the editor.
@@ -91,7 +107,8 @@ actually use to draft notes and docs.
 - **Files**: open, save and save-as with `GtkFileDialog`, atomic writes,
   unsaved-changes warning, configurable autosave.
 - **Sidebar** (F9) with filterable recent files and a navigable outline.
-- **Light and dark theme** follows the GtkSourceView style scheme.
+- **Light and dark theme** follows the GtkSourceView style scheme; the main
+  menu picks the colour scheme explicitly (follow system, light, dark).
 - **Integration**: `scribe file.md` and "Open with" from the file manager.
 - **Translated UI** (gettext): English and Spanish. New translations go in
   `po/` (see `po/update-pot.sh`).
@@ -122,22 +139,29 @@ invisible-text abort path of GNOME/gtk#8346 is unreachable by construction.
   not interpreted: it stays as dimmed text in the editor and is dropped in the
   split preview. The result is an approximation of the Markdown, not a copy of
   a browser rendering.
-- **No find & replace, no export to HTML, and no spell checking.**
+- **No replace, no export to HTML, and no spell checking.** The find bar
+  (Ctrl+F) searches the active document; replacing is not implemented.
 - **PDF export has no outline/bookmarks.** `GtkPrintOperation` does not expose
   PDF bookmarks, so the exported PDF carries no table of contents or outline.
-- **Images are local only.** Remote URLs are never fetched (no network code is
-  linked) and show a placeholder. Only regular files up to 20 MB are painted,
-  at most 144 px tall. Inline images (not alone on their line) show the
-  placeholder too.
-- The image cache does not track file mtime: a picture edited on disk is not
-  refreshed until the document is reopened.
+- **Images**: local files up to 20 MB are painted, at most 144 px tall, and
+  remote URLs are downloaded with the same limits. Inline images (not alone on
+  their line), missing files and downloads that fail show the placeholder.
+- **The image cache has no expiry.** A picture edited on disk is not refreshed
+  until the document is reopened, and a downloaded one is reused from
+  `~/.cache/scribe/images` until you delete that directory.
+- **Videos are not played inside the editor.** The card is drawn from the video
+  id and a thumbnail fetched from `i.ytimg.com`, and clicking it opens the
+  browser. A link whose id is not a valid 11-character id is left as text.
 - In "hide/reveal on cursor line" mode the marks are shrunk, not removed (see
   above).
 
 ## Privacy
 
-Scribe makes no network requests and collects nothing. Documents and
-preferences stay on your machine. See [PRIVACY.md](PRIVACY.md).
+Scribe collects nothing and has no accounts, telemetry or cloud. The only
+requests it makes are the ones a document asks for: remote images and video
+thumbnails referenced by the text are downloaded to be painted and cached under
+`~/.cache/scribe/images`. Nothing is ever uploaded. See
+[PRIVACY.md](PRIVACY.md).
 
 ## Screenshots
 

@@ -65,9 +65,23 @@ con GTK4 y ha terminado siendo algo que uso de verdad para borradores y notas.
   adorno se **encoge** en vez de ocultarse.
 - **Imágenes locales en bloque**: cuando un `![alt](ruta)` está solo en su
   línea y el fichero existe (relativo al documento), se pinta escalado bajo la
-  marca (máx. 144 px, límite de 20 MB, caché de 64). URLs remotas y ficheros
-  ausentes muestran un placeholder discreto. El buffer nunca se modifica: no se
-  insertan widgets ni caracteres.
+  marca (máx. 144 px, límite de 20 MB, caché de 64). Los ficheros ausentes
+  muestran un placeholder discreto. El buffer nunca se modifica: no se insertan
+  widgets ni caracteres.
+- **Imágenes remotas**: cuando el destino es una URL, Scribe pregunta primero su
+  tamaño (límite de 20 MB), la descarga y la cachea en disco en
+  `~/.cache/scribe/images`, de modo que las siguientes veces se pinta sin salir
+  a la red. Una URL que falla deja el placeholder y no se reintenta en cada
+  repintado.
+- **Tarjetas de YouTube**: un vídeo que está solo en su línea, escrito como
+  enlace de Markdown, URL suelta o `<iframe>`, se dibuja bajo la línea como una
+  tarjeta 16:9 con su miniatura y un botón de reproducción. La línea sigue
+  visible y editable, y no hay reproductor embebido: al pulsar la tarjeta se
+  abre el navegador.
+- **Ctrl+clic en un enlace** abre el destino con la aplicación predeterminada;
+  con Ctrl pulsado encima de uno, el globo de ayuda dice a dónde va. Solo se
+  ofrecen `http`, `https` y `mailto`, así que un clic normal sigue siendo un
+  clic de texto (cursor, selección) cuando no hay nada que abrir.
 - **Visibilidad del marcado configurable**: atenuar las marcas de sintaxis
   (`**`, `#`, backticks) siempre, ocultarlas o revelarlas en la línea del
   cursor. Por un bug de GTK
@@ -77,8 +91,12 @@ con GTK4 y ha terminado siendo algo que uso de verdad para borradores y notas.
 - **Modo foco** (Ctrl+Shift+F) atenúa todo salvo el párrafo actual.
 - **Máquina de escribir** (Ctrl+Shift+T) mantiene el cursor centrado
   verticalmente.
-- **Vista dividida** (Ctrl+Shift+P) con render completo en un panel lateral
-  usando el mismo motor de `GtkTextTag`.
+- **Vista dividida a la derecha** (Ctrl+Shift+P o el icono de la cabecera) con
+  render completo en un panel lateral usando el mismo motor de `GtkTextTag`, de
+  modo que puedes seguir el índice mientras escribes.
+- **Buscar en el documento** (Ctrl+F): barra de búsqueda dentro del panel del
+  editor, con contador de coincidencias, botones de anterior/siguiente e
+  Intro/Mayús+Intro.
 - **Ctrl+B/I/K** envuelve la selección en `**`, `*` o backticks.
 - **Alinear tablas** (Ctrl+Alt+T) reformatea todas las tablas del documento
   para que las columnas cuadren en el fuente.
@@ -87,8 +105,8 @@ con GTK4 y ha terminado siendo algo que uso de verdad para borradores y notas.
 - **Zoom** (Ctrl +/&minus;/0) con controles en el menú principal.
 - **Ir a la línea** desde la barra de estado.
 - **Cabecera** al estilo de GNOME Text Editor: botón de abrir con desplegable
-  de recientes, botón de nueva pestaña, título centrado y menú principal con
-  fila de zoom.
+  de recientes, botón de nueva pestaña, título centrado, botón de vista
+  dividida y menú principal con los esquemas de color y la fila de zoom.
 - **Preferencias** en tres páginas: Apariencia, Editor y Exportación.
 - **Exportar a PDF** (Ctrl+P): imprime o exporta el documento a través del
   pipeline de impresión de GTK, reutilizando el mismo análisis de tramos y
@@ -100,7 +118,9 @@ con GTK4 y ha terminado siendo algo que uso de verdad para borradores y notas.
   atómica, aviso de cambios sin guardar y autoguardado configurable.
 - **Barra lateral** (F9) con documentos recientes filtrables e índice del
   documento navegable.
-- **Tema claro y oscuro** que sigue el style scheme de GtkSourceView.
+- **Tema claro y oscuro** que sigue el style scheme de GtkSourceView; el menú
+  principal elige el esquema de color explícitamente (seguir el sistema, claro,
+  oscuro).
 - **Integración**: `scribe fichero.md` y "Abrir con" del gestor de archivos.
 - **Interfaz traducida** (gettext): inglés y español. Nuevas traducciones en
   `po/` (ver `po/update-pot.sh`).
@@ -132,24 +152,32 @@ inalcanzable por construcción.
   El HTML del fuente no se interpreta: queda como texto atenuado en el editor y
   se descarta en la vista dividida. El resultado es una aproximación del
   Markdown, no una copia del render de un navegador.
-- **Sin buscar y reemplazar, sin exportar a HTML y sin corrección
-  ortográfica.**
+- **Sin reemplazar, sin exportar a HTML y sin corrección ortográfica.** La
+  barra de buscar (Ctrl+F) busca en el documento activo; el reemplazo no está
+  implementado.
 - **La exportación a PDF no lleva índice ni marcadores.** `GtkPrintOperation`
   no expone marcadores de PDF, así que el PDF exportado no tiene tabla de
   contenidos ni outline.
-- **Las imágenes son solo locales.** Las URLs remotas no se descargan (no hay
-  código de red enlazado) y muestran un placeholder. Solo se pintan ficheros
-  regulares de hasta 20 MB, como máximo 144 px de alto. Las imágenes inline (no
-  solas en su línea) también muestran el placeholder.
-- La caché de imágenes no mira el mtime: un fichero editado en disco no se
-  refresca hasta reabrir el documento.
+- **Imágenes**: los ficheros locales de hasta 20 MB se pintan, como máximo
+  144 px de alto, y las URLs remotas se descargan con los mismos límites. Las
+  imágenes inline (no solas en su línea), los ficheros ausentes y las descargas
+  que fallan muestran el placeholder.
+- **La caché de imágenes no caduca.** Una imagen editada en disco no se
+  refresca hasta reabrir el documento, y la descargada se reutiliza desde
+  `~/.cache/scribe/images` hasta que borres ese directorio.
+- **Los vídeos no se reproducen dentro del editor.** La tarjeta se dibuja a
+  partir del id del vídeo y de una miniatura que se pide a `i.ytimg.com`, y al
+  pulsarla se abre el navegador. Un enlace cuyo id no sea un id válido de 11
+  caracteres se queda como texto.
 - En el modo «ocultar / revelar en la línea del cursor» las marcas se encogen,
   no se quitan (ver arriba).
 
 ## Privacidad
 
-Scribe no hace peticiones de red y no recopila nada. Los documentos y las
-preferencias se quedan en tu equipo. Ver
+Scribe no recopila nada y no tiene cuentas, telemetría ni nube. Las únicas
+peticiones que hace son las que le pide un documento: las imágenes remotas y las
+miniaturas de vídeo referenciadas por el texto se descargan para pintarlas y se
+cachean en `~/.cache/scribe/images`. Nunca se sube nada. Ver
 [PRIVACY.md](PRIVACY.md).
 
 ## Capturas

@@ -9,7 +9,8 @@ use std::rc::Rc;
 use std::time::Duration;
 
 use crate::markdown_render::{
-    analyze, ornaments_for, pad_units, Ornament, Span, SpanKind, UnclosedFence, MAX_LIVE_BYTES,
+    analyze, ornaments_for, pad_units, LinkRef, Ornament, Span, SpanKind, UnclosedFence,
+    MAX_LIVE_BYTES,
 };
 use crate::markdown_view::{MarkdownView, OrnamentPalette};
 use crate::settings::{gtk_hides_invisible_safely, FontFamily, MarkupVisibility};
@@ -89,6 +90,11 @@ pub struct Editor {
     /// Aviso transitorio (toast) que la ventana conecta al crear el editor;
     /// se usa para los avisos de pegado/soltado de imágenes.
     on_toast: ToastCallback,
+    /// Ajustes de búsqueda del documento (patrón, vuelta al final).
+    search_settings: gtksourceview5::SearchSettings,
+    /// Contexto de búsqueda del documento, vivo toda la vida del editor: el
+    /// índice se mantiene caliente aunque la barra de búsqueda esté cerrada.
+    search_context: gtksourceview5::SearchContext,
 }
 
 fn build_tags() -> gtk4::TextTagTable {
@@ -146,6 +152,11 @@ fn build_tags() -> gtk4::TextTagTable {
     add(gtk4::TextTag::builder()
         .name("imagegap")
         .pixels_below_lines(crate::markdown_render::IMAGE_GAP_HEIGHT)
+        .build());
+    // Y el de una tarjeta de vídeo, más alto porque va en 16:9.
+    add(gtk4::TextTag::builder()
+        .name("youtubegap")
+        .pixels_below_lines(crate::markdown_render::YOUTUBE_GAP_HEIGHT)
         .build());
 
     // Nota: GtkTextTag:letter-spacing no admite valores negativos, así que el
@@ -428,6 +439,26 @@ fn schedule_decoration(
 }
 
 /// Resuelve el destino de una imagen contra el directorio del documento.
+/// Abre una URL en la aplicación predeterminada del escritorio (el navegador,
+/// el cliente de correo...). El `UriLauncher` de GTK respeta el portal de
+/// escritorio; si no hay nadie que atienda el esquema, se avisa por la salida
+/// de error y no se rompe nada.
+fn abrir_en_navegador(widget: &impl IsA<gtk4::Widget>, url: &str) {
+    let ventana = widget
+        .root()
+        .and_then(|root| root.downcast::<gtk4::Window>().ok());
+    let uri = url.to_string();
+    gtk4::UriLauncher::new(url).launch(
+        ventana.as_ref(),
+        gio::Cancellable::NONE,
+        move |resultado| {
+            if let Err(error) = resultado {
+                eprintln!("no se pudo abrir {uri}: {error}");
+            }
+        },
+    );
+}
+
 /// Las URLs y las rutas absolutas se devuelven tal cual; sin directorio base,
 /// la relativa se devuelve sin resolver (el widget pintará el placeholder).
 /// `~` no se expande.
@@ -457,7 +488,7 @@ fn decorate(
     let text = buffer.text(&start, &end, true).to_string();
     if text.is_empty() || text.len() > MAX_LIVE_BYTES {
         unclosed_fences.borrow_mut().clear();
-        view.set_ornaments(Vec::new(), line_count);
+        view.set_ornaments(Vec::new(), Vec::new(), line_count);
         return;
     }
 
@@ -629,7 +660,25 @@ fn decorate(
             _ => {}
         }
     }
-    view.set_ornaments(ornaments, line_count);
+    // Los enlaces vienen en bytes (pulldown-cmark) y el widget indexa por
+    // caracteres: se traducen con la misma tabla que los tramos, o los enlaces
+    // de un texto con acentos apuntarían a otro sitio.
+    let links: Vec<LinkRef> = analysis
+        .links
+        .iter()
+        .filter_map(|link| {
+            let (from, to) = (
+                byte_to_char.get(link.start).copied()?,
+                byte_to_char.get(link.end).copied()?,
+            );
+            (from < to).then(|| LinkRef {
+                start: from as usize,
+                end: to as usize,
+                dest: link.dest.clone(),
+            })
+        })
+        .collect();
+    view.set_ornaments(ornaments, links, line_count);
 
     if config.focus_mode {
         apply_focus_shade(buffer, cursor_line);
@@ -1061,6 +1110,15 @@ impl Editor {
         apply_theme(&tags, &view, dark);
         set_column_margins(&tags, MIN_MARGIN);
 
+        // Búsqueda: contexto propio del documento, con vuelta al final al
+        // llegar al extremo. El resaltado se enciende solo mientras la barra
+        // de búsqueda está abierta (lo gobierna la ventana).
+        let search_settings = gtksourceview5::SearchSettings::new();
+        search_settings.set_wrap_around(true);
+        search_settings.set_at_word_boundaries(false);
+        let search_context = gtksourceview5::SearchContext::new(&buffer, Some(&search_settings));
+        search_context.set_highlight(false);
+
         let editor = Self {
             widget,
             view,
@@ -1076,6 +1134,8 @@ impl Editor {
             base_dir: Rc::new(RefCell::new(None)),
             unclosed_fences: Rc::new(RefCell::new(Vec::new())),
             on_toast: Rc::new(RefCell::new(None)),
+            search_settings,
+            search_context,
         };
         editor.connect_signals();
         editor
@@ -1306,6 +1366,94 @@ impl Editor {
             )
         });
         self.view.add_controller(drop_target);
+
+        // Ctrl+clic sobre un enlace lo abre en el navegador; el clic normal
+        // sigue siendo del texto (colocar el cursor, seleccionar). Va en fase
+        // de captura para ver el evento antes que los controladores propios del
+        // GtkTextView, y se rechaza explícitamente (`Denied`) cuando no hay nada
+        // que abrir, para no quitarle el clic.
+        let click = gtk4::GestureClick::new();
+        click.set_button(gdk4::BUTTON_PRIMARY);
+        click.set_propagation_phase(gtk4::PropagationPhase::Capture);
+        let click_view = self.view.clone();
+        click.connect_pressed(move |gesture, _, x, y| {
+            // El clic sobre una tarjeta de vídeo la abre; con Ctrl, además,
+            // cualquier enlace del texto.
+            let ctrl = gesture
+                .current_event_state()
+                .contains(gdk4::ModifierType::CONTROL_MASK);
+            match click_view.dest_under_pointer(x, y, ctrl) {
+                Some(url) => {
+                    gesture.set_state(gtk4::EventSequenceState::Claimed);
+                    abrir_en_navegador(&click_view, &url);
+                }
+                None => {
+                    gesture.set_state(gtk4::EventSequenceState::Denied);
+                }
+            }
+        });
+        self.view.add_controller(click);
+
+        // El globo de ayuda con el destino solo sale con Ctrl pulsado, como en
+        // el editor de texto de GNOME: sin Ctrl el puntero está escribiendo, no
+        // navegando. El estado de Ctrl se sigue con un controlador de teclado, y
+        // el globo se recalcula tanto al mover el puntero como al pulsar o
+        // soltar Ctrl, para que no haya que menear el ratón para verlo.
+        let ctrl = Rc::new(Cell::new(false));
+        let ultimo: Rc<RefCell<Option<String>>> = Rc::new(RefCell::new(None));
+        let posicion: Rc<Cell<Option<(f64, f64)>>> = Rc::new(Cell::new(None));
+        let aplicar_globo = {
+            let view = self.view.clone();
+            let ctrl = ctrl.clone();
+            let ultimo = ultimo.clone();
+            move |x: f64, y: f64| {
+                let destino = ctrl.get().then(|| view.link_at_position(x, y)).flatten();
+                let texto =
+                    destino.map(|url| gettext("Ctrl+click to open {url}").replace("{url}", &url));
+                let mut ultimo = ultimo.borrow_mut();
+                if *ultimo != texto {
+                    let mostrar = texto.is_some();
+                    view.set_tooltip_text(texto.as_deref());
+                    *ultimo = texto;
+                    if mostrar {
+                        view.trigger_tooltip_query();
+                    }
+                }
+            }
+        };
+
+        let teclas_ctrl = gtk4::EventControllerKey::new();
+        teclas_ctrl.set_propagation_phase(gtk4::PropagationPhase::Capture);
+        let al_pulsar = aplicar_globo.clone();
+        let posicion_pulsar = posicion.clone();
+        let ctrl_pulsado = ctrl.clone();
+        teclas_ctrl.connect_key_pressed(move |_, key, _, _| {
+            if matches!(key, gdk4::Key::Control_L | gdk4::Key::Control_R) {
+                ctrl_pulsado.set(true);
+                if let Some((x, y)) = posicion_pulsar.get() {
+                    al_pulsar(x, y);
+                }
+            }
+            glib::Propagation::Proceed
+        });
+        let al_soltar = aplicar_globo.clone();
+        let posicion_soltar = posicion.clone();
+        teclas_ctrl.connect_key_released(move |_, key, _, _| {
+            if matches!(key, gdk4::Key::Control_L | gdk4::Key::Control_R) {
+                ctrl.set(false);
+                if let Some((x, y)) = posicion_soltar.get() {
+                    al_soltar(x, y);
+                }
+            }
+        });
+        self.view.add_controller(teclas_ctrl);
+
+        let motion = gtk4::EventControllerMotion::new();
+        motion.connect_motion(move |_, x, y| {
+            posicion.set(Some((x, y)));
+            aplicar_globo(x, y);
+        });
+        self.view.add_controller(motion);
     }
 
     // --- contenido -------------------------------------------------------
@@ -1327,6 +1475,91 @@ impl Editor {
         self.buffer
             .text(&self.buffer.start_iter(), &self.buffer.end_iter(), true)
             .to_string()
+    }
+
+    // --- búsqueda ---------------------------------------------------------
+
+    /// Contexto de búsqueda del documento. La ventana se engancha a
+    /// `occurrences-count-notify` para llevar el contador «N de M».
+    pub fn search_context(&self) -> &gtksourceview5::SearchContext {
+        &self.search_context
+    }
+
+    /// Fija el patrón de búsqueda. Devuelve el total de coincidencias, que
+    /// puede llegar más tarde por señal si el documento es grande.
+    pub fn set_search_text(&self, text: &str) -> i32 {
+        if self.search_settings.search_text().as_deref() == Some(text) {
+            return self.search_context.occurrences_count();
+        }
+        self.search_settings.set_search_text(Some(text));
+        self.search_context.occurrences_count()
+    }
+
+    /// Enciende o apaga el resaltado de todas las coincidencias.
+    pub fn set_search_highlight(&self, on: bool) {
+        self.search_context.set_highlight(on);
+    }
+
+    /// Total de coincidencias y número de la que tiene el cursor (0 si el
+    /// cursor no está sobre ninguna).
+    pub fn search_state(&self) -> (i32, i32) {
+        let total = self.search_context.occurrences_count().max(0);
+        let position = self
+            .buffer
+            .selection_bounds()
+            .map(|(start, end)| self.search_context.occurrence_position(&start, &end))
+            .unwrap_or(0)
+            .max(0);
+        (position, total)
+    }
+
+    /// Siguiente coincidencia, dando la vuelta al llegar al final.
+    pub fn search_next(&self) -> bool {
+        self.search_step(true)
+    }
+
+    /// Coincidencia anterior, dando la vuelta al llegar al principio.
+    pub fn search_previous(&self) -> bool {
+        self.search_step(false)
+    }
+
+    fn search_step(&self, forward: bool) -> bool {
+        if self.search_context.occurrences_count() <= 0 {
+            return false;
+        }
+        // Con una coincidencia ya seleccionada se sigue desde su borde: si se
+        // partiera del cursor, que está dentro de la coincidencia, se volvería
+        // a encontrar la misma una y otra vez.
+        let anchor = match self.buffer.selection_bounds() {
+            Some((start, end)) => {
+                if forward {
+                    end
+                } else {
+                    start
+                }
+            }
+            None => {
+                let mut iter = self.buffer.iter_at_mark(&self.buffer.get_insert());
+                if forward && !iter.is_end() {
+                    iter.forward_char();
+                }
+                iter
+            }
+        };
+        let found = if forward {
+            self.search_context.forward(&anchor)
+        } else {
+            self.search_context.backward(&anchor)
+        };
+        // `forward`/`backward` solo devuelven el rango: seleccionarlo es cosa
+        // nuestra (si no, la coincidencia no se ve ni cuenta el contador).
+        let Some((start, end, _wrapped)) = found else {
+            return false;
+        };
+        self.buffer.select_range(&start, &end);
+        let mut start = start;
+        self.view.scroll_to_iter(&mut start, 0.15, true, 0.0, 0.5);
+        true
     }
 
     pub fn refresh(&self) {

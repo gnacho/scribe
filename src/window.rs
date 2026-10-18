@@ -587,10 +587,47 @@ impl ScribeWindow {
             });
         }
 
+        // ============================== BÚSQUEDA ==============================
+        // Barra de búsqueda del documento activo (issue #37). Vive dentro del
+        // panel del editor, no encima de la previsualización: al abrirla, el
+        // editor y su barra se reparten el panel izquierdo, como en Typesetter.
+        let search_entry = gtk4::SearchEntry::builder()
+            .placeholder_text(gettext("Search"))
+            .hexpand(true)
+            .build();
+        let search_count = gtk4::Label::builder()
+            .css_classes(vec!["caption".to_string(), "dim-label".to_string()])
+            .build();
+        let search_prev_button = gtk4::Button::builder()
+            .icon_name("go-up-symbolic")
+            .tooltip_text(gettext("Find Previous"))
+            .action_name("win.find-prev")
+            .build();
+        let search_next_button = gtk4::Button::builder()
+            .icon_name("go-down-symbolic")
+            .tooltip_text(gettext("Find Next"))
+            .action_name("win.find-next")
+            .build();
+        let search_box = gtk4::Box::new(gtk4::Orientation::Horizontal, 6);
+        search_box.append(&search_entry);
+        search_box.append(&search_count);
+        search_box.append(&search_prev_button);
+        search_box.append(&search_next_button);
+        let search_bar = gtk4::SearchBar::builder()
+            .child(&search_box)
+            .css_classes(vec!["toolbar".to_string()])
+            .build();
+        search_bar.connect_entry(&search_entry);
+        search_bar.set_key_capture_widget(Some(&window));
+
         // ============================== CONTENIDO ==============================
+        let editor_pane = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
+        editor_pane.append(&search_bar);
+        editor_pane.append(&tab_view);
+
         let paned = gtk4::Paned::builder()
             .orientation(gtk4::Orientation::Horizontal)
-            .start_child(&tab_view)
+            .start_child(&editor_pane)
             .wide_handle(true)
             .position(680)
             .hexpand(true)
@@ -637,6 +674,28 @@ impl ScribeWindow {
             .build();
         header.pack_end(&menu_button);
 
+        // Botón de búsqueda (issue #37): sigue el estado de la barra, de modo
+        // que al cerrarla con Escape el botón se suelta solo.
+        let search_button = gtk4::ToggleButton::builder()
+            .icon_name("edit-find-symbolic")
+            .tooltip_text(gettext("Find in the document (Ctrl+F)"))
+            .build();
+        search_button
+            .bind_property("active", &search_bar, "search-mode-enabled")
+            .bidirectional()
+            .sync_create()
+            .build();
+        header.pack_end(&search_button);
+
+        // Botón de vista dividida (issue #35), como el de Typesetter: el icono
+        // dice qué se va a ver y comparte estado con la entrada del menú.
+        let preview_button = gtk4::ToggleButton::builder()
+            .icon_name("scribe-preview-off-symbolic")
+            .tooltip_text(gettext("Split View"))
+            .action_name("win.toggle-preview")
+            .build();
+        header.pack_end(&preview_button);
+
         // ---- menú principal, con la fila de zoom como en las apps de GNOME ----
         let menu = gio::Menu::new();
 
@@ -647,12 +706,8 @@ impl ScribeWindow {
         menu.append_section(None, &zoom_section);
 
         let file_section = gio::Menu::new();
-        file_section.append(Some(&gettext("New Window")), Some("app.new-window"));
-        file_section.append(Some(&gettext("_Open…")), Some("win.open"));
         file_section.append(Some(&gettext("_Save")), Some("win.save"));
         file_section.append(Some(&gettext("Save _As…")), Some("win.save-as"));
-        file_section.append(Some(&gettext("_Reload")), Some("win.reload"));
-        file_section.append(Some(&gettext("_Close Tab")), Some("win.close-tab"));
         file_section.append(Some(&gettext("Export to _PDF…")), Some("win.export-pdf"));
         menu.append_section(None, &file_section);
 
@@ -673,6 +728,20 @@ impl ScribeWindow {
             Some("win.typewriter-mode"),
         );
         menu.append_section(None, &view_section);
+
+        // Estilos (issue #36): una acción con estado de cadena y un ítem por
+        // valor; GTK los pinta como opciones excluyentes.
+        let style_section = gio::Menu::new();
+        for (label, nick) in [
+            (gettext("Follow System Style"), "system"),
+            (gettext("Light Style"), "light"),
+            (gettext("Dark Style"), "dark"),
+        ] {
+            let item = gio::MenuItem::new(Some(&label), Some("win.color-scheme"));
+            item.set_attribute_value("target", Some(&nick.to_variant()));
+            style_section.append_item(&item);
+        }
+        menu.append_section(Some(&gettext("Style")), &style_section);
 
         let app_section = gio::Menu::new();
         app_section.append(Some(&gettext("_Preferences")), Some("win.preferences"));
@@ -835,6 +904,44 @@ impl ScribeWindow {
                 // `docs`; se fuerza su caida antes con una variable local.
                 let found = docs.borrow().iter().find(|d| d.page == page).cloned();
                 found
+            })
+        };
+
+        // ---- búsqueda del documento activo (issue #37) ----
+        // La barra es única por ventana y siempre apunta a la pestaña activa;
+        // cada documento conserva su propio contexto, así que cambiar de
+        // pestaña no pierde el índice ya calculado.
+        let update_find_count: Rc<dyn Fn()> = {
+            let active_document = active_document.clone();
+            let search_count = search_count.clone();
+            Rc::new(move || {
+                let (position, total) = match active_document() {
+                    Some(doc) => doc.editor.search_state(),
+                    None => (0, 0),
+                };
+                if total == 0 {
+                    search_count.set_label("");
+                    return;
+                }
+                // Traduccion: «{0}» es la coincidencia actual, «{1}» el total.
+                search_count.set_label(
+                    &gettext("{0} of {1}")
+                        .replace("{0}", &position.to_string())
+                        .replace("{1}", &total.to_string()),
+                );
+            })
+        };
+
+        // Reaplica el patrón de la barra al documento activo.
+        let apply_find: Rc<dyn Fn()> = {
+            let active_document = active_document.clone();
+            let search_entry = search_entry.clone();
+            let update_find_count = update_find_count.clone();
+            Rc::new(move || {
+                if let Some(doc) = active_document() {
+                    doc.editor.set_search_text(&search_entry.text());
+                }
+                update_find_count();
             })
         };
 
@@ -1102,20 +1209,28 @@ impl ScribeWindow {
         refresh_recents("");
 
         // ---- aplicar preferencias ----
+        // Ranura de la acción de estilos: `apply_settings` se construye antes
+        // que las acciones, así que el estado del menú se sincroniza por aquí
+        // cuando la preferencia cambia (menú ↔ Preferencias, issue #36).
+        let action_color_scheme_slot: Rc<RefCell<Option<gio::SimpleAction>>> =
+            Rc::new(RefCell::new(None));
         let apply_settings: Rc<dyn Fn()> = {
             let settings = settings.clone();
             let documents = Rc::downgrade(&documents);
             let preview = preview.clone();
             let zoom_label = zoom_label.clone();
             let refresh_recents = refresh_recents.clone();
+            let action_color_scheme_slot = action_color_scheme_slot.clone();
             Rc::new(move || {
-                adw::StyleManager::default().set_color_scheme(
-                    match settings.color_scheme_index() {
-                        1 => adw::ColorScheme::ForceLight,
-                        2 => adw::ColorScheme::ForceDark,
-                        _ => adw::ColorScheme::Default,
-                    },
-                );
+                let scheme = settings.color_scheme_nick();
+                adw::StyleManager::default().set_color_scheme(match scheme.as_str() {
+                    "light" => adw::ColorScheme::ForceLight,
+                    "dark" => adw::ColorScheme::ForceDark,
+                    _ => adw::ColorScheme::Default,
+                });
+                if let Some(action) = action_color_scheme_slot.borrow().as_ref() {
+                    action.set_state(&scheme.to_variant());
+                }
                 // Las preferencias del editor son globales: se aplican a
                 // todos los documentos abiertos.
                 if let Some(docs) = documents.upgrade() {
@@ -1149,6 +1264,7 @@ impl ScribeWindow {
             let update_status = update_status.clone();
             let update_counts = update_counts.clone();
             let toast = toast.clone();
+            let update_find_count = update_find_count.clone();
             Rc::new(move |body: String, file: Option<PathBuf>| {
                 // Solo puede fallar con la ventana destruyendose, cuando
                 // nadie deberia crear documentos.
@@ -1169,6 +1285,16 @@ impl ScribeWindow {
                 {
                     let toast = toast.clone();
                     editor.connect_toast(move |msg| toast(msg));
+                }
+
+                // El contador de búsqueda sigue al documento activo; con
+                // documentos grandes el recuento llega por señal, no al fijar
+                // el patrón.
+                {
+                    let update_find_count = update_find_count.clone();
+                    editor
+                        .search_context()
+                        .connect_occurrences_count_notify(move |_| update_find_count());
                 }
 
                 let page = tab_view.append(&editor.widget);
@@ -1538,6 +1664,16 @@ impl ScribeWindow {
         let action_tab_prev = gio::SimpleAction::new("tab-prev", None);
         let action_reload = gio::SimpleAction::new("reload", None);
         let action_export_pdf = gio::SimpleAction::new("export-pdf", None);
+        let action_find = gio::SimpleAction::new("find", None);
+        let action_find_next = gio::SimpleAction::new("find-next", None);
+        let action_find_prev = gio::SimpleAction::new("find-prev", None);
+        // Estilos: una sola acción con estado de cadena («system»/«light»/
+        // «dark»), para que GTK pinte los tres ítems como excluyentes.
+        let action_color_scheme = gio::SimpleAction::new_stateful(
+            "color-scheme",
+            Some(glib::VariantTy::STRING),
+            &settings.color_scheme_nick().to_variant(),
+        );
 
         // Las alternancias son con estado, para que el menú muestre la marca.
         let action_sidebar = gio::SimpleAction::new_stateful(
@@ -1581,10 +1717,14 @@ impl ScribeWindow {
             &action_tab_prev,
             &action_reload,
             &action_export_pdf,
+            &action_find,
+            &action_find_next,
+            &action_find_prev,
         ] {
             window.add_action(a);
         }
         window.add_action(&action_open_recent);
+        window.add_action(&action_color_scheme);
         window.add_action(&action_sidebar);
         window.add_action(&action_preview);
         window.add_action(&action_focus);
@@ -1907,6 +2047,114 @@ impl ScribeWindow {
                 settings.set_show_preview(next);
             });
         }
+        // El icono del botón dice qué se va a ver: panel derecho atenuado
+        // (previsualización oculta) o relleno (visible).
+        {
+            let preview_button = preview_button.clone();
+            let sync_icon = move |on: bool| {
+                preview_button.set_icon_name(if on {
+                    "scribe-preview-on-symbolic"
+                } else {
+                    "scribe-preview-off-symbolic"
+                });
+            };
+            sync_icon(preview_visible.get());
+            action_preview.connect_state_notify(move |action| {
+                sync_icon(
+                    action
+                        .state()
+                        .and_then(|s| s.get::<bool>())
+                        .unwrap_or(false),
+                );
+            });
+        }
+
+        // ---- estilos (issue #36) ----
+        {
+            // El estado inicial del menú sale del ajuste; a partir de aquí menú
+            // y Preferencias se sincronizan solos vía `apply_settings`.
+            *action_color_scheme_slot.borrow_mut() = Some(action_color_scheme.clone());
+            let settings = settings.clone();
+            let apply_settings = apply_settings.clone();
+            action_color_scheme.connect_activate(move |action, param| {
+                let Some(nick) = param.and_then(|p| p.get::<String>()) else {
+                    return;
+                };
+                action.set_state(&nick.to_variant());
+                settings.set_color_scheme_nick(&nick);
+                apply_settings();
+            });
+        }
+
+        // ---- búsqueda (issue #37) ----
+        {
+            let apply_find = apply_find.clone();
+            search_entry.connect_search_changed(move |_| apply_find());
+        }
+        {
+            // Intros en captura: se adelantan al GtkText interno, que si no
+            // emitiría su «activate» (siguiente) también con Mayús pulsado.
+            let update_find_count = update_find_count.clone();
+            let active_document = active_document.clone();
+            let keys = gtk4::EventControllerKey::new();
+            keys.set_propagation_phase(gtk4::PropagationPhase::Capture);
+            keys.connect_key_pressed(move |_, key, _, state| {
+                if key != gtk4::gdk::Key::Return && key != gtk4::gdk::Key::KP_Enter {
+                    return glib::Propagation::Proceed;
+                }
+                if let Some(doc) = active_document() {
+                    if state.contains(gtk4::gdk::ModifierType::SHIFT_MASK) {
+                        doc.editor.search_previous();
+                    } else {
+                        doc.editor.search_next();
+                    }
+                }
+                update_find_count();
+                glib::Propagation::Stop
+            });
+            search_entry.add_controller(keys);
+        }
+        for (action, forward) in [(&action_find_next, true), (&action_find_prev, false)] {
+            let update_find_count = update_find_count.clone();
+            let active_document = active_document.clone();
+            action.connect_activate(move |_, _| {
+                if let Some(doc) = active_document() {
+                    if forward {
+                        doc.editor.search_next();
+                    } else {
+                        doc.editor.search_previous();
+                    }
+                }
+                update_find_count();
+            });
+        }
+        {
+            let update_find_count = update_find_count.clone();
+            let apply_find = apply_find.clone();
+            let active_document = active_document.clone();
+            search_bar.connect_search_mode_enabled_notify(move |bar| {
+                if bar.is_search_mode() {
+                    // El patrón de la barra se reaplica al documento que pasa a
+                    // estar activo, para no buscar con el texto de otra pestaña.
+                    apply_find();
+                    if let Some(doc) = active_document() {
+                        doc.editor.set_search_highlight(true);
+                    }
+                } else if let Some(doc) = active_document() {
+                    doc.editor.set_search_highlight(false);
+                }
+                update_find_count();
+            });
+        }
+        {
+            let search_bar = search_bar.clone();
+            let search_entry = search_entry.clone();
+            action_find.connect_activate(move |_, _| {
+                search_bar.set_search_mode(true);
+                search_entry.select_region(0, -1);
+                search_entry.grab_focus();
+            });
+        }
         for (action, is_focus) in [(&action_focus, true), (&action_typewriter, false)] {
             // Débil: estos modos se aplican a todos los editores.
             let documents = Rc::downgrade(&documents);
@@ -1970,6 +2218,9 @@ impl ScribeWindow {
             let preview_visible = preview_visible.clone();
             let toc_list = toc_list.clone();
             let toc_lines = toc_lines.clone();
+            let search_bar = search_bar.clone();
+            let apply_find = apply_find.clone();
+            let update_find_count = update_find_count.clone();
             tab_view.connect_selected_page_notify(move |tv| {
                 refresh_tabs();
                 update_status();
@@ -1985,6 +2236,13 @@ impl ScribeWindow {
                     preview.update(&text);
                 }
                 rebuild_toc(&toc_list, &toc_lines, &text);
+                // Con la barra de búsqueda abierta, el patrón se traslada a la
+                // pestaña que pasa a estar activa.
+                if search_bar.is_search_mode() {
+                    apply_find();
+                } else {
+                    update_find_count();
+                }
             });
         }
 

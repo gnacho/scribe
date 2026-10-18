@@ -438,21 +438,36 @@ impl AppSettings {
 
     /// 0 = sistema, 1 = claro, 2 = oscuro.
     pub fn color_scheme_index(&self) -> u32 {
-        match self
-            .get("system".to_string(), |s| {
-                s.string("color-scheme").to_string()
-            })
-            .as_str()
-        {
+        match self.color_scheme_nick().as_str() {
             "light" => 1,
             "dark" => 2,
             _ => 0,
         }
     }
+
+    /// Nick del ajuste `color-scheme`: «system», «light» o «dark».
+    pub fn color_scheme_nick(&self) -> String {
+        let nick = self.get("system".to_string(), |s| {
+            s.string("color-scheme").to_string()
+        });
+        match nick.as_str() {
+            "light" | "dark" => nick,
+            _ => "system".to_string(),
+        }
+    }
     pub fn set_color_scheme_index(&self, index: u32) {
-        let nick = match index {
+        self.set_color_scheme_nick(match index {
             1 => "light",
             2 => "dark",
+            _ => "system",
+        });
+    }
+
+    /// Fija el esquema por nick («system», «light», «dark»). Un valor
+    /// desconocido cae en «system», igual que al leerlo.
+    pub fn set_color_scheme_nick(&self, nick: &str) {
+        let nick = match nick {
+            "light" | "dark" => nick,
             _ => "system",
         };
         self.set(|s| {
