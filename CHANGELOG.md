@@ -5,6 +5,82 @@ All notable changes to Scribe will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.12] - 2026-10-18
+
+### Added
+
+- **Vista dividida desde la cabecera** (#35): un icono en la cabecera muestra u
+  oculta la previsualización, que se pinta a la derecha del editor con el mismo
+  motor de `GtkTextTag`.
+- **Esquemas de color en el menú** (#36): seguir el sistema, claro y oscuro, como
+  acción con estado y sincronizada con la página de Apariencia de Preferencias.
+  El menú deja de ofrecer lo que ya está en la cabecera (nueva ventana, abrir,
+  recargar y cerrar pestaña).
+- **Buscar en el documento** (#37): barra de búsqueda dentro del panel del
+  editor, con contador de coincidencias, botones de anterior/siguiente y Ctrl+F,
+  Intro y Mayús+Intro.
+- **Imágenes remotas** (#38): las imágenes con URL se descargan y se cachean en
+  `~/.cache/scribe/images` (se pregunta primero el tamaño, con límite de 20 MB),
+  de modo que las siguientes veces se pintan sin salir a la red. Si la descarga
+  falla queda el placeholder y no se reintenta en cada repintado.
+- **Tarjetas de YouTube** (#39): un vídeo solo en su línea (enlace de Markdown,
+  URL suelta o `<iframe>`) se dibuja como tarjeta 16:9 con su miniatura y botón
+  de reproducción, sin tocar el buffer. No hay reproductor embebido: al pulsar
+  la tarjeta se abre el navegador.
+- **Ctrl+clic en un enlace** (#40): abre el destino con la aplicación
+  predeterminada (solo `http`, `https` y `mailto`) y, con Ctrl pulsado encima de
+  un enlace, el globo de ayuda dice a dónde va. El clic normal sigue siendo del
+  texto: coloca el cursor y selecciona.
+- **Exportar a PDF** (Ctrl+P) por el pipeline de impresión de GTK, con ajustes
+  propios (esquema de color, fuentes, tamaño y orientación) y paginación
+  cuidada, y **recarga automática** cuando el fichero cambia en disco (#31).
+- **Pegado y arrastre de imágenes**: se guardan junto al documento y se enlazan
+  con ruta relativa. **Recuperación del borrador** tras un cierre inesperado
+  (#31).
+- **Línea de órdenes**: `scribe fichero.md:12:4` abre en la línea y columna
+  indicadas, y acepta contenido por tubería (#31).
+- **Icono nuevo** (#44): un portanotas con una nota (cabecera, línea
+  resaltada y lista) y una pluma estilográfica escribiendo en la esquina,
+  dibujado en Impress y exportado a SVG; se lee de 16 px en adelante.
+
+### Changed
+
+- **Instalación de usuario** (`make install`) que incluye el binario, el esquema
+  GSettings recompilado, el fichero .desktop y los iconos; **MSRV a Rust 1.85**
+  (el árbol de dependencias exige edition2024) y **presupuestos de rendimiento**
+  en modo release para abrir y decorar (#31).
+- **Menú principal depurado** (#46): fuera la sección «Estilo» (el esquema de
+  color se elige en Preferencias), la entrada «Vista dividida» (está en la
+  cabecera y en Ctrl+Shift+P), la fila de zoom con el tamaño de fuente en px,
+  y «Alinear tablas» y «Cerrar vallas». Las acciones y sus atajos siguen:
+  Ctrl+Shift+P, Ctrl +/-/0, Ctrl+Alt+T y Ctrl+Alt+F.
+- **Privacidad y documentación**: el aviso de privacidad pasa a decir la verdad
+  sobre la red (las únicas peticiones son las que pide el documento, con su
+  caché en disco) y el README (inglés y español) recoge las funciones nuevas con
+  sus límites reales y capturas al día.
+
+### Removed
+
+- **Barra de estado** (#45): se quita el footer con el contador de palabras, el
+  botón «Ln, Col» con su popover de ir a la línea, el botón «Markdown» con las
+  propiedades y el aviso de vallas. «Cerrar vallas» queda en Ctrl+Alt+F y
+  «Alinear tablas» en Ctrl+Alt+T.
+
+### Fixed
+
+- **Aborto al arrancar en Wayland** (#32, #34): los márgenes de columna se
+  aplicaban dentro del ciclo de validación de GTK y disparaban el `g_assert` de
+  `gtk_text_view_validate_onscreen` en cada arranque bajo un compositor (GTK
+  4.22.5 y 4.24.1; con Xvfb no se reproducía). Ahora se aplican desde un idle.
+- **Tablas** (#30, #34): las columnas se miden desde la fila de guiones en vez de
+  desde los espacios que tenga cada fila, con una línea vertical continua por
+  frontera, regla de cabecera y respeto de `:---`, `:---:` y `---:`. La fila
+  donde está el cursor dentro de una tabla se muestra en su fuente para poder
+  editarla. Una celda más ancha que su columna sigue desbordando: Ctrl+Alt+T
+  («Formatear tablas») la deja alineada.
+- **Test de pestañas** (#33, #34): el título del borrador se comparaba con el
+  msgid sin traducir.
+
 ## [0.3.10] - 2026-09-19
 
 ### Added

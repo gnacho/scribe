@@ -25,6 +25,24 @@
   </developer>
   <content_rating type="oars-1.1" />
   <releases>
+    <release version="0.3.12" date="2026-10-18">
+      <description>
+        <p>Vista dividida desde la cabecera, esquemas de color (seguir el
+        sistema, claro, oscuro) en el menú y barra de buscar con contador de
+        coincidencias (Ctrl+F).</p>
+        <p>Markdown: las imágenes con URL se descargan y se cachean en disco
+        para pintarlas, un vídeo de YouTube solo en su línea se dibuja como
+        tarjeta 16:9 con su miniatura y Ctrl+clic en un enlace lo abre con la
+        aplicación predeterminada.</p>
+        <p>Tablas: las columnas se miden desde la fila de guiones y la fila del
+        cursor se muestra en su fuente para editarla. Arreglado el aborto al
+        arrancar en Wayland con GTK 4.22.5 y posteriores. Exportación a PDF,
+        recarga automática del fichero y recuperación del borrador.</p>
+        <p>Icono nuevo: un portanotas con una pluma estilográfica. Se elimina
+        la barra de estado y el menú se depura (los atajos Ctrl+Shift+P,
+        Ctrl+Alt+T y Ctrl+Alt+F se conservan).</p>
+      </description>
+    </release>
     <release version="0.3.10" date="2026-09-19">
       <description>
         <p>Interfaz traducida con gettext: cadenas fuente en inglés y catálogo
