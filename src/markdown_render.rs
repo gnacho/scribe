@@ -708,14 +708,60 @@ pub fn canvas_layout(
     if rows.is_empty() || columns.is_empty() {
         return None;
     }
-    // Pesos: el ancho del delimitador, con un mínimo para que una columna
-    // corta no desaparezca; se normalizan al ancho disponible en celdas.
-    let pesos: Vec<f32> = columns.iter().map(|(_, w)| (*w).max(3) as f32).collect();
+    // Pesos: el mayor entre el ancho del delimitador y el ancho de la celda
+    // más larga de la columna (con tope, para que una celda gigante no se coma
+    // la tabla). Se normalizan al ancho disponible en celdas.
+    let mut pesos: Vec<f32> = columns.iter().map(|(_, w)| (*w).max(3) as f32).collect();
+    for row in rows {
+        for (i, celda) in row.cells.iter().enumerate() {
+            if let Some(p) = pesos.get_mut(i) {
+                let largo = celda.chars().count() as f32;
+                *p = p.max(largo.min(48.0));
+            }
+        }
+    }
+    // Suelo por columna: su palabra más larga más el padding de celda (2 ×
+    // CANVAS_CELL_PAD ≈ 4 celdas), para que ninguna palabra se parta por
+    // estrecha que quede la columna tras normalizar.
+    let mut suelos = vec![6.0f32; columns.len()];
+    for row in rows {
+        for (i, celda) in row.cells.iter().enumerate() {
+            if let Some(s) = suelos.get_mut(i) {
+                let palabra = celda
+                    .split_whitespace()
+                    .map(|w| w.chars().count())
+                    .max()
+                    .unwrap_or(0) as f32;
+                *s = (*s).max(palabra + 4.0);
+            }
+        }
+    }
     let total: f32 = pesos.iter().sum();
-    let col_widths: Vec<f32> = pesos
-        .iter()
-        .map(|w| (w / total * column_cells).max(4.0))
-        .collect();
+    let base = column_cells / columns.len() as f32;
+    let mut col_widths: Vec<f32> = if base < 6.0 {
+        // No hay para el mínimo por columna: reparto equitativo degradado.
+        vec![base; columns.len()]
+    } else {
+        pesos
+            .iter()
+            .map(|w| (w / total * column_cells).max(6.0))
+            .collect()
+    };
+    // Suelo por columna: su palabra más larga más el padding de celda (2 ×
+    // CANVAS_CELL_PAD ≈ 4 celdas), para que ninguna palabra se parta por
+    // estrecha que quede la columna tras normalizar. Si los suelos desbordan
+    // el ancho disponible, reparto proporcional a los suelos.
+    for (i, suelo) in suelos.iter().enumerate() {
+        if let Some(w) = col_widths.get_mut(i) {
+            *w = w.max(*suelo);
+        }
+    }
+    let suma: f32 = col_widths.iter().sum();
+    if suma > column_cells && suma > 0.0 {
+        for w in col_widths.iter_mut() {
+            *w = *w / suma * column_cells;
+        }
+    }
     if (col_widths[0] as usize) < 4 {
         return None;
     }
@@ -2657,21 +2703,26 @@ mod tests {
                 cells: vec!["Lunes".into(), "redactar el informe completo".into()],
             },
         ];
-        let layout = canvas_layout(&columns, &rows, 40.0).expect("layout");
-        // Pesos 3 y 6 → tercio y dos tercios de 40 celdas.
+        let layout = canvas_layout(&columns, &rows, 20.0).expect("layout");
+        // Pesos por contenido: col0 = 5 (delimitador 3, celdas 3 y 5); col1 =
+        // 28 (su celda más larga). Normalizados sobre 20: 3.03 y 16.97; los
+        // suelos (palabra más larga + padding: 9 y 12) elevan col0 a 9 y con
+        // la suma (25.97) desbordando, se reparten proporcionalmente:
+        // 20 × 9/25.97 = 6.93 y 20 × 16.97/25.97 = 13.07.
         assert!(
-            (layout.col_widths[0] - 13.33).abs() < 0.1,
+            (layout.col_widths[0] - 6.93).abs() < 0.1,
             "{:?}",
             layout.col_widths
         );
         assert!(
-            (layout.col_widths[1] - 26.66).abs() < 0.1,
+            (layout.col_widths[1] - 13.07).abs() < 0.1,
             "{:?}",
             layout.col_widths
         );
-        // La celda larga (26 letras + espacios) envuelve en dos líneas.
-        assert_eq!(layout.row_lines, vec![1, 2]);
-        assert_eq!(layout.cells[1][1].len(), 2);
+        // La celda larga (26 letras + espacios) envuelve en tres líneas con
+        // 13 celdas de columna.
+        assert_eq!(layout.row_lines, vec![1, 3]);
+        assert_eq!(layout.cells[1][1].len(), 3);
         // Envoltura simple: no parte palabras.
         assert_eq!(wrap_cells("aa bb cc", 5), vec!["aa bb", "cc"]);
         // Palabra imposible: la parte sin desbordar.
