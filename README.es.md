@@ -181,14 +181,12 @@ cachean en `~/.cache/scribe/images`. Nunca se sube nada. Ver
 
 ## Capturas
 
-La interfaz está actualmente en español.
-
 **Ventana principal con render Markdown en vivo**
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/hero-es-dark.png">
   <source media="(prefers-color-scheme: light)" srcset="assets/hero-es-light.png">
-  <img alt="Ventana principal del editor con cabeceras, negrita, cursiva, una cita, una lista, una tabla y una imagen pintada desde una URL" src="assets/hero-es-light.png" width="800">
+  <img alt="Ventana principal del editor con cabeceras, negrita, cursiva, una cita, una lista, una tabla alineada y una imagen pintada desde una URL" src="assets/hero-es-light.png" width="800">
 </picture>
 
 **Vista dividida (con el icono de la cabecera) y buscar en el documento**

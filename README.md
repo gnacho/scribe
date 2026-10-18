@@ -12,9 +12,9 @@
 
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="assets/hero-es-dark.png">
-    <source media="(prefers-color-scheme: light)" srcset="assets/hero-es-light.png">
-    <img alt="Scribe editor window showing Markdown text with live WYSIWYG rendering" src="assets/hero-es-light.png" width="800">
+    <source media="(prefers-color-scheme: dark)" srcset="assets/hero-en-dark.png">
+    <source media="(prefers-color-scheme: light)" srcset="assets/hero-en-light.png">
+    <img alt="Scribe editor window showing Markdown text with live WYSIWYG rendering" src="assets/hero-en-light.png" width="800">
   </picture>
 </p>
 
@@ -163,36 +163,34 @@ thumbnails referenced by the text are downloaded to be painted and cached under
 
 ## Screenshots
 
-The interface is currently in Spanish.
-
 **Main window with live Markdown rendering**
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="assets/hero-es-dark.png">
-  <source media="(prefers-color-scheme: light)" srcset="assets/hero-es-light.png">
-  <img alt="Main editor window with headings, bold, italic, a quote, a list, a table and a picture painted from a URL" src="assets/hero-es-light.png" width="800">
+  <source media="(prefers-color-scheme: dark)" srcset="assets/hero-en-dark.png">
+  <source media="(prefers-color-scheme: light)" srcset="assets/hero-en-light.png">
+  <img alt="Main editor window with headings, bold, italic, a quote, a list, an aligned table and a picture painted from a URL" src="assets/hero-en-light.png" width="800">
 </picture>
 
 **Split preview (toggled from the header icon) and find in the document**
 
 <p align="center">
-  <img alt="Editor with the split preview on the right rendering the same document" src="assets/screenshot-split-es-light.png" width="800">
+  <img alt="Editor with the split preview on the right rendering the same document" src="assets/screenshot-split-en-light.png" width="800">
 </p>
 
 <p align="center">
-  <img alt="Find bar inside the editor pane with next and previous" src="assets/screenshot-find-es-light.png" width="800">
+  <img alt="Find bar inside the editor pane with next and previous" src="assets/screenshot-find-en-light.png" width="800">
 </p>
 
 **Preferences window**
 
 <p align="center">
-  <img alt="Preferences window with Appearance, Editor and Export pages" src="assets/screenshot-preferences-es-light.png" width="800">
+  <img alt="Preferences window with Appearance, Editor and Export pages" src="assets/screenshot-preferences-en-light.png" width="800">
 </p>
 
 **Focus mode (everything dimmed except the current paragraph)**
 
 <p align="center">
-  <img alt="Focus mode in the editor showing a dimmed document with the current paragraph highlighted" src="assets/screenshot-focus-es-light.png" width="800">
+  <img alt="Focus mode in the editor showing a dimmed document with the current paragraph highlighted" src="assets/screenshot-focus-en-light.png" width="800">
 </p>
 
 ## Build requirements
