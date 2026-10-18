@@ -143,41 +143,14 @@ fn lienzo_colapsa_filas_y_revela_la_del_cursor() {
     win.present();
     editor.set_text(doc);
     pump(&ctx, 1200);
-    eprintln!(
-        "DEBUG analisis: {:?}",
-        markdown_render::analyze(doc)
-            .ornaments
-            .iter()
-            .map(|o| format!("{o:?}"))
-            .collect::<Vec<_>>()
-    );
 
     let buffer = editor.view.buffer();
     let colapsado = buffer
         .tag_table()
         .lookup("tcanvas_src")
         .expect("tag de colapso creado");
-    eprintln!(
-        "DEBUG tags linea0: {:?}",
-        buffer.iter_at_line(0).expect("l0").tags().len()
-    );
-    eprintln!(
-        "DEBUG tags offset5: {:?}",
-        buffer.iter_at_offset(5).tags().len()
-    );
     // Fila de contenido (línea 2): colapsada y con hueco.
     let iter = buffer.iter_at_line(2).expect("línea 2");
-    eprintln!("DEBUG tags linea2:");
-    buffer.tag_table().foreach(|t| {
-        if iter.has_tag(t) {
-            eprintln!("  tag: {:?}", t.name());
-        }
-    });
-    eprintln!(
-        "DEBUG view.width={} advance={}",
-        editor.view.width(),
-        editor.view.cell_advance()
-    );
     assert!(
         iter.has_tag(&colapsado),
         "la fila de contenido lleva el colapso"
@@ -200,5 +173,76 @@ fn lienzo_colapsa_filas_y_revela_la_del_cursor() {
     assert!(
         !iter.has_tag(&colapsado),
         "la fila del cursor se revela sin colapso"
+    );
+}
+
+/// Corrector ortográfico (issue #51): encendido marca la palabra mal escrita
+/// con el tag propio; apagado deja de subrayar.
+#[test]
+#[ignore = "requiere display y diccionario del sistema (es_ES)"]
+fn ortografia_subraya_y_se_apaga() {
+    gtk4::init().expect("GTK necesita un display");
+    libadwaita::init().expect("libadwaita init");
+    let ctx = gtk4::glib::MainContext::default();
+    let editor = Editor::new();
+    // SIN ventana (bisect): la vista vive sin present.
+    editor.set_text("holaa mundo\n");
+    // El subrayado en vivo es incómodo sobre la palabra que se teclea: el
+    // cursor va al final del documento (como lo dejara el usuario).
+    editor.place_cursor_at(1, 1);
+    // libspelling no marca el rango que solapa con el cursor (no subraya lo
+    // que estas tecleando): el cursor va al final del documento.
+    // SIN cursor movido (variante de depuracion)
+    let tabla = editor.view.buffer().tag_table();
+    tabla.connect_tag_added(|_t, tag| {
+        eprintln!(
+            "TAG-ADDED: name={:?} anon={}",
+            tag.name(),
+            tag.name().is_none()
+        );
+    });
+    tabla.connect_tag_removed(|_t, tag| {
+        eprintln!(
+            "TAG-REMOVED: name={:?} anon={}",
+            tag.name(),
+            tag.name().is_none()
+        );
+    });
+    editor.set_spellcheck(true);
+    pump(&ctx, 2500);
+
+    let buffer = editor.view.buffer();
+    let tag = buffer
+        .tag_table()
+        .lookup("ortografia")
+        .expect("el tag de ortografia existe en la tabla");
+    let marcada = |buffer: &gtk4::TextBuffer, tag: &gtk4::TextTag| {
+        let ultimo = buffer.end_iter().offset();
+        (0..ultimo).any(|off| buffer.iter_at_offset(off).has_tag(tag))
+    };
+    pump(&ctx, 4000);
+    assert!(
+        marcada(&buffer, &tag),
+        "la palabra mal escrita queda marcada por el corrector"
+    );
+    assert_eq!(
+        tag.underline(),
+        gtk4::pango::Underline::Single,
+        "con el corrector encendido, la marca subraya"
+    );
+
+    // Al apagarlo la marca permanece aplicada (apagarla del todo rompe
+    // libspelling 0.4) pero deja de subrayar.
+    editor.set_spellcheck(false);
+    assert_eq!(
+        tag.underline(),
+        gtk4::pango::Underline::None,
+        "sin subrayado"
+    );
+    editor.set_spellcheck(true);
+    assert_eq!(
+        tag.underline(),
+        gtk4::pango::Underline::Single,
+        "vuelve a subrayar"
     );
 }

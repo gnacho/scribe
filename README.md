@@ -59,6 +59,9 @@ actually use to draft notes and docs.
   rule where the delimiter row was), a rule under H1/H2, vertical quote bars,
   drawn bullets per nesting level, checkable task boxes and horizontal rules.
   The mark a decoration replaces is **shrunk** instead of hidden.
+- **Spell checking**: misspelt words are underlined as you type, with
+  suggestions and "ignore/add to dictionary" in the context menu; the language
+  follows the system locale and it can be switched off in Preferences.
 - **Tables of prose as real tables**: when a table's prose cells cannot fit
   its delimiter geometry (the common long-form table), the source rows collapse
   and the table is painted as a canvas: every cell wraps within its column,

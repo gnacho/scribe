@@ -4,3 +4,4 @@ core
 core.*
 *.core
 *.po~
+data/gschemas.compiled

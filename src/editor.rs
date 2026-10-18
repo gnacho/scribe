@@ -58,6 +58,7 @@ const BLOCK_INDENTS: [(&str, i32, i32); 6] = [
 struct Decoration {
     markup: MarkupVisibility,
     focus_mode: bool,
+    spellcheck: bool,
 }
 
 impl Default for Decoration {
@@ -65,8 +66,71 @@ impl Default for Decoration {
         Self {
             markup: MarkupVisibility::Focus,
             focus_mode: false,
+            spellcheck: true,
         }
     }
+}
+
+/// Corrector ortográfico sobre enchant: el diccionario del locale del
+/// sistema (hunspell es_ES, en_US, ...). Con `dict` a `None` (sin
+/// diccionario instalado) no marca nada y todo valida.
+struct Ortografia {
+    dict: Option<enchant::Dict>,
+}
+
+impl Ortografia {
+    /// Resuelve el diccionario con el locale del sistema (LC_MESSAGES o
+    /// LANG, sin codificacion ni modificador); si enchant no lo tiene,
+    /// prueba ingles y se queda sin.
+    fn con_locale_del_sistema() -> Self {
+        let mut broker = enchant::Broker::new();
+        let mut dict = None;
+        let senales = [
+            std::env::var("LC_MESSAGES").ok(),
+            std::env::var("LANG").ok(),
+        ];
+        for valor in senales.iter().flatten() {
+            let base = valor
+                .split('.')
+                .next()
+                .and_then(|sin_codigo| sin_codigo.split('@').next())
+                .unwrap_or_default();
+            if base.chars().count() < 2 {
+                continue;
+            }
+            if let Ok(encontrado) = broker.request_dict(base) {
+                dict = Some(encontrado);
+                break;
+            }
+        }
+        if dict.is_none() {
+            dict = broker.request_dict("en_US").ok();
+        }
+        Self { dict }
+    }
+
+    /// Valida una palabra: `true` si el diccionario la conoce (o si no hay
+    /// diccionario, en cuyo caso no se marca nada).
+    fn valida(&self, palabra: &str) -> bool {
+        match &self.dict {
+            Some(dict) => dict.check(palabra).unwrap_or(true),
+            None => true,
+        }
+    }
+}
+
+/// Contexto de una pasada de decoración: todo lo que `decorate` necesita
+/// sobre el documento activo. Clonable: los cierres de señales capturan una
+/// copia y cada re-decoración la consume.
+#[derive(Clone)]
+struct DecoracionCtx {
+    view: glib::WeakRef<MarkdownView>,
+    buffer: glib::WeakRef<gtksourceview5::Buffer>,
+    decoration: Rc<Cell<Decoration>>,
+    generation: Rc<Cell<u64>>,
+    base_dir: Rc<RefCell<Option<PathBuf>>>,
+    unclosed_fences: Rc<RefCell<Vec<UnclosedFence>>>,
+    ortografia: Rc<Ortografia>,
 }
 
 pub struct Editor {
@@ -76,7 +140,6 @@ pub struct Editor {
     tags: gtk4::TextTagTable,
     on_changed: ChangedCallback,
     last_line: Rc<Cell<i32>>,
-    generation: Rc<Cell<u64>>,
     decoration: Rc<Cell<Decoration>>,
     column_width: Rc<Cell<i32>>,
     continue_lists: Rc<Cell<bool>>,
@@ -95,6 +158,9 @@ pub struct Editor {
     /// Contexto de búsqueda del documento, vivo toda la vida del editor: el
     /// índice se mantiene caliente aunque la barra de búsqueda esté cerrada.
     search_context: gtksourceview5::SearchContext,
+    /// Contexto de las pasadas de decoración: lo capturan los cierres de
+    /// señales por copia y lleva dentro el corrector ortográfico.
+    decoracion_ctx: DecoracionCtx,
 }
 
 fn build_tags() -> gtk4::TextTagTable {
@@ -246,6 +312,13 @@ fn build_tags() -> gtk4::TextTagTable {
         .build());
     // Filas fuente de un lienzo de tabla pintado: colapsan (igual que las
     // marcas encogidas) y la vista pinta la fila real bajo su hueco.
+    // Corrector ortografico (issue #51): subrayado de las palabras que el
+    // diccionario no valida, en el rojo de error de GNOME.
+    add(gtk4::TextTag::builder()
+        .name("ortografia")
+        .underline(pango::Underline::Single)
+        .foreground_rgba(&rgba(0xe01b24, 1.0))
+        .build());
     add(gtk4::TextTag::builder()
         .name("tcanvas_src")
         .scale(0.0)
@@ -412,36 +485,24 @@ fn paragraph_bounds(buffer: &gtksourceview5::Buffer, line: i32) -> (i32, i32) {
 /// `gtk_text_iter_set_visible_line_index` («byte index off the end of the
 /// line») y, antes de llegar ahi, tags de bloque que se extienden mas alla de
 /// su rango. Se difiere siempre al bucle principal.
-fn schedule_decoration(
-    view: &MarkdownView,
-    buffer: &gtksourceview5::Buffer,
-    decoration: &Rc<Cell<Decoration>>,
-    generation: &Rc<Cell<u64>>,
-    base_dir: &Rc<RefCell<Option<PathBuf>>>,
-    unclosed_fences: &Rc<RefCell<Vec<UnclosedFence>>>,
-    delay: Duration,
-) {
-    let current = generation.get().wrapping_add(1);
-    generation.set(current);
+fn schedule_decoration(ctx: &DecoracionCtx, delay: Duration) {
+    let config = ctx.decoration.get();
+    let current = ctx.generation.get().wrapping_add(1);
+    ctx.generation.set(current);
 
-    let view = view.clone();
-    let buffer = buffer.clone();
-    let decoration = decoration.clone();
-    let generation = generation.clone();
-    let base_dir = base_dir.clone();
-    let unclosed_fences = unclosed_fences.clone();
+    let ctx = ctx.clone();
     glib::timeout_add_local_once(delay, move || {
         // Si ha llegado otra peticion mientras esperabamos, esta sobra.
-        if generation.get() != current {
+        if ctx.generation.get() != current {
             return;
         }
-        decorate(
-            &view,
-            &buffer,
-            decoration.get(),
-            &base_dir,
-            &unclosed_fences,
-        );
+        let Some(view) = ctx.view.upgrade() else {
+            return;
+        };
+        let Some(buffer) = ctx.buffer.upgrade() else {
+            return;
+        };
+        decorate(&view, &buffer, &ctx, config);
     });
 }
 
@@ -480,16 +541,111 @@ fn resolve_image_dest(dest: &str, base_dir: &Option<PathBuf>) -> String {
     }
 }
 
-fn decorate(
-    view: &MarkdownView,
+/// Cap de palabras por pasada de ortografia: un documento gigante no debe
+/// pagar miles de busquedas de hunspell en cada tecla (la pasada siguiente
+/// cubrira lo que falte si el usuario sigue escribiendo cerca del final).
+const ORTOGRAFIA_MAX_PALABRAS: usize = 4000;
+
+/// Es esta pieza parte de una palabra? Letras y apostrofo interior.
+fn es_de_palabra(ch: char, previa: Option<char>) -> bool {
+    if ch.is_alphabetic() {
+        return true;
+    }
+    // Apostrofo interior (castellano: "del'", frances/ingles: "don't").
+    ch == '\'' && previa.is_some_and(|p| p.is_alphabetic())
+}
+
+/// Pase de ortografia (issue #51): recorre el texto, marca con el tag
+/// «ortografia» las palabras que el diccionario no valida y, si el
+/// corrector esta apagado, limpia cualquier marca previa.
+fn revisa_ortografia(
     buffer: &gtksourceview5::Buffer,
-    config: Decoration,
-    base_dir: &Rc<RefCell<Option<PathBuf>>>,
-    unclosed_fences: &Rc<RefCell<Vec<UnclosedFence>>>,
+    ortografia: &Ortografia,
+    text: &str,
+    byte_to_char: &[i32],
+    enabled: bool,
 ) {
     let start = buffer.start_iter();
     let end = buffer.end_iter();
-    buffer.remove_all_tags(&start, &end);
+    let subrayado = match buffer.tag_table().lookup("ortografia") {
+        Some(tag) => tag,
+        None => return,
+    };
+    buffer.remove_tag(&subrayado, &start, &end);
+    if !enabled {
+        return;
+    }
+
+    let mut word_start: Option<usize> = None;
+    let mut previa: Option<char> = None;
+    let mut revisadas = 0usize;
+
+    let mut i = 0usize;
+    while i <= text.len() {
+        let ch = text[i..].chars().next();
+        match ch {
+            Some(c) if es_de_palabra(c, previa) => {
+                if word_start.is_none() {
+                    word_start = Some(i);
+                }
+                previa = Some(c);
+                i += c.len_utf8();
+            }
+            _ => {
+                if let Some(desde) = word_start.take() {
+                    let palabra = &text[desde..i];
+                    revisadas += 1;
+                    if revisadas <= ORTOGRAFIA_MAX_PALABRAS
+                        && palabra.chars().count() >= 2
+                        && !ortografia.valida(palabra)
+                    {
+                        let (Some(&from), Some(&to)) =
+                            (byte_to_char.get(desde), byte_to_char.get(i.min(text.len())))
+                        else {
+                            continue;
+                        };
+                        if from < to {
+                            let ini = buffer.iter_at_offset(from);
+                            let fin = buffer.iter_at_offset(to);
+                            buffer.apply_tag_by_name("ortografia", &ini, &fin);
+                        }
+                    }
+                }
+                previa = None;
+                if let Some(c) = ch {
+                    i += c.len_utf8();
+                } else {
+                    break;
+                }
+            }
+        }
+    }
+}
+
+fn decorate(
+    view: &MarkdownView,
+    buffer: &gtksourceview5::Buffer,
+    ctx: &DecoracionCtx,
+    config: Decoration,
+) {
+    let base_dir = &ctx.base_dir;
+    let unclosed_fences = &ctx.unclosed_fences;
+    let ortografia = &ctx.ortografia;
+    let start = buffer.start_iter();
+    let end = buffer.end_iter();
+    // Se retiran SOLO los tags con nombre (los nuestros): el buffer puede
+    // llevar tags de otras librerias creados sin nombre (el corrector
+    // ortografico marca con uno anonimo) que remove_all_tags borraria sin
+    // que nadie los vuelva a aplicar.
+    let mut con_nombre: Vec<gtk4::TextTag> = Vec::new();
+    buffer.tag_table().foreach(|t| {
+        if t.name().is_some() {
+            con_nombre.push(t.clone());
+        }
+    });
+    for tag in &con_nombre {
+        buffer.remove_tag(tag, &start, &end);
+    }
 
     let line_count = end.line() + 1;
     let text = buffer.text(&start, &end, true).to_string();
@@ -510,6 +666,17 @@ fn decorate(
         byte_index += ch.len_utf8();
         char_index += 1;
     }
+
+    // Corrector ortografico (issue #51): subraya las palabras que el checker
+    // del diccionario no valida. Va aqui, donde byte_to_char ya traduce a
+    // offsets del widget. La pasada anterior se borro al inicio.
+    revisa_ortografia(
+        buffer,
+        ortografia,
+        text.as_str(),
+        &byte_to_char,
+        config.spellcheck,
+    );
     byte_to_char[text.len()] = char_index;
 
     let analysis = analyze(&text);
@@ -1259,23 +1426,48 @@ impl Editor {
         let search_context = gtksourceview5::SearchContext::new(&buffer, Some(&search_settings));
         search_context.set_highlight(false);
 
+        // Corrector ortografico (issue #51): el diccionario lo resuelve
+        // enchant con el locale del sistema; sin diccionario, la revision
+        // no marca nada (y la preferencia sigue funcionando).
+        let ortografia = Rc::new(Ortografia::con_locale_del_sistema());
+
+        let on_changed = Rc::new(RefCell::new(None));
+        let last_line = Rc::new(Cell::new(-1));
+        let generation = Rc::new(Cell::new(0));
+        let decoration = Rc::new(Cell::new(Decoration::default()));
+        let column_width = Rc::new(Cell::new(720));
+        let continue_lists = Rc::new(Cell::new(true));
+        let typewriter = Rc::new(Cell::new(false));
+        let base_dir = Rc::new(RefCell::new(None));
+        let unclosed_fences = Rc::new(RefCell::new(Vec::new()));
+        let on_toast = Rc::new(RefCell::new(None));
+        let decoracion_ctx = DecoracionCtx {
+            view: view.downgrade(),
+            buffer: buffer.downgrade(),
+            decoration: decoration.clone(),
+            generation: generation.clone(),
+            base_dir: base_dir.clone(),
+            unclosed_fences: unclosed_fences.clone(),
+            ortografia,
+        };
+
         let editor = Self {
             widget,
             view,
             buffer,
             tags,
-            on_changed: Rc::new(RefCell::new(None)),
-            last_line: Rc::new(Cell::new(-1)),
-            generation: Rc::new(Cell::new(0)),
-            decoration: Rc::new(Cell::new(Decoration::default())),
-            column_width: Rc::new(Cell::new(720)),
-            continue_lists: Rc::new(Cell::new(true)),
-            typewriter: Rc::new(Cell::new(false)),
-            base_dir: Rc::new(RefCell::new(None)),
-            unclosed_fences: Rc::new(RefCell::new(Vec::new())),
-            on_toast: Rc::new(RefCell::new(None)),
+            on_changed,
+            last_line,
+            decoration,
+            column_width,
+            continue_lists,
+            typewriter,
+            base_dir,
+            unclosed_fences,
+            on_toast,
             search_settings,
             search_context,
+            decoracion_ctx,
         };
         editor.connect_signals();
         editor
@@ -1286,11 +1478,7 @@ impl Editor {
             let view = self.view.clone();
             let tags = self.tags.clone();
             let column_width = self.column_width.clone();
-            let decoracion = self.decoration.clone();
-            let generacion = self.generation.clone();
-            let base_dir = self.base_dir.clone();
-            let unclosed_fences = self.unclosed_fences.clone();
-            let buffer = self.buffer.clone();
+            let ctx = self.decoracion_ctx.clone();
             hadj.connect_page_size_notify(move |adj| {
                 let width = adj.page_size() as i32;
                 if width <= 0 {
@@ -1300,15 +1488,7 @@ impl Editor {
                 apply_column_margins_deferred(&view, &tags, margin);
                 // El layout del lienzo de tabla depende del ancho: al
                 // cambiarlo hay que re-decorar para recalcular sus huecos.
-                schedule_decoration(
-                    &view,
-                    &buffer,
-                    &decoracion,
-                    &generacion,
-                    &base_dir,
-                    &unclosed_fences,
-                    Duration::ZERO,
-                );
+                schedule_decoration(&ctx, Duration::ZERO);
             });
         }
 
@@ -1318,49 +1498,30 @@ impl Editor {
         // desconectar; como todas las capturas son débiles, los handlers de
         // editores cerrados quedan inertes (un no-op por cambio de tema),
         // no hay fuga de widgets.
+        let ctx = self.decoracion_ctx.clone();
         let tags = self.tags.downgrade();
         let buffer = self.buffer.downgrade();
         let view = self.view.downgrade();
-        let decoration = Rc::downgrade(&self.decoration);
-        let generation = Rc::downgrade(&self.generation);
-        let base_dir = Rc::downgrade(&self.base_dir);
-        let unclosed_fences = Rc::downgrade(&self.unclosed_fences);
         adw::StyleManager::default().connect_dark_notify(move |sm| {
-            let (tags, buffer, view, decoration, generation, base_dir, unclosed_fences) = match (
-                tags.upgrade(),
-                buffer.upgrade(),
-                view.upgrade(),
-                decoration.upgrade(),
-                generation.upgrade(),
-                base_dir.upgrade(),
-                unclosed_fences.upgrade(),
-            ) {
-                (Some(t), Some(b), Some(v), Some(d), Some(g), Some(dir), Some(u)) => {
-                    (t, b, v, d, g, dir, u)
-                }
-                _ => return,
+            let Some(tags) = tags.upgrade() else {
+                return;
+            };
+            let Some(buffer) = buffer.upgrade() else {
+                return;
+            };
+            let Some(view) = view.upgrade() else {
+                return;
             };
             apply_scheme(&buffer, sm.is_dark());
             apply_theme(&tags, &view, sm.is_dark());
-            schedule_decoration(
-                &view,
-                &buffer,
-                &decoration,
-                &generation,
-                &base_dir,
-                &unclosed_fences,
-                Duration::ZERO,
-            );
+            schedule_decoration(&ctx, Duration::ZERO);
         });
 
         // Las señales del buffer viven tanto como el buffer, y la vista posee
         // el buffer: capturar la vista en débil rompe el ciclo.
         let on_changed = self.on_changed.clone();
-        let generation = self.generation.clone();
         let last_line = self.last_line.clone();
-        let decoration = self.decoration.clone();
-        let base_dir = self.base_dir.clone();
-        let unclosed_fences = self.unclosed_fences.clone();
+        let ctx = self.decoracion_ctx.clone();
         let view = self.view.downgrade();
         self.buffer.connect_changed(move |buf| {
             let text = buf.text(&buf.start_iter(), &buf.end_iter(), true);
@@ -1368,26 +1529,13 @@ impl Editor {
                 cb(&text);
             }
             last_line.set(buf.iter_at_offset(buf.cursor_position()).line());
-            if let Some(view) = view.upgrade() {
-                schedule_decoration(
-                    &view,
-                    buf,
-                    &decoration,
-                    &generation,
-                    &base_dir,
-                    &unclosed_fences,
-                    Duration::from_millis(45),
-                );
-            }
+            schedule_decoration(&ctx, Duration::from_millis(45));
         });
 
         let last_line = self.last_line.clone();
         let decoration = self.decoration.clone();
-        let generation = self.generation.clone();
-        let base_dir = self.base_dir.clone();
-        let unclosed_fences = self.unclosed_fences.clone();
+        let ctx = self.decoracion_ctx.clone();
         let typewriter = self.typewriter.clone();
-        let view = self.view.downgrade();
         self.buffer.connect_cursor_position_notify(move |buf| {
             if typewriter.get() {
                 if let Some(view) = view.upgrade() {
@@ -1412,15 +1560,7 @@ impl Editor {
             // O(n) y no se toca.
             if let Some(view) = view.upgrade() {
                 if view.line_in_table(line) || view.line_in_table(previous) {
-                    schedule_decoration(
-                        &view,
-                        buf,
-                        &decoration,
-                        &generation,
-                        &base_dir,
-                        &unclosed_fences,
-                        Duration::from_millis(45),
-                    );
+                    schedule_decoration(&ctx, Duration::from_millis(45));
                 }
             }
             if decoration.get().focus_mode {
@@ -1665,6 +1805,30 @@ impl Editor {
         self.search_context.set_highlight(on);
     }
 
+    /// TEMPORAL (depuracion del corrector): fija el texto sin refrescar la
+    /// decoracion.
+    #[allow(dead_code)]
+    pub fn texto_sin_decorar(&self, text: &str) {
+        self.buffer.set_text(text);
+    }
+
+    /// Corrector ortográfico: enciende o apaga el subrayado de las palabras
+    /// que el diccionario no valida (issue #51). El motor es parte del pase
+    /// de decoración: apagarlo simplemente salta la revisión.
+    pub fn set_spellcheck(&self, enabled: bool) {
+        let mut config = self.decoration.get();
+        config.spellcheck = enabled;
+        self.decoration.set(config);
+        if let Some(tag) = self.buffer.tag_table().lookup("ortografia") {
+            tag.set_underline(if enabled {
+                pango::Underline::Single
+            } else {
+                pango::Underline::None
+            });
+        }
+        self.refresh();
+    }
+
     /// Sensibilidad a mayúsculas/minúsculas del patrón (issue #50). Cada
     /// documento conserva su propio ajuste.
     pub fn set_search_case_sensitive(&self, on: bool) {
@@ -1785,15 +1949,7 @@ impl Editor {
     }
 
     pub fn refresh(&self) {
-        schedule_decoration(
-            &self.view,
-            &self.buffer,
-            &self.decoration,
-            &self.generation,
-            &self.base_dir,
-            &self.unclosed_fences,
-            Duration::ZERO,
-        );
+        schedule_decoration(&self.decoracion_ctx, Duration::ZERO);
     }
 
     /// Directorio del documento, contra el que se resuelven las rutas

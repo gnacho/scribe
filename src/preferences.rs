@@ -216,13 +216,20 @@ fn editor_page(settings: &Rc<AppSettings>, apply: &Rc<dyn Fn()>) -> adw::Prefere
         .subtitle(gettext("Keeps the cursor line vertically centered"))
         .active(settings.typewriter_mode())
         .build();
+    let spellcheck = adw::SwitchRow::builder()
+        .title(gettext("Spell checking"))
+        .subtitle(gettext(
+            "Underlines misspelt words; right-click offers fixes",
+        ))
+        .active(settings.spellcheck())
+        .build();
     let tabs = spin(
         &gettext("Tab width"),
         &gettext("Spaces per indent level"),
         &gtk4::Adjustment::new(settings.tab_width() as f64, 2.0, 8.0, 1.0, 1.0, 0.0),
         0,
     );
-    for row in [&lists, &focus, &typewriter] {
+    for row in [&lists, &focus, &typewriter, &spellcheck] {
         writing_group.add(row);
     }
     writing_group.add(&tabs);
@@ -302,6 +309,10 @@ fn editor_page(settings: &Rc<AppSettings>, apply: &Rc<dyn Fn()>) -> adw::Prefere
         (
             &typewriter,
             Box::new(|s: &AppSettings, v: bool| s.set_typewriter_mode(v)),
+        ),
+        (
+            &spellcheck,
+            Box::new(|s: &AppSettings, v: bool| s.set_spellcheck(v)),
         ),
     ] {
         let settings = settings.clone();

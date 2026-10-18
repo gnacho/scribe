@@ -385,6 +385,7 @@ impl AppSettings {
     prop!(font_size, set_font_size, "font-size", i32, 16);
     prop!(line_spacing, set_line_spacing, "line-spacing", f64, 1.7);
     prop!(column_width, set_column_width, "column-width", i32, 720);
+    prop!(spellcheck, set_spellcheck, "spellcheck", bool, true);
     prop!(focus_mode, set_focus_mode, "focus-mode", bool, false);
     prop!(
         typewriter_mode,

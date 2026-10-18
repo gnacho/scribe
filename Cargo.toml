@@ -11,6 +11,7 @@ license = "AGPL-3.0-or-later"
 gtk4 = { version = "0.9", features = ["v4_14"] }
 libadwaita = { version = "0.7", features = ["v1_5"] }
 gtksourceview5 = { version = "0.9", package = "sourceview5", features = ["v5_10"] }
+enchant = "0.3"
 glib = "0.20"
 gio = "0.20"
 gdk4 = "0.9"
