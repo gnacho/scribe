@@ -845,7 +845,11 @@ pub fn canvas_layout(
         let mut fila = Vec::with_capacity(row.cells.len());
         let mut alto = 1usize;
         for (i, celda) in row.cells.iter().enumerate() {
-            let ancho = col_widths.get(i).copied().unwrap_or(8.0) as usize;
+            // El texto no debe llegar al borde de su celda: al envolver se
+            // descuenta el mismo padding que el pintado reserva por lado
+            // (CANVAS_CELL_PAD, ~0.8 celdas), o la ultima letra pisa la
+            // linea vertical vecina.
+            let ancho = (col_widths.get(i).copied().unwrap_or(8.0) - 1.6).max(2.0) as usize;
             let lineas = wrap_segments(celda, ancho);
             alto = alto.max(lineas.len());
             fila.push(lineas);
@@ -3488,5 +3492,29 @@ mod tests {
         assert!(find(&analyze(&fixed).spans, "h1")
             .iter()
             .any(|s| fixed[s.start..s.end].contains("Emphasis")));
+    }
+}
+
+#[cfg(test)]
+mod prueba_tmp {
+    use super::*;
+    #[test]
+    fn listas_spans_tmp() {
+        let doc = "- **negrita** en lista\n- texto normal **en medio** de la linea\n- [enlace](https://example.com) en lista\n";
+        let a = analyze(doc);
+        for span in &a.spans {
+            println!(
+                "SPAN {}..{} [{}] => {:?}",
+                span.start,
+                span.end,
+                span.tag,
+                &doc[span.start..span.end]
+            );
+        }
+        for o in &a.ornaments {
+            if let Ornament::Bullet { line, .. } = o {
+                println!("BULLET linea {line}");
+            }
+        }
     }
 }

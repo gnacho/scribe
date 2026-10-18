@@ -1679,6 +1679,13 @@ impl Editor {
         click.set_propagation_phase(gtk4::PropagationPhase::Capture);
         let click_view = self.view.clone();
         click.connect_pressed(move |gesture, _, x, y| {
+            // El clic sobre la casilla de una tarea la alterna, sin mover el
+            // cursor (el gesto se queda el evento).
+            if let Some(line) = click_view.checkbox_at_position(x, y) {
+                gesture.set_state(gtk4::EventSequenceState::Claimed);
+                click_view.toggle_checkbox(line);
+                return;
+            }
             // El clic sobre una tarjeta de vídeo la abre; con Ctrl, además,
             // cualquier enlace del texto.
             let ctrl = gesture

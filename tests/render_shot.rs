@@ -288,3 +288,71 @@ fn margen_acotado_en_ventana_ancha() {
         "en ventana estrecha manda el minimo"
     );
 }
+
+/// Casillas de tarea clicables: el punto de la casilla se reconoce y el
+/// toggle edita el fuente entre [ ] y [x] (issue de listas de tareas).
+#[test]
+#[ignore = "requiere display"]
+fn casillas_de_tarea_clicables() {
+    gtk4::init().expect("GTK necesita un display");
+    libadwaita::init().expect("libadwaita init");
+    let ctx = gtk4::glib::MainContext::default();
+    let editor = Editor::new();
+    let win = gtk4::Window::builder()
+        .default_width(760)
+        .default_height(400)
+        .build();
+    win.set_child(Some(&editor.widget));
+    win.present();
+    editor.set_text("- [ ] tarea pendiente\n- [x] tarea hecha\n");
+    pump(&ctx, 1200);
+
+    let view = &editor.view;
+    let buffer = view.buffer();
+    // Casilla de la linea 0: centro de la casilla en coordenadas de buffer.
+    let iter = buffer.iter_at_line(0).expect("linea 0");
+    let loc = view.iter_location(&iter);
+    let centro_buffer = (
+        (loc.x() as f32 - 15.0) as i32,
+        (loc.y() as f32 + loc.height() as f32 / 2.0) as i32,
+    );
+    let (wx, wy) = view.buffer_to_window_coords(
+        gtk4::TextWindowType::Widget,
+        centro_buffer.0,
+        centro_buffer.1,
+    );
+    assert_eq!(
+        view.checkbox_at_position(wx as f64, wy as f64),
+        Some(0),
+        "el centro de la casilla de la linea 0 se reconoce"
+    );
+    assert_eq!(
+        view.checkbox_at_position(wx as f64 + 300.0, wy as f64),
+        None,
+        "un punto alejado de la casilla no se reconoce"
+    );
+
+    view.toggle_checkbox(0);
+    pump(&ctx, 400);
+    let texto = buffer
+        .text(&buffer.start_iter(), &buffer.end_iter(), true)
+        .to_string();
+    assert!(
+        texto.starts_with("- [x] tarea pendiente"),
+        "el toggle marca la tarea: {texto:?}"
+    );
+
+    view.toggle_checkbox(0);
+    pump(&ctx, 400);
+    let texto = buffer
+        .text(&buffer.start_iter(), &buffer.end_iter(), true)
+        .to_string();
+    assert!(
+        texto.starts_with("- [ ] tarea pendiente"),
+        "el toggle desmarca de nuevo: {texto:?}"
+    );
+    assert!(
+        texto.contains("- [x] tarea hecha"),
+        "la otra casilla no se toca"
+    );
+}
