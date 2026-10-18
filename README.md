@@ -170,13 +170,17 @@ The interface is currently in Spanish.
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/hero-es-dark.png">
   <source media="(prefers-color-scheme: light)" srcset="assets/hero-es-light.png">
-  <img alt="Main editor window with headings, bold, italic, code and a quote block" src="assets/hero-es-light.png" width="800">
+  <img alt="Main editor window with headings, bold, italic, a quote, a list, a table and a picture painted from a URL" src="assets/hero-es-light.png" width="800">
 </picture>
 
-**Main menu with zoom controls**
+**Split preview (toggled from the header icon) and find in the document**
 
 <p align="center">
-  <img alt="Menu showing open, save, zoom and view options" src="assets/screenshot-menu-es-light.png" width="800">
+  <img alt="Editor with the split preview on the right rendering the same document" src="assets/screenshot-split-es-light.png" width="800">
+</p>
+
+<p align="center">
+  <img alt="Find bar inside the editor pane with next and previous" src="assets/screenshot-find-es-light.png" width="800">
 </p>
 
 **Preferences window**

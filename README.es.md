@@ -188,13 +188,17 @@ La interfaz está actualmente en español.
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/hero-es-dark.png">
   <source media="(prefers-color-scheme: light)" srcset="assets/hero-es-light.png">
-  <img alt="Ventana principal del editor con cabeceras, negrita, cursiva, código y una cita" src="assets/hero-es-light.png" width="800">
+  <img alt="Ventana principal del editor con cabeceras, negrita, cursiva, una cita, una lista, una tabla y una imagen pintada desde una URL" src="assets/hero-es-light.png" width="800">
 </picture>
 
-**Menú principal con controles de zoom**
+**Vista dividida (con el icono de la cabecera) y buscar en el documento**
 
 <p align="center">
-  <img alt="Menú con las opciones de abrir, guardar, zoom y vista" src="assets/screenshot-menu-es-light.png" width="800">
+  <img alt="Editor con la vista dividida a la derecha renderizando el mismo documento" src="assets/screenshot-split-es-light.png" width="800">
+</p>
+
+<p align="center">
+  <img alt="Barra de buscar dentro del panel del editor, con anterior y siguiente" src="assets/screenshot-find-es-light.png" width="800">
 </p>
 
 **Ventana de preferencias**
