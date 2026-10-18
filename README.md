@@ -59,6 +59,11 @@ actually use to draft notes and docs.
   rule where the delimiter row was), a rule under H1/H2, vertical quote bars,
   drawn bullets per nesting level, checkable task boxes and horizontal rules.
   The mark a decoration replaces is **shrunk** instead of hidden.
+- **Tables of prose as real tables**: when a table's prose cells cannot fit
+  its delimiter geometry (the common long-form table), the source rows collapse
+  and the table is painted as a canvas: every cell wraps within its column,
+  the header is bold with a rule, and alignments are honoured. The row under
+  the cursor shows its raw source for editing.
 - **Local images in block**: when an `![alt](path)` is alone on its line and
   the file exists (relative to the document), it is painted scaled below the
   mark (max 144 px, 20 MB limit, cache of 64). Missing files show a discreet

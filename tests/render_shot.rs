@@ -124,3 +124,81 @@ fn captura_vista_enriquecida() {
     }
     eprintln!("{page} paginas escritas en {}", out.display());
 }
+
+/// Lienzo de tabla (issue #54): las filas fuente de una tabla de prosa se
+/// colapsan y reciben un tag de hueco; la fila del cursor queda cruda.
+#[test]
+#[ignore = "requiere display"]
+fn lienzo_colapsa_filas_y_revela_la_del_cursor() {
+    gtk4::init().expect("GTK necesita un display");
+    libadwaita::init().expect("libadwaita init");
+    let ctx = gtk4::glib::MainContext::default();
+    let doc = "| Una cabecera bastante larga que no cabe | B |\n|---|---|\n| una celda de prosa bastante larga que no cabe en su columna corta para nada | otra |\n";
+    let editor = Editor::new();
+    let win = gtk4::Window::builder()
+        .default_width(700)
+        .default_height(400)
+        .build();
+    win.set_child(Some(&editor.widget));
+    win.present();
+    editor.set_text(doc);
+    pump(&ctx, 1200);
+    eprintln!(
+        "DEBUG analisis: {:?}",
+        markdown_render::analyze(doc)
+            .ornaments
+            .iter()
+            .map(|o| format!("{o:?}"))
+            .collect::<Vec<_>>()
+    );
+
+    let buffer = editor.view.buffer();
+    let colapsado = buffer
+        .tag_table()
+        .lookup("tcanvas_src")
+        .expect("tag de colapso creado");
+    eprintln!(
+        "DEBUG tags linea0: {:?}",
+        buffer.iter_at_line(0).expect("l0").tags().len()
+    );
+    eprintln!(
+        "DEBUG tags offset5: {:?}",
+        buffer.iter_at_offset(5).tags().len()
+    );
+    // Fila de contenido (línea 2): colapsada y con hueco.
+    let iter = buffer.iter_at_line(2).expect("línea 2");
+    eprintln!("DEBUG tags linea2:");
+    buffer.tag_table().foreach(|t| {
+        if iter.has_tag(t) {
+            eprintln!("  tag: {:?}", t.name());
+        }
+    });
+    eprintln!(
+        "DEBUG view.width={} advance={}",
+        editor.view.width(),
+        editor.view.cell_advance()
+    );
+    assert!(
+        iter.has_tag(&colapsado),
+        "la fila de contenido lleva el colapso"
+    );
+    let con_hueco = std::cell::Cell::new(false);
+    buffer.tag_table().foreach(|t| {
+        if t.name()
+            .map(|n| n.starts_with("tcanvasgap"))
+            .unwrap_or(false)
+        {
+            con_hueco.set(true);
+        }
+    });
+    assert!(con_hueco.get(), "hay un tag de hueco de lienzo");
+
+    // Con el cursor en esa fila se revela cruda: sin colapso tras decorar.
+    editor.place_cursor_at(3, 1);
+    pump(&ctx, 600);
+    let iter = buffer.iter_at_line(2).expect("línea 2");
+    assert!(
+        !iter.has_tag(&colapsado),
+        "la fila del cursor se revela sin colapso"
+    );
+}

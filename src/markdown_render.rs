@@ -36,6 +36,12 @@ pub const IMAGE_GAP_HEIGHT: i32 = 150;
 /// 16:9 (la miniatura de YouTube lo es).
 pub const YOUTUBE_GAP_HEIGHT: i32 = 260;
 
+/// Relleno vertical interior de una fila pintada del lienzo de tabla, en
+/// píxeles. El editor lo suma al alto del hueco de cada fila colapsada.
+pub const CANVAS_ROW_PAD: f32 = 6.0;
+/// Relleno horizontal interior de una celda pintada del lienzo, en píxeles.
+pub const CANVAS_CELL_PAD: f32 = 7.0;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SpanKind {
     /// Estilo permanente: negrita, cabecera, color…
@@ -142,6 +148,24 @@ pub enum Ornament {
         /// Rellenos de celda, en orden de lectura.
         pads: Vec<TablePad>,
     },
+    /// Tabla cuyas celdas no caben en la geometría del delimitador (prosa
+    /// larga con `|---|` triviales): en vez de la rejilla alineada al fuente
+    /// se pinta como lienzo, con una fila fuente colapsada por fila pintada y
+    /// el texto de cada celda envuelto dentro de su columna. La primera fila
+    /// es la cabecera (negrita y filete). La geometría en celdas la calcula
+    /// `canvas_layout` en el editor y en la vista con las mismas entradas.
+    TableCanvas {
+        /// Primera y última línea lógica de la tabla.
+        first: usize,
+        last: usize,
+        /// Línea de la fila delimitadora: también colapsa (su geometría la
+        /// pinta el lienzo).
+        anchor: usize,
+        /// Por columna: alineación y peso (ancho del delimitador, en celdas).
+        columns: Vec<(Align, usize)>,
+        /// Filas de contenido, con la línea fuente de cada una.
+        rows: Vec<CanvasRow>,
+    },
     /// Filete fino bajo un título H1/H2, estilo GitHub. Aditivo: no sustituye
     /// ninguna marca.
     HeadingRule { line: usize },
@@ -195,6 +219,7 @@ impl Ornament {
             | Ornament::TableRule { .. }
             | Ornament::Break { .. }
             | Ornament::TableGrid { .. } => OrnamentFamily::Substitute,
+            Ornament::TableCanvas { .. } => OrnamentFamily::Substitute,
             Ornament::HeadingRule { .. } | Ornament::Image { .. } | Ornament::Youtube { .. } => {
                 OrnamentFamily::Additive
             }
@@ -564,6 +589,157 @@ fn is_delimiter_row(line: &str) -> bool {
 /// `SHRUNK_CELLS` (véase `syn_shrink` en editor.rs).
 const SHRUNK_CELLS: f32 = 0.05;
 
+/// Quita las marcas de markdown inline de un texto de celda para pintarlo:
+/// `**negrita**`, `*cursiva*`, `` `código` ``, `~~tachado~~`, `[texto](url)`
+/// e `![alt](url)` dejan su texto, y `<br>` becomes un espacio. Lo que no
+/// reconoce se deja tal cual: mejor una marca suelta que perder texto.
+pub fn strip_inline_marks(texto: &str) -> String {
+    let mut out = String::with_capacity(texto.len());
+    let mut rest = texto;
+    while !rest.is_empty() {
+        let car = rest.chars().next().unwrap();
+        let avance = car.len_utf8();
+        let tail = rest;
+        if tail.starts_with("**") || tail.starts_with("~~") {
+            let marca = &tail[..2];
+            if let Some(fin) = tail[2..].find(marca) {
+                out.push_str(&tail[2..2 + fin]);
+                rest = &tail[2 + fin + 2..];
+                continue;
+            }
+        }
+        if tail.starts_with('*') || tail.starts_with('`') {
+            let marca = &tail[..1];
+            if let Some(fin) = tail[1..].find(marca) {
+                out.push_str(&tail[1..1 + fin]);
+                rest = &tail[1 + fin + 1..];
+                continue;
+            }
+        }
+        if tail.starts_with("![") || tail.starts_with('[') {
+            let abre = if tail.starts_with("![") { 2 } else { 1 };
+            if let Some(cierre) = tail[abre..].find(']').map(|p| p + abre) {
+                out.push_str(&tail[abre..cierre]);
+                let mut resto = &tail[cierre + 1..];
+                // Saltar el destino entre paréntesis, si lo hay.
+                if resto.starts_with('(') {
+                    if let Some(fin) = resto.find(')') {
+                        resto = &resto[fin + 1..];
+                    }
+                }
+                rest = resto;
+                continue;
+            }
+        }
+        if tail.starts_with("<br") {
+            out.push(' ');
+            rest = &tail[tail.find('>').map(|g| g + 1).unwrap_or(3)..];
+            continue;
+        }
+        out.push(car);
+        rest = &tail[avance..];
+    }
+    out.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
+/// Layout de un lienzo de tabla: anchos de columna en celdas (los pesos del
+/// delimitador normalizados al ancho disponible), y por fila el texto de cada
+/// celda ya envuelto en líneas junto con su número de líneas. Pura: el editor
+/// la usa para los huecos de las filas colapsadas y la vista para pintar, con
+/// las mismas entradas, así ambas coinciden al carácter.
+#[derive(Debug, Clone, PartialEq)]
+pub struct CanvasLayout {
+    /// Ancho de cada columna, en celdas.
+    pub col_widths: Vec<f32>,
+    /// Por fila: por celda: líneas de texto envueltas.
+    pub cells: Vec<Vec<Vec<String>>>,
+    /// Por fila: líneas que ocupa (el máximo entre sus celdas).
+    pub row_lines: Vec<usize>,
+}
+
+/// Envuelve `texto` en líneas de como mucho `ancho` celdas, sin partir
+/// palabras. Una palabra más larga que el ancho se corta: mejor cortar que
+/// desbordar la columna.
+pub fn wrap_cells(texto: &str, ancho: usize) -> Vec<String> {
+    let ancho = ancho.max(1);
+    let mut lineas = Vec::new();
+    let mut actual = String::new();
+    for palabra in texto.split_whitespace() {
+        let largo = palabra.chars().count();
+        let usadas = actual.chars().count();
+        if usadas > 0 && usadas + 1 + largo > ancho {
+            lineas.push(std::mem::take(&mut actual));
+        }
+        if largo > ancho {
+            // Palabra imposible: partirla dura.
+            let mut resto = palabra;
+            while !resto.is_empty() {
+                let mut fin = resto.len();
+                for (n, (i, ch)) in resto.char_indices().enumerate() {
+                    if n >= ancho {
+                        fin = i;
+                        break;
+                    }
+                    fin = i + ch.len_utf8();
+                }
+                lineas.push(resto[..fin].to_string());
+                resto = &resto[fin..];
+            }
+        } else {
+            if !actual.is_empty() {
+                actual.push(' ');
+            }
+            actual.push_str(palabra);
+        }
+    }
+    if !actual.is_empty() {
+        lineas.push(actual);
+    }
+    lineas
+}
+
+/// Calcula el layout de un lienzo. Devuelve `None` si no cabe ni una columna
+/// mínima o no hay filas.
+pub fn canvas_layout(
+    columns: &[(Align, usize)],
+    rows: &[CanvasRow],
+    column_cells: f32,
+) -> Option<CanvasLayout> {
+    if rows.is_empty() || columns.is_empty() {
+        return None;
+    }
+    // Pesos: el ancho del delimitador, con un mínimo para que una columna
+    // corta no desaparezca; se normalizan al ancho disponible en celdas.
+    let pesos: Vec<f32> = columns.iter().map(|(_, w)| (*w).max(3) as f32).collect();
+    let total: f32 = pesos.iter().sum();
+    let col_widths: Vec<f32> = pesos
+        .iter()
+        .map(|w| (w / total * column_cells).max(4.0))
+        .collect();
+    if (col_widths[0] as usize) < 4 {
+        return None;
+    }
+    let mut cells = Vec::with_capacity(rows.len());
+    let mut row_lines = Vec::with_capacity(rows.len());
+    for row in rows {
+        let mut fila = Vec::with_capacity(row.cells.len());
+        let mut alto = 1usize;
+        for (i, celda) in row.cells.iter().enumerate() {
+            let ancho = col_widths.get(i).copied().unwrap_or(8.0) as usize;
+            let lineas = wrap_cells(celda, ancho);
+            alto = alto.max(lineas.len());
+            fila.push(lineas);
+        }
+        cells.push(fila);
+        row_lines.push(alto);
+    }
+    Some(CanvasLayout {
+        col_widths,
+        cells,
+        row_lines,
+    })
+}
+
 /// Geometría de una columna, en celdas de carácter desde el inicio de la fila
 /// delimitadora.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -575,6 +751,15 @@ struct ColumnGeom {
     /// fija el ancho de la columna.
     width: usize,
     align: Align,
+}
+
+/// Fila de un lienzo de tabla pintado: la línea fuente que la origina y el
+/// texto plano de cada celda (marcas inline quitadas, espacios colapsados).
+#[derive(Debug, Clone, PartialEq)]
+pub struct CanvasRow {
+    pub line: usize,
+    pub header: bool,
+    pub cells: Vec<String>,
 }
 
 /// Celda de una fila de tabla, con el ancla de su relleno.
@@ -789,6 +974,10 @@ impl TablePlan {
                 };
                 let width = pos(cell.end) - pos(cell.start);
                 let slack = column.width as f32 - width;
+                eprintln!(
+                    "PADS fila anchura={width} col={} slack={slack}",
+                    column.width
+                );
                 if slack < -0.5 {
                     fila_cabe = false;
                 }
@@ -810,6 +999,35 @@ impl TablePlan {
             alguna_fila_cabe |= fila_cabe;
         }
         (out, !alguna_fila_cabe)
+    }
+
+    /// Lienzo pintado de esta tabla: columnas (alineación y peso) y filas con
+    /// el texto plano de cada celda, ancladas a su línea lógica. La primera
+    /// fila de contenido es la cabecera. Devuelve `None` si no hay filas.
+    fn canvas(&self, text: &str, lines: &LineIndex) -> Option<Ornament> {
+        let rows: Vec<CanvasRow> = self
+            .rows
+            .iter()
+            .enumerate()
+            .map(|(i, (row_start, _, cells))| CanvasRow {
+                line: lines.line_of(*row_start),
+                header: i == 0,
+                cells: cells
+                    .iter()
+                    .map(|cell| {
+                        strip_inline_marks(&text[row_start + cell.start..row_start + cell.end])
+                    })
+                    .collect(),
+            })
+            .collect();
+        let (first, last) = (rows.first()?.line, rows.last()?.line);
+        Some(Ornament::TableCanvas {
+            first,
+            last,
+            anchor: self.anchor,
+            columns: self.columns.iter().map(|c| (c.align, c.width)).collect(),
+            rows,
+        })
     }
 }
 
@@ -1517,9 +1735,12 @@ pub fn analyze(text: &str) -> Analysis {
         let (pads, inviable) = pending.plan.pads(text, &shrunk);
         if inviable {
             // Ninguna fila cabe en la geometría del delimitador: la rejilla
-            // sería un abanico de líneas sobre el texto. Sin adorno, la tabla
-            // se dibuja como bloque fluido (caja + filete de cabecera).
+            // sería un abanico de líneas sobre el texto. En su lugar la tabla
+            // se pinta como lienzo (celdas con texto envuelto por columna).
             rejillas_inviables.push(pending.grid);
+            if let Some(canvas) = pending.plan.canvas(text, &lines) {
+                ornaments.push(canvas);
+            }
         } else if let Some(Ornament::TableGrid { pads: slot, .. }) = ornaments.get_mut(pending.grid)
         {
             *slot = pads;
@@ -1622,7 +1843,7 @@ fn is_br(content: &str) -> bool {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum Align {
+pub enum Align {
     None,
     Left,
     Center,
@@ -2096,7 +2317,8 @@ mod tests {
                 Ornament::Quote { last, .. }
                 | Ornament::CodeBlock { last, .. }
                 | Ornament::Table { last, .. }
-                | Ornament::TableGrid { last, .. } => last,
+                | Ornament::TableGrid { last, .. }
+                | Ornament::TableCanvas { last, .. } => last,
                 // Break va por offset, no por línea: se comprueba aparte en
                 // su test propio.
                 Ornament::Break { .. } => continue,
@@ -2378,6 +2600,82 @@ mod tests {
         assert!(ornaments
             .iter()
             .any(|o| matches!(o, Ornament::TableRule { .. })));
+    }
+
+    #[test]
+    fn tabla_inviable_emite_lienzo_con_el_texto_plano_de_las_celdas() {
+        // La tabla inviable del test anterior ahora se pinta como lienzo: se
+        // emite el adorno con las filas, la cabecera marcada y las marcas
+        // inline de las celdas ya quitadas.
+        let text = "| Informe | Archivo |\n|---|---|\n\
+                    | **Nutri** (Test) | G000952966_Nutri.pdf |\n";
+        let ornaments = analyze(text).ornaments;
+        let Some(Ornament::TableCanvas { columns, rows, .. }) = ornaments
+            .iter()
+            .find(|o| matches!(o, Ornament::TableCanvas { .. }))
+        else {
+            panic!("la tabla inviable debería tener lienzo: {ornaments:?}");
+        };
+        assert_eq!(columns.len(), 2, "dos columnas");
+        assert_eq!(rows.len(), 2, "cabecera y una fila de contenido");
+        assert!(rows[0].header, "la primera fila es la cabecera");
+        assert_eq!(rows[0].cells, vec!["Informe", "Archivo"]);
+        assert!(!rows[1].header);
+        assert_eq!(rows[1].cells[0], "Nutri (Test)", "marca ** quitada");
+        assert_eq!(rows[1].cells[1], "G000952966_Nutri.pdf");
+    }
+
+    #[test]
+    fn strip_marcas_deja_el_texto_y_los_enlaces() {
+        assert_eq!(
+            strip_inline_marks("**Dieta** y *peso* con `código` y ~~nada~~"),
+            "Dieta y peso con código y nada"
+        );
+        assert_eq!(
+            strip_inline_marks("[enlace](https://ejemplo.com) e ![alt](img.png)"),
+            "enlace e alt"
+        );
+        assert_eq!(
+            strip_inline_marks("texto <br> con   muchos   espacios"),
+            "texto con muchos espacios"
+        );
+    }
+
+    #[test]
+    fn lienzo_normaliza_pesos_y_envuelve_por_palabras() {
+        use super::{canvas_layout, wrap_cells, Align, CanvasRow};
+        let columns = vec![(Align::Left, 3), (Align::Right, 6)];
+        let rows = vec![
+            CanvasRow {
+                line: 0,
+                header: true,
+                cells: vec!["Día".into(), "Tarea".into()],
+            },
+            CanvasRow {
+                line: 1,
+                header: false,
+                cells: vec!["Lunes".into(), "redactar el informe completo".into()],
+            },
+        ];
+        let layout = canvas_layout(&columns, &rows, 40.0).expect("layout");
+        // Pesos 3 y 6 → tercio y dos tercios de 40 celdas.
+        assert!(
+            (layout.col_widths[0] - 13.33).abs() < 0.1,
+            "{:?}",
+            layout.col_widths
+        );
+        assert!(
+            (layout.col_widths[1] - 26.66).abs() < 0.1,
+            "{:?}",
+            layout.col_widths
+        );
+        // La celda larga (26 letras + espacios) envuelve en dos líneas.
+        assert_eq!(layout.row_lines, vec![1, 2]);
+        assert_eq!(layout.cells[1][1].len(), 2);
+        // Envoltura simple: no parte palabras.
+        assert_eq!(wrap_cells("aa bb cc", 5), vec!["aa bb", "cc"]);
+        // Palabra imposible: la parte sin desbordar.
+        assert_eq!(wrap_cells("abcdefgh", 3), vec!["abc", "def", "gh"]);
     }
 
     #[test]
