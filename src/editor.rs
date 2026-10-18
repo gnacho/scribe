@@ -248,7 +248,7 @@ fn build_tags() -> gtk4::TextTagTable {
     // marcas encogidas) y la vista pinta la fila real bajo su hueco.
     add(gtk4::TextTag::builder()
         .name("tcanvas_src")
-        .scale(0.05)
+        .scale(0.0)
         .foreground_rgba(&rgba(0x000000, 0.0))
         .build());
 
