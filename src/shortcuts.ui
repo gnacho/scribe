@@ -99,6 +99,12 @@
             </child>
             <child>
               <object class="GtkShortcutsShortcut">
+                <property name="title" translatable="yes">Replace</property>
+                <property name="accelerator">&lt;Control&gt;h</property>
+              </object>
+            </child>
+            <child>
+              <object class="GtkShortcutsShortcut">
                 <property name="title" translatable="yes">Find Next</property>
                 <property name="accelerator">&lt;Control&gt;g</property>
               </object>

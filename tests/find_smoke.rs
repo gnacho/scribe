@@ -21,6 +21,7 @@ mod settings;
 
 use editor::Editor;
 use gtk4::prelude::*;
+use std::rc::Rc;
 use std::time::{Duration, Instant};
 
 const DOC: &str = "\
@@ -108,4 +109,88 @@ fn recuento_saltos_y_vuelta_al_final() {
     assert!(!editor.search_context().is_highlight());
     editor.set_search_highlight(true);
     assert!(editor.search_context().is_highlight());
+
+    // ---- opciones y reemplazo (issue #50), sobre un editor nuevo ----
+    let editor2 = Editor::new();
+    editor2.set_text("Casi todo y nada; TODO dos veces: todo.");
+
+    // Por defecto no distingue mayúsculas: las tres variantes cuentan.
+    editor2.set_search_text("todo");
+    pump(&ctx, 400);
+    assert_eq!(editor2.search_state().1, 3, "sin distinguir mayúsculas");
+
+    // Con «Aa» solo queda la minúscula exacta.
+    editor2.set_search_case_sensitive(true);
+    pump(&ctx, 400);
+    assert_eq!(
+        editor2.search_state().1,
+        2,
+        "distinguiendo mayúsculas quedan las dos minúsculas"
+    );
+    assert!(editor2.search_case_sensitive());
+    editor2.set_search_case_sensitive(false);
+
+    // Con regex el patrón es un patrón: «TODO+» con mayúsculas distinguidas
+    // solo casa el grito.
+    editor2.set_search_case_sensitive(true);
+    editor2.set_search_regex(true);
+    editor2.set_search_text("TODO+");
+    pump(&ctx, 400);
+    assert_eq!(editor2.search_state().1, 1, "la regex solo casa TODO");
+    assert!(editor2.search_regex());
+    editor2.set_search_regex(false);
+    editor2.set_search_case_sensitive(false);
+
+    // Reemplazar la selección actual y saltar a la siguiente coincidencia.
+    editor2.set_search_text("todo");
+    pump(&ctx, 400);
+    assert!(editor2.search_next(), "salta a la primera");
+    assert_eq!(seleccion(&editor2).as_deref(), Some("todo"));
+    assert!(
+        editor2.replace_current("nada"),
+        "reemplaza la coincidencia seleccionada"
+    );
+    // El salto a la siguiente corre en un idle (tras la recomputación de
+    // gtksourceview), así que hay que bombearlo como en la UI real.
+    pump(&ctx, 400);
+    assert_eq!(
+        seleccion(&editor2).as_deref(),
+        Some("TODO"),
+        "tras reemplazar salta a la siguiente"
+    );
+    assert_eq!(
+        editor2.text().matches("nada").count(),
+        2,
+        "quedan dos «nada» (el original y el reemplazo)"
+    );
+
+    // Reemplazar todas las que quedan de una vez. El recuento llega por el
+    // callback tras el idle que hace el trabajo.
+    let reemplazadas = Rc::new(std::cell::Cell::new(usize::MAX));
+    {
+        let reemplazadas = reemplazadas.clone();
+        editor2.replace_all_matches("x", move |n| reemplazadas.set(n));
+    }
+    pump(&ctx, 400);
+    assert_eq!(reemplazadas.get(), 2, "quedaban TODO y todo por reemplazar");
+    assert!(
+        !editor2.text().to_lowercase().contains("todo"),
+        "sin «todo» (en ninguna capitalización) después de reemplazar todas"
+    );
+
+    // Sobre texto seleccionado a mano (no coincidencia) no se reemplaza nada.
+    let editor3 = Editor::new();
+    editor3.set_text("algo de texto");
+    editor3.set_search_text("texto");
+    pump(&ctx, 400);
+    let buffer3 = editor3.view.buffer();
+    let a = buffer3.start_iter();
+    let mut b = a;
+    b.forward_chars(4); // «algo»
+    buffer3.select_range(&a, &b);
+    assert!(
+        !editor3.replace_current("x"),
+        "sin reemplazo sobre una selección que no es coincidencia"
+    );
+    assert_eq!(editor3.text(), "algo de texto", "el texto queda intacto");
 }
