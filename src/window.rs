@@ -595,6 +595,16 @@ impl ScribeWindow {
             .placeholder_text(gettext("Search"))
             .hexpand(true)
             .build();
+        // Opciones de búsqueda (issue #50), como en gnome-text-editor:
+        // «Aa» distingue mayúsculas y «.*» trata el patrón como regex.
+        let case_toggle = gtk4::ToggleButton::builder()
+            .label("Aa")
+            .tooltip_text(gettext("Match Case"))
+            .build();
+        let regex_toggle = gtk4::ToggleButton::builder()
+            .label(".*")
+            .tooltip_text(gettext("Regular Expression"))
+            .build();
         let search_count = gtk4::Label::builder()
             .css_classes(vec!["caption".to_string(), "dim-label".to_string()])
             .build();
@@ -610,11 +620,44 @@ impl ScribeWindow {
             .build();
         let search_box = gtk4::Box::new(gtk4::Orientation::Horizontal, 6);
         search_box.append(&search_entry);
+        search_box.append(&case_toggle);
+        search_box.append(&regex_toggle);
         search_box.append(&search_count);
         search_box.append(&search_prev_button);
         search_box.append(&search_next_button);
+
+        // Fila de reemplazar (Ctrl+H), como en gnome-text-editor: aparece bajo
+        // la de búsqueda al pedirla y se oculta al cerrar el modo.
+        let replace_entry = gtk4::SearchEntry::builder()
+            .placeholder_text(gettext("Replace"))
+            .hexpand(true)
+            .build();
+        let replace_button = gtk4::Button::builder()
+            .label(gettext("_Replace"))
+            .use_underline(true)
+            .build();
+        let replace_all_button = gtk4::Button::builder()
+            .label(gettext("Replace _All"))
+            .use_underline(true)
+            .build();
+        let replace_box = gtk4::Box::new(gtk4::Orientation::Horizontal, 6);
+        replace_box.append(&replace_entry);
+        replace_box.append(&replace_button);
+        replace_box.append(&replace_all_button);
+        replace_box.set_visible(false);
+
+        let search_rows = gtk4::Box::builder()
+            .orientation(gtk4::Orientation::Vertical)
+            .spacing(6)
+            .margin_top(6)
+            .margin_bottom(6)
+            .margin_start(6)
+            .margin_end(6)
+            .build();
+        search_rows.append(&search_box);
+        search_rows.append(&replace_box);
         let search_bar = gtk4::SearchBar::builder()
-            .child(&search_box)
+            .child(&search_rows)
             .css_classes(vec!["toolbar".to_string()])
             .build();
         search_bar.connect_entry(&search_entry);
@@ -801,15 +844,23 @@ impl ScribeWindow {
             })
         };
 
-        // Reaplica el patrón de la barra al documento activo.
+        // Reaplica el patrón de la barra al documento activo y sincroniza las
+        // opciones con él: cada pestaña conserva sus propios ajustes.
         let apply_find: Rc<dyn Fn()> = {
             let active_document = active_document.clone();
             let search_entry = search_entry.clone();
+            let case_toggle = case_toggle.clone();
+            let regex_toggle = regex_toggle.clone();
             let update_find_count = update_find_count.clone();
             Rc::new(move || {
+                let mut invalido = false;
                 if let Some(doc) = active_document() {
                     doc.editor.set_search_text(&search_entry.text());
+                    case_toggle.set_active(doc.editor.search_case_sensitive());
+                    regex_toggle.set_active(doc.editor.search_regex());
+                    invalido = doc.editor.search_pattern_has_error();
                 }
+                search_entry.set_css_classes(if invalido { &["error"] } else { &[] });
                 update_find_count();
             })
         };
@@ -1445,6 +1496,7 @@ impl ScribeWindow {
         let action_find = gio::SimpleAction::new("find", None);
         let action_find_next = gio::SimpleAction::new("find-next", None);
         let action_find_prev = gio::SimpleAction::new("find-prev", None);
+        let action_find_replace = gio::SimpleAction::new("toggle-replace", None);
         // Estilos: una sola acción con estado de cadena («system»/«light»/
         // «dark»), para que GTK pinte los tres ítems como excluyentes.
         let action_color_scheme = gio::SimpleAction::new_stateful(
@@ -1498,6 +1550,7 @@ impl ScribeWindow {
             &action_find,
             &action_find_next,
             &action_find_prev,
+            &action_find_replace,
         ] {
             window.add_action(a);
         }
@@ -1868,6 +1921,77 @@ impl ScribeWindow {
         {
             let apply_find = apply_find.clone();
             search_entry.connect_search_changed(move |_| apply_find());
+        }
+        // ---- opciones y reemplazo (issue #50) ----
+        {
+            let active_document = active_document.clone();
+            let update_find_count = update_find_count.clone();
+            case_toggle.connect_toggled(move |t| {
+                if let Some(doc) = active_document() {
+                    doc.editor.set_search_case_sensitive(t.is_active());
+                }
+                update_find_count();
+            });
+        }
+        {
+            // Al cambiar la regex hay que revalidar el patrón: aplica de nuevo
+            // el texto de la entrada (pinta el error si la regex no compila).
+            let active_document = active_document.clone();
+            let apply_find = apply_find.clone();
+            regex_toggle.connect_toggled(move |t| {
+                if let Some(doc) = active_document() {
+                    doc.editor.set_search_regex(t.is_active());
+                }
+                apply_find();
+            });
+        }
+        {
+            let active_document = active_document.clone();
+            let replace_entry = replace_entry.clone();
+            let update_find_count = update_find_count.clone();
+            replace_button.connect_clicked(move |_| {
+                if let Some(doc) = active_document() {
+                    doc.editor.replace_current(&replace_entry.text());
+                }
+                update_find_count();
+            });
+        }
+        {
+            let active_document = active_document.clone();
+            let replace_entry = replace_entry.clone();
+            let toast = toast.clone();
+            replace_all_button.connect_clicked(move |_| {
+                if let Some(doc) = active_document() {
+                    let toast = toast.clone();
+                    doc.editor
+                        .replace_all_matches(&replace_entry.text(), move |n| {
+                            if n > 0 {
+                                toast(
+                                    &gettext("{n} occurrences replaced")
+                                        .replace("{n}", &n.to_string()),
+                                );
+                            }
+                        });
+                }
+            });
+        }
+        {
+            // Ctrl+H: muestra u oculta la fila de reemplazar.
+            let search_bar = search_bar.clone();
+            let search_entry = search_entry.clone();
+            let replace_box = replace_box.clone();
+            let replace_entry = replace_entry.clone();
+            action_find_replace.connect_activate(move |_, _| {
+                search_bar.set_search_mode(true);
+                let visible = !replace_box.is_visible();
+                replace_box.set_visible(visible);
+                if visible {
+                    replace_entry.grab_focus();
+                    replace_entry.select_region(0, -1);
+                } else {
+                    search_entry.grab_focus();
+                }
+            });
         }
         {
             // Intros en captura: se adelantan al GtkText interno, que si no
