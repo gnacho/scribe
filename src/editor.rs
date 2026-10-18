@@ -317,7 +317,7 @@ fn build_tags() -> gtk4::TextTagTable {
     add(gtk4::TextTag::builder()
         .name("ortografia")
         .underline(pango::Underline::Single)
-        .underline_rgba(&rgba(0xe01b24, 1.0))
+        .foreground_rgba(&rgba(0xe01b24, 1.0))
         .build());
     add(gtk4::TextTag::builder()
         .name("tcanvas_src")
