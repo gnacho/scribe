@@ -109,13 +109,13 @@ fn captura_vista_enriquecida() {
         .unwrap_or(800);
     pump(&ctx, espera);
 
-    let total = editor.line_count().max(1);
+    let total = editor.text().lines().count().max(1);
     // Filas de texto por página (~1000 px de ventana): paginar con solape de
     // una línea para no cortar cajas ni tablas a la mitad sin contexto.
     let per_page = 38usize;
     let mut first = 0usize;
     let mut page = 0usize;
-    while first < total as usize {
+    while first < total {
         editor.scroll_to_line(first as i32);
         pump(&ctx, 350);
         shot(&win, &out.join(format!("pagina-{page:02}.png")));

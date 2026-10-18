@@ -103,7 +103,6 @@ con GTK4 y ha terminado siendo algo que uso de verdad para borradores y notas.
 - **Continuación de listas**: al pulsar Intro se crea el siguiente elemento y
   se renumeran las listas ordenadas. Dejar un elemento vacío cierra la lista.
 - **Zoom** (Ctrl +/&minus;/0) con controles en el menú principal.
-- **Ir a la línea** desde la barra de estado.
 - **Cabecera** al estilo de GNOME Text Editor: botón de abrir con desplegable
   de recientes, botón de nueva pestaña, título centrado, botón de vista
   dividida y menú principal con los esquemas de color y la fila de zoom.

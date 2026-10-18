@@ -114,7 +114,7 @@ fn abrir_documento_grande_no_aborta() {
             let _ = editor.view.iter_at_position(10, y);
             y += 37;
         }
-        let line = (i * 13) % editor.line_count().max(1) as usize;
+        let line = (i * 13) % editor.text().lines().count().max(1);
         editor.scroll_to_line(line as i32);
         pump(&ctx, 30);
     }

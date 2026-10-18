@@ -1592,28 +1592,9 @@ impl Editor {
         *self.on_toast.borrow_mut() = Some(Box::new(callback));
     }
 
-    pub fn connect_cursor_moved<F: Fn() + 'static>(&self, callback: F) {
-        self.buffer
-            .connect_cursor_position_notify(move |_| callback());
-    }
-
     pub fn cursor_position(&self) -> (i32, i32) {
         let iter = self.buffer.iter_at_offset(self.buffer.cursor_position());
         (iter.line() + 1, iter.line_offset() + 1)
-    }
-
-    pub fn line_count(&self) -> i32 {
-        self.buffer.end_iter().line() + 1
-    }
-
-    /// Vallas de código abiertas detectadas en el último `decorate` (1-based).
-    /// La barra de estado de la ventana las consulta para avisar al usuario.
-    pub fn unclosed_fences(&self) -> Vec<UnclosedFence> {
-        self.unclosed_fences.borrow().clone()
-    }
-
-    pub fn go_to_line(&self, line: i32) {
-        self.scroll_to_line((line - 1).max(0));
     }
 
     pub fn scroll_to_line(&self, line: i32) {
