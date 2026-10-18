@@ -431,11 +431,25 @@ mod imp {
             let (first_visible, last_visible) = self.visible_lines();
             let (left, right) = self.column();
 
+            // Las tablas con lienzo pintan su propio sombreado a ancho
+            // completo: la caja de `Ornament::Table` se mediría sobre las
+            // filas colapsadas y quedaría más estrecha que el lienzo.
+            let con_lienzo = |first: i32| {
+                ornaments.iter().any(
+                    |o| matches!(o, Ornament::TableCanvas { first: f, .. } if *f as i32 == first),
+                )
+            };
             for ornament in ornaments.iter() {
                 let (first, last) = match ornament {
-                    Ornament::CodeBlock { first, last }
-                    | Ornament::Table { first, last }
-                    | Ornament::Quote { first, last } => (*first as i32, *last as i32),
+                    Ornament::CodeBlock { first, last } | Ornament::Quote { first, last } => {
+                        (*first as i32, *last as i32)
+                    }
+                    Ornament::Table { first, last } => {
+                        if con_lienzo(*first as i32) {
+                            continue;
+                        }
+                        (*first as i32, *last as i32)
+                    }
                     _ => continue,
                 };
                 if last < first_visible || first > last_visible {
@@ -924,14 +938,26 @@ mod imp {
                         continue;
                     }
                     let Some((line_y, line_h)) = self.line_extent(row.line as i32) else {
-                        eprintln!("CANVAS fila {} SIN line_extent", row.line);
                         continue;
                     };
                     let top = line_y + line_h - fila_px;
-                    eprintln!(
-                        "CANVAS fila {} top={} line_h={} fila_px={}",
-                        row.line, top, line_h, fila_px
-                    );
+                    let stroke = gsk::Stroke::new(1.0);
+                    // Sombreado de la fila, a todo el ancho del lienzo.
+                    let fondo = gsk::PathBuilder::new();
+                    fondo.add_rect(&graphene::Rect::new(
+                        xs[0],
+                        top,
+                        xs.last().unwrap() - xs[0],
+                        fila_px,
+                    ));
+                    snapshot.append_fill(&fondo.to_path(), gsk::FillRule::Winding, &palette.table);
+                    if ri == 0 {
+                        // Borde superior: sobre la cabecera.
+                        let borde = gsk::PathBuilder::new();
+                        borde.move_to(xs[0], top);
+                        borde.line_to(*xs.last().unwrap(), top);
+                        snapshot.append_stroke(&borde.to_path(), &stroke, &palette.muted);
+                    }
                     let base = top + CANVAS_ROW_PAD;
                     // Celdas: línea a línea, con la alineación de su columna.
                     for (ci, cell_lines) in layout.cells[ri].iter().enumerate() {
@@ -964,7 +990,6 @@ mod imp {
                         }
                     }
                     // Filete bajo la cabecera y separadores de fila.
-                    let stroke = gsk::Stroke::new(1.0);
                     let rule = gsk::PathBuilder::new();
                     rule.move_to(xs[0], top + fila_px);
                     rule.line_to(*xs.last().unwrap(), top + fila_px);
