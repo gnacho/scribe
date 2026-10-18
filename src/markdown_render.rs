@@ -125,6 +125,10 @@ pub enum Ornament {
     /// (que depende del relleno). El widget dibuja una línea continua en cada
     /// frontera y el editor recoloca el contenido de las celdas con `pads`
     /// para que caiga en su columna.
+    ///
+    /// No se emite cuando ninguna fila de contenido cabe en la geometría del
+    /// delimitador (celdas de prosa con `|---|` triviales): la tabla no es
+    /// dibujable como rejilla y queda como bloque fluido.
     TableGrid {
         /// Primera y última línea lógica de la tabla.
         first: usize,
@@ -747,27 +751,47 @@ fn table_plan(text: &str, rows: &[(usize, usize)], lines: &LineIndex) -> Option<
 }
 
 impl TablePlan {
-    /// Rellenos que colocan el contenido de cada celda en su columna canónica.
+    /// Rellenos que colocan el contenido de cada celda en su columna canónica,
+    /// y si la rejilla es inviable.
     ///
     /// El recorrido es de izquierda a derecha y acumula lo ya rellenado, así
     /// que un desbordamiento (contenido más ancho que su columna) desplaza a
     /// las columnas siguientes en vez de encoger nada. Las filas sin `|`
     /// inicial no tienen ancla y se dejan como están.
-    fn pads(&self, text: &str, shrunk: &[(usize, usize)]) -> Vec<TablePad> {
+    ///
+    /// La rejilla es inviable cuando ninguna fila de contenido cabe entera en
+    /// la geometría de la fila de guiones (tabla con delimitadores triviales
+    /// como `|---|` y celdas de prosa larga): recolocar nada es imposible y
+    /// pintarla dejaría un abanico de líneas sobre el texto. El adorno no se
+    /// emite entonces y la tabla se dibuja como bloque fluido; el remedio del
+    /// desborde parcial sigue siendo la acción «Format tables».
+    fn pads(&self, text: &str, shrunk: &[(usize, usize)]) -> (Vec<TablePad>, bool) {
         let mut out = Vec::new();
+        let mut alguna_fila_cabe = false;
         for (row_start, row_end, cells) in &self.rows {
             let metrics = RowMetrics::new(text, *row_start, *row_end, shrunk);
             // Las celdas vienen con offsets relativos a su fila; `RowMetrics`
             // trabaja en bytes absolutos del documento.
             let pos = |at: usize| metrics.pos(row_start + at);
             let mut shift = 0.0f32;
+            let mut fila_cabe = true;
             for cell in cells {
-                let (Some(anchor), Some(column)) = (cell.anchor, self.columns.get(cell.column))
-                else {
+                let Some(column) = self.columns.get(cell.column) else {
+                    // Más celdas que columnas: el contenido sobra fuera de la
+                    // última frontera de la rejilla.
+                    fila_cabe = false;
+                    continue;
+                };
+                let Some(anchor) = cell.anchor else {
+                    // Fila sin `|` inicial: la celda no se puede recolocar,
+                    // pero tampoco desborda la rejilla por existir.
                     continue;
                 };
                 let width = pos(cell.end) - pos(cell.start);
                 let slack = column.width as f32 - width;
+                if slack < -0.5 {
+                    fila_cabe = false;
+                }
                 let target = column.start as f32
                     + match column.align {
                         Align::Right => slack.max(0.0),
@@ -783,8 +807,9 @@ impl TablePlan {
                     });
                 }
             }
+            alguna_fila_cabe |= fila_cabe;
         }
-        out
+        (out, !alguna_fila_cabe)
     }
 }
 
@@ -1487,11 +1512,21 @@ pub fn analyze(text: &str) -> Analysis {
     // porque los tramos que se encogen (pipes, markup) solo se conocen cuando
     // ha terminado el recorrido de eventos.
     let shrunk = shrunk_ranges(&spans);
+    let mut rejillas_inviables = Vec::new();
     for pending in pending_tables {
-        let pads = pending.plan.pads(text, &shrunk);
-        if let Some(Ornament::TableGrid { pads: slot, .. }) = ornaments.get_mut(pending.grid) {
+        let (pads, inviable) = pending.plan.pads(text, &shrunk);
+        if inviable {
+            // Ninguna fila cabe en la geometría del delimitador: la rejilla
+            // sería un abanico de líneas sobre el texto. Sin adorno, la tabla
+            // se dibuja como bloque fluido (caja + filete de cabecera).
+            rejillas_inviables.push(pending.grid);
+        } else if let Some(Ornament::TableGrid { pads: slot, .. }) = ornaments.get_mut(pending.grid)
+        {
             *slot = pads;
         }
+    }
+    for &i in rejillas_inviables.iter().rev() {
+        ornaments.remove(i);
     }
 
     // Un elemento de tarea genera viñeta y casilla; la casilla manda.
@@ -2319,6 +2354,40 @@ mod tests {
         assert_eq!(pads.len(), 1, "{pads:?}");
         assert_eq!(pads[0].offset, 4);
         assert!((pads[0].cells - 0.9).abs() < 0.01, "{pads:?}");
+    }
+
+    #[test]
+    fn tabla_con_todo_el_contenido_mas_ancha_que_la_geometria_no_genera_rejilla() {
+        // Delimitadores triviales (`|---|`) con celdas de prosa larga: ninguna
+        // fila cabe en la geometría, así que no hay rejilla que pintar (sería
+        // un abanico de líneas sobre el texto). La tabla sigue siendo bloque
+        // (caja y filete de cabecera) y las celdas de la cabecera siguen en
+        // negrita.
+        let text = "| Informe | Archivo |\n|---|---|\n\
+                    | **Nutri** (Test de Nutrición 24Genetics) | G000952966_Nutri.pdf |\n";
+        let ornaments = analyze(text).ornaments;
+        assert!(
+            ornaments
+                .iter()
+                .all(|o| !matches!(o, Ornament::TableGrid { .. })),
+            "la rejilla inviable no se emite: {ornaments:?}"
+        );
+        assert!(ornaments
+            .iter()
+            .any(|o| matches!(o, Ornament::Table { .. })));
+        assert!(ornaments
+            .iter()
+            .any(|o| matches!(o, Ornament::TableRule { .. })));
+    }
+
+    #[test]
+    fn tabla_con_una_sola_fila_que_desborda_mantiene_la_rejilla() {
+        // El desborde de una fila suelta (con el resto cabiendo) es la
+        // limitación aceptada: la rejilla se mantiene y el remedio es
+        // «Format tables». Solo cuando NINGUNA fila cabe se suprime.
+        let text = "| a | b |\n|---|---|\n| 1 | 2 |\n| desbordaaaaa | 2 |\n";
+        let (_, _, _, bounds, _) = grid(text);
+        assert_eq!(bounds, vec![0, 4, 8]);
     }
 
     #[test]

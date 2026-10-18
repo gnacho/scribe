@@ -249,6 +249,20 @@ mod imp {
             Some((x0, (*last - *first) as f32 * advance, advance))
         }
 
+        /// Rejilla de tabla que cabe entera en la columna de texto. Una tabla
+        /// más ancha que la columna envuelve sus filas, y entonces las líneas
+        /// de la rejilla cruzarían el texto envuelto: se comporta como si no
+        /// hubiera rejilla (la caja y el filete abrazan el contenido).
+        fn grid_fitting(
+            &self,
+            anchor: i32,
+            bounds: &[usize],
+            right: f32,
+        ) -> Option<(f32, f32, f32)> {
+            let (x0, width, advance) = self.grid_extent(anchor, bounds)?;
+            (x0 + width <= right).then_some((x0, width, advance))
+        }
+
         /// Segmentos verticales de una rejilla: el rango visible del bloque,
         /// partido por la línea del cursor (donde el fuente se ve crudo y la
         /// rejilla estorbaría).
@@ -281,12 +295,17 @@ mod imp {
         /// solo en la ventana anclada a lo visible, por la misma razón que
         /// el rect vertical: no pedir geometría de miles de líneas fuera de
         /// pantalla en mitad del dibujado.
+        ///
+        /// Una fila que envuelve en varias líneas de visualización mide hasta
+        /// `right`: el final lógico cae en la última línea (la más corta) y
+        /// el texto envuelto llega hasta el borde de la columna.
         fn table_extent(
             &self,
             first: i32,
             last: i32,
             anchor_top: i32,
             anchor_bottom: i32,
+            right: f32,
         ) -> Option<(f32, f32)> {
             let (from, to) = if last - first <= 200 {
                 (first, last)
@@ -302,11 +321,18 @@ mod imp {
                 let Some(mut iter) = buffer.iter_at_line(line) else {
                     continue;
                 };
-                start_x = start_x.min(view.iter_location(&iter).x() as f32);
+                let start = view.iter_location(&iter);
+                start_x = start_x.min(start.x() as f32);
                 if !iter.ends_line() {
                     iter.forward_to_line_end();
+                    let rect = view.iter_location(&iter);
+                    let end = if (rect.y() as f32) > start.y() as f32 {
+                        right
+                    } else {
+                        (rect.x() + rect.width()) as f32
+                    };
+                    end_x = end_x.max(end);
                 }
-                end_x = end_x.max(view.iter_location(&iter).x() as f32);
                 any = true;
             }
             any.then_some((start_x, end_x))
@@ -332,7 +358,7 @@ mod imp {
                     bounds,
                     ..
                 } if *f as i32 == first && *l as i32 == last => {
-                    self.grid_extent(*anchor as i32, bounds)
+                    self.grid_fitting(*anchor as i32, bounds, right)
                 }
                 _ => None,
             });
@@ -342,7 +368,7 @@ mod imp {
                     (x0 + width + BLOCK_PADDING).min(right),
                 );
             }
-            match self.table_extent(first, last, anchor_top, anchor_bottom) {
+            match self.table_extent(first, last, anchor_top, anchor_bottom, right) {
                 Some((s, e)) => (
                     (s - BLOCK_PADDING).max(left),
                     (e + BLOCK_PADDING).min(right),
@@ -481,7 +507,7 @@ mod imp {
                 if last < first_visible - 1 || first > last_visible + 1 {
                     continue;
                 }
-                let Some((x0, _, advance)) = self.grid_extent(anchor, bounds) else {
+                let Some((x0, _, advance)) = self.grid_fitting(anchor, bounds, right) else {
                     continue;
                 };
                 // El rect se limita al rango visible (mismo motivo que las
@@ -596,7 +622,7 @@ mod imp {
                                 bounds,
                                 ..
                             } if (*first as i32) <= line && line <= (*last as i32) => {
-                                self.grid_extent(*anchor as i32, bounds)
+                                self.grid_fitting(*anchor as i32, bounds, right)
                             }
                             _ => None,
                         });
