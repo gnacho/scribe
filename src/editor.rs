@@ -1396,40 +1396,62 @@ impl Editor {
 
         // El globo de ayuda con el destino solo sale con Ctrl pulsado, como en
         // el editor de texto de GNOME: sin Ctrl el puntero está escribiendo, no
-        // navegando.
+        // navegando. El estado de Ctrl se sigue con un controlador de teclado, y
+        // el globo se recalcula tanto al mover el puntero como al pulsar o
+        // soltar Ctrl, para que no haya que menear el ratón para verlo.
         let ctrl = Rc::new(Cell::new(false));
+        let ultimo: Rc<RefCell<Option<String>>> = Rc::new(RefCell::new(None));
+        let posicion: Rc<Cell<Option<(f64, f64)>>> = Rc::new(Cell::new(None));
+        let aplicar_globo = {
+            let view = self.view.clone();
+            let ctrl = ctrl.clone();
+            let ultimo = ultimo.clone();
+            move |x: f64, y: f64| {
+                let destino = ctrl.get().then(|| view.link_at_position(x, y)).flatten();
+                let texto =
+                    destino.map(|url| gettext("Ctrl+click to open {url}").replace("{url}", &url));
+                let mut ultimo = ultimo.borrow_mut();
+                if *ultimo != texto {
+                    let mostrar = texto.is_some();
+                    view.set_tooltip_text(texto.as_deref());
+                    *ultimo = texto;
+                    if mostrar {
+                        view.trigger_tooltip_query();
+                    }
+                }
+            }
+        };
+
         let teclas_ctrl = gtk4::EventControllerKey::new();
         teclas_ctrl.set_propagation_phase(gtk4::PropagationPhase::Capture);
+        let al_pulsar = aplicar_globo.clone();
+        let posicion_pulsar = posicion.clone();
         let ctrl_pulsado = ctrl.clone();
         teclas_ctrl.connect_key_pressed(move |_, key, _, _| {
             if matches!(key, gdk4::Key::Control_L | gdk4::Key::Control_R) {
                 ctrl_pulsado.set(true);
+                if let Some((x, y)) = posicion_pulsar.get() {
+                    al_pulsar(x, y);
+                }
             }
             glib::Propagation::Proceed
         });
-        let ctrl_soltado = ctrl.clone();
+        let al_soltar = aplicar_globo.clone();
+        let posicion_soltar = posicion.clone();
         teclas_ctrl.connect_key_released(move |_, key, _, _| {
             if matches!(key, gdk4::Key::Control_L | gdk4::Key::Control_R) {
-                ctrl_soltado.set(false);
+                ctrl.set(false);
+                if let Some((x, y)) = posicion_soltar.get() {
+                    al_soltar(x, y);
+                }
             }
         });
         self.view.add_controller(teclas_ctrl);
 
         let motion = gtk4::EventControllerMotion::new();
-        let hover_view = self.view.clone();
-        let ultimo: Rc<RefCell<Option<String>>> = Rc::new(RefCell::new(None));
         motion.connect_motion(move |_, x, y| {
-            let destino = ctrl
-                .get()
-                .then(|| hover_view.link_at_position(x, y))
-                .flatten();
-            let texto =
-                destino.map(|url| gettext("Ctrl+click to open {url}").replace("{url}", &url));
-            let mut ultimo = ultimo.borrow_mut();
-            if *ultimo != texto {
-                hover_view.set_tooltip_text(texto.as_deref());
-                *ultimo = texto;
-            }
+            posicion.set(Some((x, y)));
+            aplicar_globo(x, y);
         });
         self.view.add_controller(motion);
     }
