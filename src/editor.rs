@@ -9,10 +9,10 @@ use std::rc::Rc;
 use std::time::Duration;
 
 use crate::markdown_render::{
-    analyze, ornaments_for, pad_units, LinkRef, Ornament, Span, SpanKind, UnclosedFence,
-    MAX_LIVE_BYTES,
+    analyze, canvas_layout, ornaments_for, pad_units, LinkRef, Ornament, Span, SpanKind,
+    UnclosedFence, CANVAS_ROW_PAD, MAX_LIVE_BYTES,
 };
-use crate::markdown_view::{MarkdownView, OrnamentPalette};
+use crate::markdown_view::{MarkdownView, OrnamentPalette, BLOCK_PADDING};
 use crate::settings::{gtk_hides_invisible_safely, FontFamily, MarkupVisibility};
 use std::path::{Path, PathBuf};
 
@@ -241,6 +241,13 @@ fn build_tags() -> gtk4::TextTagTable {
     // aquí y no en el tema: debe ser transparente con cualquier paleta.
     add(gtk4::TextTag::builder()
         .name("syn_shrink")
+        .scale(0.05)
+        .foreground_rgba(&rgba(0x000000, 0.0))
+        .build());
+    // Filas fuente de un lienzo de tabla pintado: colapsan (igual que las
+    // marcas encogidas) y la vista pinta la fila real bajo su hueco.
+    add(gtk4::TextTag::builder()
+        .name("tcanvas_src")
         .scale(0.05)
         .foreground_rgba(&rgba(0x000000, 0.0))
         .build());
@@ -642,6 +649,92 @@ fn decorate(
     // `ornaments_for`): en «Atenuar» solo ambientales y aditivos; en los
     // modos WYSIWYG todos, con las marcas sustituidas encogidas u ocultas.
     let mut ornaments = ornaments_for(&analysis.ornaments, config.markup);
+    // Lienzos de tabla (tablas de prosa que no caben en la rejilla): cada
+    // fila fuente colapsa y bajo ella se reserva, con `pixels_below_lines`, el
+    // alto de la fila que pinta la vista. La fila del cursor se queda cruda,
+    // como el revelado de la rejilla. En el modo «Atenuar» el adorno se filtra
+    // antes de llegar aquí y el fuente se ve entero. El ancho de columna usa
+    // la MISMA fórmula que la vista para que el hueco y la pintura casen.
+    {
+        let advance = view.cell_advance();
+        if advance > 0.0 {
+            let line_height = view.cell_height();
+            let column_cells = ((view.width() - view.left_margin() - view.right_margin()) as f32
+                - 2.0 * BLOCK_PADDING)
+                .max(0.0)
+                / advance;
+            if column_cells >= 16.0 {
+                // Con la vista aún sin asignar (decorado inicial) el ancho es
+                // irreal y el envoltorio daría unas alturas absurdas: se
+                // espera al notify de ancho, que pide una re-decoración.
+                let mut line_starts = vec![0usize];
+                for (i, b) in text.bytes().enumerate() {
+                    if b == b'\n' {
+                        line_starts.push(i + 1);
+                    }
+                }
+                for ornament in &ornaments {
+                    let Ornament::TableCanvas {
+                        columns,
+                        rows,
+                        anchor,
+                        ..
+                    } = ornament
+                    else {
+                        continue;
+                    };
+                    let Some(layout) = canvas_layout(columns, rows, column_cells) else {
+                        continue;
+                    };
+                    let colapsa = |linea: usize| {
+                        if linea as i32 == cursor_line {
+                            return;
+                        }
+                        let desde = line_starts.get(linea).copied().unwrap_or(text.len());
+                        let hasta = line_starts.get(linea + 1).copied().unwrap_or(text.len());
+                        let (Some(&from), Some(&to)) =
+                            (byte_to_char.get(desde), byte_to_char.get(hasta))
+                        else {
+                            return;
+                        };
+                        if from >= to {
+                            return;
+                        }
+                        let start_iter = buffer.iter_at_offset(from);
+                        let end_iter = buffer.iter_at_offset(to);
+                        buffer.apply_tag_by_name("tcanvas_src", &start_iter, &end_iter);
+                    };
+                    // La fila delimitadora colapsa sin hueco: su geometría la
+                    // pinta el lienzo.
+                    colapsa(*anchor);
+                    for (ri, row) in rows.iter().enumerate() {
+                        colapsa(row.line);
+                        if row.line as i32 == cursor_line {
+                            continue;
+                        }
+                        let desde = line_starts.get(row.line).copied().unwrap_or(text.len());
+                        let hasta = line_starts.get(row.line + 1).copied().unwrap_or(text.len());
+                        let (Some(&from), Some(&to)) =
+                            (byte_to_char.get(desde), byte_to_char.get(hasta))
+                        else {
+                            continue;
+                        };
+                        if from >= to {
+                            continue;
+                        }
+                        let gap_px = (layout.row_lines[ri] as f32 * line_height
+                            + 2.0 * CANVAS_ROW_PAD)
+                            .ceil() as i32;
+                        let name = view.gap_tag(gap_px);
+                        let start_iter = buffer.iter_at_offset(from);
+                        let end_iter = buffer.iter_at_offset(to);
+                        buffer.apply_tag_by_name(&name, &start_iter, &end_iter);
+                    }
+                }
+            }
+        }
+    }
+
     // Los adornos van por número de línea salvo `Break`, que guarda un byte
     // offset: el widget indexa por caracteres, así que lo convertimos.
     for o in &mut ornaments {
@@ -1193,6 +1286,11 @@ impl Editor {
             let view = self.view.clone();
             let tags = self.tags.clone();
             let column_width = self.column_width.clone();
+            let decoracion = self.decoration.clone();
+            let generacion = self.generation.clone();
+            let base_dir = self.base_dir.clone();
+            let unclosed_fences = self.unclosed_fences.clone();
+            let buffer = self.buffer.clone();
             hadj.connect_page_size_notify(move |adj| {
                 let width = adj.page_size() as i32;
                 if width <= 0 {
@@ -1200,6 +1298,17 @@ impl Editor {
                 }
                 let margin = ((width - column_width.get()) / 2).max(MIN_MARGIN);
                 apply_column_margins_deferred(&view, &tags, margin);
+                // El layout del lienzo de tabla depende del ancho: al
+                // cambiarlo hay que re-decorar para recalcular sus huecos.
+                schedule_decoration(
+                    &view,
+                    &buffer,
+                    &decoracion,
+                    &generacion,
+                    &base_dir,
+                    &unclosed_fences,
+                    Duration::ZERO,
+                );
             });
         }
 

@@ -63,6 +63,12 @@ con GTK4 y ha terminado siendo algo que uso de verdad para borradores y notas.
   filete bajo H1/H2, barra lateral de citas, viñetas dibujadas por nivel,
   casillas de tarea marcables y reglas horizontales. La marca que sustituye un
   adorno se **encoge** en vez de ocultarse.
+- **Tablas de prosa como tablas de verdad**: cuando las celdas de prosa no
+  caben en la geometría del delimitador (la tabla larga de toda la vida), las
+  filas fuente colapsan y la tabla se pinta como lienzo: cada celda envuelve
+  su texto dentro de su columna, la cabecera va en negrita con filete y se
+  respetan las alineaciones. La fila bajo el cursor muestra su fuente crudo
+  para editarla.
 - **Imágenes locales en bloque**: cuando un `![alt](ruta)` está solo en su
   línea y el fichero existe (relativo al documento), se pinta escalado bajo la
   marca (máx. 144 px, límite de 20 MB, caché de 64). Los ficheros ausentes

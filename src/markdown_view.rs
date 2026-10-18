@@ -36,7 +36,9 @@ use gtk4::subclass::prelude::*;
 use gtk4::{gdk, graphene, gsk};
 use gtksourceview5 as sourceview;
 
-use crate::markdown_render::{LinkRef, Ornament};
+use crate::markdown_render::{
+    canvas_layout, Align, LinkRef, Ornament, CANVAS_CELL_PAD, CANVAS_ROW_PAD,
+};
 
 /// Colores de los adornos. Los fija la aplicación para que casen con su tema.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -79,7 +81,7 @@ const CHECKBOX_SIZE: f32 = 14.0;
 /// Distancia del borde izquierdo de la casilla al borde del texto.
 const CHECKBOX_OFFSET: f32 = 22.0;
 /// Sangrado de la caja de código respecto al margen de la columna.
-const BLOCK_PADDING: f32 = 8.0;
+pub(crate) const BLOCK_PADDING: f32 = 8.0;
 const BLOCK_RADIUS: f32 = 8.0;
 const QUOTE_BAR_WIDTH: f32 = 3.0;
 const QUOTE_BAR_OFFSET: f32 = 20.0;
@@ -127,6 +129,9 @@ mod imp {
         /// Los rellenos se repiten mucho entre tablas y filas: sin caché, cada
         /// pasada crearía un tag por celda.
         pub pad_tags: RefCell<HashMap<i32, glib::GString>>,
+        /// Cache de tags de hueco (`pixels_below_lines`) para las filas
+        /// colapsadas del lienzo de tabla: un tag por alto distinto.
+        pub gap_tags: RefCell<HashMap<i32, glib::GString>>,
         /// Enlaces del documento, con su destino ya resuelto. Los usa el editor
         /// para abrir con Ctrl+clic y para el globo de ayuda del puntero.
         pub links: RefCell<Vec<LinkRef>>,
@@ -157,6 +162,7 @@ mod imp {
                     self.draw_blocks(&snapshot);
                     self.draw_images(&snapshot);
                     self.draw_youtube(&snapshot);
+                    self.draw_table_canvas(&snapshot);
                 }
                 gtk4::TextViewLayer::AboveText => self.draw_glyphs(&snapshot),
                 _ => {}
@@ -214,6 +220,38 @@ mod imp {
             layout.set_markup(&format!("<span font_family=\"monospace\">{sample}</span>"));
             let (width, _) = layout.pixel_size();
             width as f32 / ADVANCE_SAMPLE as f32
+        }
+
+        /// Altura de línea de la monoespaciada, en píxeles. El lienzo de tabla
+        /// la usa para el alto de sus filas pintadas, igual que el editor para
+        /// los huecos de las filas colapsadas: misma medida, mismo alto.
+        pub(super) fn cell_height(&self) -> f32 {
+            let view = self.obj();
+            let layout = view.create_pango_layout(None);
+            layout.set_markup("<span font_family=\"monospace\">0</span>");
+            let (_, height) = layout.pixel_size();
+            height as f32
+        }
+
+        /// Nombre del tag de hueco (`pixels_below_lines`) para un alto dado,
+        /// en píxeles. Un tag por valor distinto, cacheado: el editor lo aplica
+        /// sobre cada fila fuente colapsada de un lienzo de tabla.
+        pub(super) fn gap_tag(&self, px: i32) -> glib::GString {
+            let mut cache = self.gap_tags.borrow_mut();
+            if let Some(name) = cache.get(&px) {
+                return name.clone();
+            }
+            if cache.len() >= MAX_PAD_TAGS {
+                cache.clear();
+            }
+            let name = glib::GString::from(format!("tcanvasgap{px}"));
+            let tag = gtk4::TextTag::builder()
+                .name(name.as_str())
+                .pixels_below_lines(px)
+                .build();
+            self.obj().buffer().tag_table().add(&tag);
+            cache.insert(px, name.clone());
+            name
         }
 
         /// Nombre del tag de relleno (`letter-spacing`) para un avance dado, en
@@ -827,6 +865,122 @@ mod imp {
             }
         }
 
+        /// Lienzos de tabla (tablas de prosa que no caben en la rejilla del
+        /// fuente): cada fila fuente colapsa (tag `tcanvas_src` + hueco) y se
+        /// pinta bajo su línea con el texto de cada celda envuelto en su
+        /// columna, cabecera en negrita y filete, y alineaciones respetadas.
+        /// La fila del cursor no se pinta: el editor revela ahí el fuente.
+        fn draw_table_canvas(&self, snapshot: &gtk4::Snapshot) {
+            let ornaments = self.ornaments.borrow();
+            if ornaments.is_empty() || self.stale() {
+                return;
+            }
+            let palette = self.palette.get();
+            let (first_visible, last_visible) = self.visible_lines();
+            let (left, right) = self.column();
+            let max_w = (right - left - BLOCK_PADDING * 2.0).max(0.0);
+            let advance = self.cell_advance();
+            if advance <= 0.0 || max_w <= 0.0 {
+                return;
+            }
+            let column_cells = max_w / advance;
+            let line_height = self.cell_height();
+            let view = self.obj();
+            let cursor_line = view
+                .buffer()
+                .iter_at_mark(&view.buffer().get_insert())
+                .line();
+
+            for ornament in ornaments.iter() {
+                let Ornament::TableCanvas { columns, rows, .. } = ornament else {
+                    continue;
+                };
+                let Some(layout) = canvas_layout(columns, rows, column_cells) else {
+                    continue;
+                };
+                eprintln!(
+                    "CANVAS row_lines={:?} primeras={:?}",
+                    layout.row_lines,
+                    layout.cells.first().map(|c| c.first().map(|l| l.len()))
+                );
+                // X de cada frontera de columna, en píxeles.
+                let mut xs = Vec::with_capacity(layout.col_widths.len() + 1);
+                let mut x = left + BLOCK_PADDING;
+                for w in &layout.col_widths {
+                    xs.push(x);
+                    x += w * advance;
+                }
+                xs.push(x);
+                for (ri, row) in rows.iter().enumerate() {
+                    if row.line as i32 == cursor_line {
+                        continue;
+                    }
+                    // El mismo alto (con el mismo redondeo) que el editor
+                    // reservó con `pixels_below_lines`: la pintura va dentro
+                    // del hueco, no debajo de la línea.
+                    let fila_px =
+                        (layout.row_lines[ri] as f32 * line_height + 2.0 * CANVAS_ROW_PAD).ceil();
+                    if row.line as i32 + 1 < first_visible || row.line as i32 > last_visible + 1 {
+                        continue;
+                    }
+                    let Some((line_y, line_h)) = self.line_extent(row.line as i32) else {
+                        eprintln!("CANVAS fila {} SIN line_extent", row.line);
+                        continue;
+                    };
+                    let top = line_y + line_h - fila_px;
+                    eprintln!(
+                        "CANVAS fila {} top={} line_h={} fila_px={}",
+                        row.line, top, line_h, fila_px
+                    );
+                    let base = top + CANVAS_ROW_PAD;
+                    // Celdas: línea a línea, con la alineación de su columna.
+                    for (ci, cell_lines) in layout.cells[ri].iter().enumerate() {
+                        let col_w = layout.col_widths[ci] * advance;
+                        let disponible = col_w - 2.0 * CANVAS_CELL_PAD;
+                        for (li, texto) in cell_lines.iter().enumerate() {
+                            let pango = view.create_pango_layout(Some(texto));
+                            if let Some(desc) = view.pango_context().font_description() {
+                                let mut mono =
+                                    gtk4::pango::FontDescription::from_string(&desc.to_string());
+                                mono.set_family("monospace");
+                                if row.header {
+                                    mono.set_weight(gtk4::pango::Weight::Bold);
+                                }
+                                pango.set_font_description(Some(&mono));
+                            }
+                            let (lw, _) = pango.pixel_size();
+                            let dx = match columns.get(ci).map(|(a, _)| a).copied() {
+                                Some(Align::Right) => (disponible - lw as f32).max(0.0),
+                                Some(Align::Center) => ((disponible - lw as f32) / 2.0).max(0.0),
+                                _ => 0.0,
+                            };
+                            snapshot.save();
+                            snapshot.translate(&graphene::Point::new(
+                                xs[ci] + CANVAS_CELL_PAD + dx,
+                                base + li as f32 * line_height,
+                            ));
+                            snapshot.append_layout(&pango, &view.color());
+                            snapshot.restore();
+                        }
+                    }
+                    // Filete bajo la cabecera y separadores de fila.
+                    let stroke = gsk::Stroke::new(1.0);
+                    let rule = gsk::PathBuilder::new();
+                    rule.move_to(xs[0], top + fila_px);
+                    rule.line_to(*xs.last().unwrap(), top + fila_px);
+                    snapshot.append_stroke(&rule.to_path(), &stroke, &palette.muted);
+                    // Fronteras verticales: se alargan un píxel arriba y abajo
+                    // para coserse con la fila vecina.
+                    for fx in &xs {
+                        let linea = gsk::PathBuilder::new();
+                        linea.move_to(*fx, top - 1.0);
+                        linea.line_to(*fx, top + fila_px + 1.0);
+                        snapshot.append_stroke(&linea.to_path(), &stroke, &palette.muted);
+                    }
+                }
+            }
+        }
+
         /// Tarjetas de vídeo: se pintan en el hueco que reserva `youtubegap`,
         /// centradas y en 16:9. La miniatura llega por la misma caché que las
         /// imágenes (descarga en segundo plano); mientras no esté, la tarjeta
@@ -1217,6 +1371,17 @@ impl MarkdownView {
     /// calcula en celdas de carácter.
     pub fn cell_advance(&self) -> f32 {
         self.imp().cell_advance()
+    }
+
+    /// Altura de línea de la monoespaciada, en píxeles.
+    pub fn cell_height(&self) -> f32 {
+        self.imp().cell_height()
+    }
+
+    /// Nombre del tag de hueco (`pixels_below_lines`) para `px` píxeles,
+    /// creado y cacheado bajo demanda.
+    pub fn gap_tag(&self, px: i32) -> glib::GString {
+        self.imp().gap_tag(px)
     }
 
     /// ¿Cae esta línea dentro de una tabla? El editor lo consulta para
