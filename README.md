@@ -94,7 +94,6 @@ actually use to draft notes and docs.
 - **List continuation**: pressing Enter starts the next item and re-numbers
   ordered lists. Leaving an item empty closes the list.
 - **Zoom** (Ctrl +/&minus;/0) with controls in the main menu.
-- **Go to line** from the status bar.
 - **Header bar** follows GNOME Text Editor: open button with recent files
   dropdown, new tab button, centered title, split preview toggle and main menu
   with the colour schemes and zoom row.
