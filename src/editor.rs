@@ -89,6 +89,11 @@ pub struct Editor {
     /// Aviso transitorio (toast) que la ventana conecta al crear el editor;
     /// se usa para los avisos de pegado/soltado de imágenes.
     on_toast: ToastCallback,
+    /// Ajustes de búsqueda del documento (patrón, vuelta al final).
+    search_settings: gtksourceview5::SearchSettings,
+    /// Contexto de búsqueda del documento, vivo toda la vida del editor: el
+    /// índice se mantiene caliente aunque la barra de búsqueda esté cerrada.
+    search_context: gtksourceview5::SearchContext,
 }
 
 fn build_tags() -> gtk4::TextTagTable {
@@ -1061,6 +1066,15 @@ impl Editor {
         apply_theme(&tags, &view, dark);
         set_column_margins(&tags, MIN_MARGIN);
 
+        // Búsqueda: contexto propio del documento, con vuelta al final al
+        // llegar al extremo. El resaltado se enciende solo mientras la barra
+        // de búsqueda está abierta (lo gobierna la ventana).
+        let search_settings = gtksourceview5::SearchSettings::new();
+        search_settings.set_wrap_around(true);
+        search_settings.set_at_word_boundaries(false);
+        let search_context = gtksourceview5::SearchContext::new(&buffer, Some(&search_settings));
+        search_context.set_highlight(false);
+
         let editor = Self {
             widget,
             view,
@@ -1076,6 +1090,8 @@ impl Editor {
             base_dir: Rc::new(RefCell::new(None)),
             unclosed_fences: Rc::new(RefCell::new(Vec::new())),
             on_toast: Rc::new(RefCell::new(None)),
+            search_settings,
+            search_context,
         };
         editor.connect_signals();
         editor
@@ -1327,6 +1343,91 @@ impl Editor {
         self.buffer
             .text(&self.buffer.start_iter(), &self.buffer.end_iter(), true)
             .to_string()
+    }
+
+    // --- búsqueda ---------------------------------------------------------
+
+    /// Contexto de búsqueda del documento. La ventana se engancha a
+    /// `occurrences-count-notify` para llevar el contador «N de M».
+    pub fn search_context(&self) -> &gtksourceview5::SearchContext {
+        &self.search_context
+    }
+
+    /// Fija el patrón de búsqueda. Devuelve el total de coincidencias, que
+    /// puede llegar más tarde por señal si el documento es grande.
+    pub fn set_search_text(&self, text: &str) -> i32 {
+        if self.search_settings.search_text().as_deref() == Some(text) {
+            return self.search_context.occurrences_count();
+        }
+        self.search_settings.set_search_text(Some(text));
+        self.search_context.occurrences_count()
+    }
+
+    /// Enciende o apaga el resaltado de todas las coincidencias.
+    pub fn set_search_highlight(&self, on: bool) {
+        self.search_context.set_highlight(on);
+    }
+
+    /// Total de coincidencias y número de la que tiene el cursor (0 si el
+    /// cursor no está sobre ninguna).
+    pub fn search_state(&self) -> (i32, i32) {
+        let total = self.search_context.occurrences_count().max(0);
+        let position = self
+            .buffer
+            .selection_bounds()
+            .map(|(start, end)| self.search_context.occurrence_position(&start, &end))
+            .unwrap_or(0)
+            .max(0);
+        (position, total)
+    }
+
+    /// Siguiente coincidencia, dando la vuelta al llegar al final.
+    pub fn search_next(&self) -> bool {
+        self.search_step(true)
+    }
+
+    /// Coincidencia anterior, dando la vuelta al llegar al principio.
+    pub fn search_previous(&self) -> bool {
+        self.search_step(false)
+    }
+
+    fn search_step(&self, forward: bool) -> bool {
+        if self.search_context.occurrences_count() <= 0 {
+            return false;
+        }
+        // Con una coincidencia ya seleccionada se sigue desde su borde: si se
+        // partiera del cursor, que está dentro de la coincidencia, se volvería
+        // a encontrar la misma una y otra vez.
+        let anchor = match self.buffer.selection_bounds() {
+            Some((start, end)) => {
+                if forward {
+                    end
+                } else {
+                    start
+                }
+            }
+            None => {
+                let mut iter = self.buffer.iter_at_mark(&self.buffer.get_insert());
+                if forward && !iter.is_end() {
+                    iter.forward_char();
+                }
+                iter
+            }
+        };
+        let found = if forward {
+            self.search_context.forward(&anchor)
+        } else {
+            self.search_context.backward(&anchor)
+        };
+        // `forward`/`backward` solo devuelven el rango: seleccionarlo es cosa
+        // nuestra (si no, la coincidencia no se ve ni cuenta el contador).
+        let Some((start, end, _wrapped)) = found else {
+            return false;
+        };
+        self.buffer.select_range(&start, &end);
+        let mut start = start;
+        self.view.scroll_to_iter(&mut start, 0.15, true, 0.0, 0.5);
+        true
     }
 
     pub fn refresh(&self) {

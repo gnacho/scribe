@@ -22,7 +22,7 @@ BINDIR := $(PREFIX)/bin
 DATADIR := $(PREFIX)/share
 SCHEMADIR := $(DATADIR)/glib-2.0/schemas
 APPDIR := $(DATADIR)/applications
-ICONDIR := $(DATADIR)/icons/hicolor/scalable/apps
+ICONDIR := $(DATADIR)/icons/hicolor
 
 CARGO ?= cargo
 
@@ -53,4 +53,10 @@ install: build
 	install -Dm644 data/app.scribe.Scribe.gschema.xml "$(SCHEMADIR)/app.scribe.Scribe.gschema.xml"
 	glib-compile-schemas "$(SCHEMADIR)"
 	install -Dm644 data/app.scribe.Scribe.desktop "$(APPDIR)/app.scribe.Scribe.desktop"
-	install -Dm644 data/icons/hicolor/scalable/apps/app.scribe.Scribe.svg "$(ICONDIR)/app.scribe.Scribe.svg"
+	install -Dm644 data/icons/hicolor/scalable/apps/app.scribe.Scribe.svg "$(ICONDIR)/scalable/apps/app.scribe.Scribe.svg"
+	# Los simbólicos van a scalable/actions: el index.theme de hicolor declara
+	# scalable/* pero no symbolic/*, así que una carpeta symbolic propia aquí
+	# nunca se escanea.
+	for icon in data/icons/hicolor/scalable/actions/*.svg; do \
+		install -Dm644 "$$icon" "$(ICONDIR)/scalable/actions/$$(basename "$$icon")"; \
+	done

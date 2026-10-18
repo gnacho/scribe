@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: scribe\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-07 22:58+0200\n"
+"POT-Creation-Date: 2026-10-18 09:34+0200\n"
 "PO-Revision-Date: 2026-09-19 19:58+0200\n"
 "Last-Translator: Automatically generated\n"
 "Language-Team: none\n"
@@ -17,212 +17,237 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=2; plural=(n != 1);\n"
 
-#: src/main.rs:236
+#: src/main.rs:237
 msgid "Recover unsaved documents?"
 msgstr "¿Recuperar los documentos sin guardar?"
 
-#: src/main.rs:239
+#: src/main.rs:240
 msgid "_Recover All"
 msgstr "_Recuperar todo"
 
-#: src/main.rs:240
+#: src/main.rs:241
 msgid "_Discard All"
 msgstr "_Descartar todo"
 
-#: src/main.rs:241
+#: src/main.rs:242
 msgid "Decide Later"
 msgstr "Decidir más tarde"
 
-#: src/window.rs:250 src/window.rs:608 src/window.rs:1164 src/window.rs:1453
+#: src/window.rs:261 src/window.rs:657 src/window.rs:1303 src/window.rs:1592
 msgid "Untitled"
 msgstr "Sin título"
 
-#: src/window.rs:292
+#: src/window.rs:303
 msgid "Draft"
 msgstr "Borrador"
 
-#: src/window.rs:296
+#: src/window.rs:307
 msgid "Unsaved draft"
 msgstr "Borrador sin guardar"
 
-#: src/window.rs:386 src/window.rs:2040
+#: src/window.rs:397 src/window.rs:2312
 #, rust-format
 msgid "Save changes to “{name}”?"
 msgstr "¿Guardar los cambios en «{name}»?"
 
-#: src/window.rs:388 src/window.rs:2042
+#: src/window.rs:399 src/window.rs:2314
 msgid "If you close without saving, you will lose what you have written."
 msgstr "Si cierras sin guardar, perderás lo que hayas escrito."
 
-#: src/window.rs:391 src/window.rs:939 src/window.rs:2045
+#: src/window.rs:402 src/window.rs:1059 src/window.rs:2317
 msgid "_Cancel"
 msgstr "_Cancelar"
 
-#: src/window.rs:392 src/window.rs:2046
+#: src/window.rs:403 src/window.rs:2318
 msgid "_Discard"
 msgstr "_Descartar"
 
-#: src/window.rs:393 src/window.rs:639 src/window.rs:2047
+#: src/window.rs:404 src/window.rs:709 src/window.rs:2319
 msgid "_Save"
 msgstr "_Guardar"
 
-#: src/window.rs:422 src/window.rs:456 src/window.rs:2077 src/window.rs:2105
+#: src/window.rs:433 src/window.rs:467 src/window.rs:2349 src/window.rs:2377
 #, rust-format
 msgid "Could not save: {e}"
 msgstr "No se pudo guardar: {e}"
 
-#: src/window.rs:504
+#: src/window.rs:515
 msgid "Documents"
 msgstr "Documentos"
 
-#: src/window.rs:510
+#: src/window.rs:521
 msgid "Filter recents…"
 msgstr "Filtrar recientes…"
 
-#: src/window.rs:539
+#: src/window.rs:550
 msgid "Recents"
 msgstr "Recientes"
 
-#: src/window.rs:541
+#: src/window.rs:552
 msgid "Contents"
 msgstr "Contenido"
 
-#: src/window.rs:600
+#: src/window.rs:595
+msgid "Search"
+msgstr "Buscar"
+
+#: src/window.rs:603 src/shortcuts.ui:108
+msgid "Find Previous"
+msgstr "Buscar anterior"
+
+#: src/window.rs:608 src/shortcuts.ui:102
+msgid "Find Next"
+msgstr "Buscar siguiente"
+
+#: src/window.rs:649
 msgid "_Open"
 msgstr "_Abrir"
 
-#: src/window.rs:602
+#: src/window.rs:651
 msgid "Open a document (Ctrl+O)"
 msgstr "Abrir un documento (Ctrl+O)"
 
-#: src/window.rs:615
+#: src/window.rs:665
 msgid "New Tab (Ctrl+N)"
 msgstr "Nueva pestaña (Ctrl+N)"
 
-#: src/window.rs:622
+#: src/window.rs:673
 msgid "Main menu"
 msgstr "Menú principal"
 
-#: src/window.rs:637 src/shortcuts.ui:50
-msgid "New Window"
-msgstr "Nueva ventana"
+#: src/window.rs:681
+msgid "Find in the document (Ctrl+F)"
+msgstr "Buscar en el documento (Ctrl+F)"
 
-#: src/window.rs:638
-msgid "_Open…"
-msgstr "_Abrir…"
-
-#: src/window.rs:640
-msgid "Save _As…"
-msgstr "Guardar _como…"
-
-#: src/window.rs:641 src/window.rs:940
-msgid "_Reload"
-msgstr "_Recargar"
-
-#: src/window.rs:642
-msgid "_Close Tab"
-msgstr "_Cerrar pestaña"
-
-#: src/window.rs:643
-msgid "Export to _PDF…"
-msgstr "Exportar a _PDF…"
-
-#: src/window.rs:647 src/shortcuts.ui:114
-msgid "Align Tables"
-msgstr "Alinear tablas"
-
-#: src/window.rs:649
-msgid "Close Unclosed Code Fences"
-msgstr "Cerrar vallas de código abiertas"
-
-#: src/window.rs:655 src/shortcuts.ui:131
-msgid "Sidebar"
-msgstr "Barra lateral"
-
-#: src/window.rs:656 src/shortcuts.ui:137
+#: src/window.rs:694 src/window.rs:724 src/shortcuts.ui:160
 msgid "Split View"
 msgstr "Vista dividida"
 
-#: src/window.rs:657 src/shortcuts.ui:143
+#: src/window.rs:710
+msgid "Save _As…"
+msgstr "Guardar _como…"
+
+#: src/window.rs:711
+msgid "Export to _PDF…"
+msgstr "Exportar a _PDF…"
+
+#: src/window.rs:715 src/shortcuts.ui:137
+msgid "Align Tables"
+msgstr "Alinear tablas"
+
+#: src/window.rs:717
+msgid "Close Unclosed Code Fences"
+msgstr "Cerrar vallas de código abiertas"
+
+#: src/window.rs:723 src/shortcuts.ui:154
+msgid "Sidebar"
+msgstr "Barra lateral"
+
+#: src/window.rs:725 src/shortcuts.ui:166
 msgid "Focus Mode"
 msgstr "Modo foco"
 
-#: src/window.rs:659 src/shortcuts.ui:149
+#: src/window.rs:727 src/shortcuts.ui:172
 msgid "Typewriter Mode"
 msgstr "Máquina de escribir"
 
-#: src/window.rs:665
+#: src/window.rs:736
+msgid "Follow System Style"
+msgstr "Seguir el estilo del sistema"
+
+#: src/window.rs:737
+msgid "Light Style"
+msgstr "Estilo claro"
+
+#: src/window.rs:738
+msgid "Dark Style"
+msgstr "Estilo oscuro"
+
+#: src/window.rs:744
+msgid "Style"
+msgstr "Estilo"
+
+#: src/window.rs:747
 msgid "_Preferences"
 msgstr "_Preferencias"
 
-#: src/window.rs:667
+#: src/window.rs:749
 msgid "_Keyboard Shortcuts"
 msgstr "_Atajos de teclado"
 
-#: src/window.rs:670
+#: src/window.rs:752
 msgid "_About Scribe"
 msgstr "_Acerca de Scribe"
 
-#: src/window.rs:684
+#: src/window.rs:766
 msgid "Zoom Out"
 msgstr "Reducir"
 
-#: src/window.rs:689
+#: src/window.rs:771
 msgid "Zoom Reset"
 msgstr "Restablecer"
 
-#: src/window.rs:694
+#: src/window.rs:776
 msgid "Zoom In"
 msgstr "Ampliar"
 
-#: src/window.rs:719
+#: src/window.rs:801
 msgid "Close the unterminated code fences"
 msgstr "Cerrar las vallas de código abiertas"
 
-#: src/window.rs:724
+#: src/window.rs:806
 msgid "_Go"
 msgstr "_Ir"
 
-#: src/window.rs:736
+#: src/window.rs:818
 msgid "Line"
 msgstr "Línea"
 
-#: src/window.rs:743
+#: src/window.rs:825
 msgid "Go to line"
 msgstr "Ir a la línea"
 
-#: src/window.rs:757
+#: src/window.rs:839
 msgid "Document properties"
 msgstr "Propiedades del documento"
 
-#: src/window.rs:875 src/window.rs:919 src/window.rs:956
+#: src/window.rs:928
+#, rust-format
+msgid "{0} of {1}"
+msgstr "{0} de {1}"
+
+#: src/window.rs:995 src/window.rs:1039 src/window.rs:1076
 #, rust-format
 msgid "Could not reload: {e}"
 msgstr "No se pudo recargar: {e}"
 
-#: src/window.rs:882 src/window.rs:912
+#: src/window.rs:1002 src/window.rs:1032
 msgid "File deleted on disk; save to recreate it"
 msgstr "El fichero se borró en disco; guárdalo para recrearlo"
 
-#: src/window.rs:904
+#: src/window.rs:1024
 msgid "This document is not linked to a file"
 msgstr "Este documento no está asociado a un fichero"
 
-#: src/window.rs:934
+#: src/window.rs:1054
 #, rust-format
 msgid "Reload “{name}” and discard changes?"
 msgstr "¿Recargar «{name}» y descartar los cambios?"
 
-#: src/window.rs:936
+#: src/window.rs:1056
 msgid "The file changed on disk. Reloading discards your unsaved edits."
 msgstr "El fichero cambió en disco. Recargar descarta tus cambios sin guardar."
 
-#: src/window.rs:978
+#: src/window.rs:1060
+msgid "_Reload"
+msgstr "_Recargar"
+
+#: src/window.rs:1098
 #, rust-format
 msgid "{words} words"
 msgstr "{words} palabras"
 
-#: src/window.rs:981
+#: src/window.rs:1101
 #, rust-format
 msgid ""
 "Words: {words}\n"
@@ -235,54 +260,54 @@ msgstr ""
 "Líneas: {lines}\n"
 "Lectura: ~{minutes} min"
 
-#: src/window.rs:1016
+#: src/window.rs:1136
 #, rust-format
 msgid "Unclosed fence (line {first}){extra}"
 msgstr "Valla abierta (línea {first}){extra}"
 
-#: src/window.rs:1061
+#: src/window.rs:1181
 msgid "Not found"
 msgstr "No encontrado"
 
-#: src/window.rs:1079
+#: src/window.rs:1199
 msgid "No recent documents"
 msgstr "Sin documentos recientes"
 
-#: src/window.rs:1081
+#: src/window.rs:1201
 msgid "No results"
 msgstr "Ningún resultado"
 
-#: src/window.rs:1360
+#: src/window.rs:1499
 #, rust-format
 msgid "Could not open: {e}"
 msgstr "No se pudo abrir: {e}"
 
-#: src/window.rs:1616
+#: src/window.rs:1769
 msgid "Code fences closed"
 msgstr "Vallas de código cerradas"
 
-#: src/window.rs:1618
+#: src/window.rs:1771
 msgid "No unclosed fences"
 msgstr "No hay vallas abiertas"
 
-#: src/window.rs:1833
+#: src/window.rs:1986
 msgid "That file is already open in another tab"
 msgstr "Ese fichero ya está abierto en otra pestaña"
 
-#: src/window.rs:2207
+#: src/window.rs:2479
 #, rust-format
 msgid "Could not autosave: {e}"
 msgstr "No se pudo autoguardar: {e}"
 
-#: src/editor.rs:786 src/editor.rs:791 src/editor.rs:796
+#: src/editor.rs:895 src/editor.rs:900 src/editor.rs:905
 msgid "Could not save the image"
 msgstr "No se pudo guardar la imagen"
 
-#: src/editor.rs:836
+#: src/editor.rs:945
 msgid "Save the document before pasting images"
 msgstr "Guarda el documento antes de pegar imágenes"
 
-#: src/editor.rs:856 src/editor.rs:873 src/editor.rs:912
+#: src/editor.rs:965 src/editor.rs:982 src/editor.rs:1021
 msgid "Save the document before dropping images"
 msgstr "Guarda el documento antes de soltar imágenes"
 
@@ -586,6 +611,10 @@ msgstr "Recargar"
 msgid "Export to PDF"
 msgstr "Exportar a PDF"
 
+#: src/shortcuts.ui:50
+msgid "New Window"
+msgstr "Nueva ventana"
+
 #: src/shortcuts.ui:56
 msgid "Quit"
 msgstr "Salir"
@@ -611,34 +640,47 @@ msgid "Switch Tabs"
 msgstr "Cambiar de pestaña"
 
 #: src/shortcuts.ui:93
+msgid "Find"
+msgstr "Buscar"
+
+#: src/shortcuts.ui:96
+msgid "Find in the Document"
+msgstr "Buscar en el documento"
+
+#: src/shortcuts.ui:116
 msgid "Format"
 msgstr "Formato"
 
-#: src/shortcuts.ui:96
+#: src/shortcuts.ui:119
 msgid "Bold"
 msgstr "Negrita"
 
-#: src/shortcuts.ui:102
+#: src/shortcuts.ui:125
 msgid "Italic"
 msgstr "Cursiva"
 
-#: src/shortcuts.ui:108
+#: src/shortcuts.ui:131
 msgid "Code"
 msgstr "Código"
 
-#: src/shortcuts.ui:120
+#: src/shortcuts.ui:143
 msgid "Close Unclosed Fences"
 msgstr "Cerrar vallas abiertas"
 
-#: src/shortcuts.ui:128
+#: src/shortcuts.ui:151
 msgid "View"
 msgstr "Vista"
 
-#: src/shortcuts.ui:155
+#: src/shortcuts.ui:178
 msgid "Zoom In or Out"
 msgstr "Ampliar o reducir"
 
-#: src/shortcuts.ui:161
+#: src/shortcuts.ui:184
 msgid "Preferences"
 msgstr "Preferencias"
 
+#~ msgid "_Open…"
+#~ msgstr "_Abrir…"
+
+#~ msgid "_Close Tab"
+#~ msgstr "_Cerrar pestaña"

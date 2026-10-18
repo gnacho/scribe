@@ -109,6 +109,7 @@ fn main() -> glib::ExitCode {
             ("win.save", &["<Ctrl>s"]),
             ("win.save-as", &["<Ctrl><Shift>s"]),
             ("win.reload", &["F5"]),
+            ("win.find", &["<Ctrl>f"]),
             ("win.close-tab", &["<Ctrl>w"]),
             ("win.tab-next", &["<Ctrl>Tab", "<Ctrl>Page_Down"]),
             ("win.tab-prev", &["<Ctrl><Shift>Tab", "<Ctrl>Page_Up"]),
