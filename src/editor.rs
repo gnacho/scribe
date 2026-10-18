@@ -1074,6 +1074,53 @@ fn soltar_sobre_editor(
     false
 }
 
+/// Salta a la coincidencia siguiente (o anterior) de un contexto: selecciona
+/// el rango y lo lleva a la vista. `forward`/`backward` solo devuelven el
+/// rango; seleccionarlo es responsabilidad nuestra (si no, la coincidencia no
+/// se ve ni cuenta el contador). Función libre para poder reutilizarla desde
+/// un idle tras un reemplazo.
+fn search_step(
+    buffer: &gtksourceview5::Buffer,
+    context: &gtksourceview5::SearchContext,
+    view: &MarkdownView,
+    forward: bool,
+) -> bool {
+    if context.occurrences_count() <= 0 {
+        return false;
+    }
+    // Con una coincidencia ya seleccionada se sigue desde su borde: si se
+    // partiera del cursor, que está dentro de la coincidencia, se volvería a
+    // encontrar la misma una y otra vez.
+    let anchor = match buffer.selection_bounds() {
+        Some((start, end)) => {
+            if forward {
+                end
+            } else {
+                start
+            }
+        }
+        None => {
+            let mut iter = buffer.iter_at_mark(&buffer.get_insert());
+            if forward && !iter.is_end() {
+                iter.forward_char();
+            }
+            iter
+        }
+    };
+    let found = if forward {
+        context.forward(&anchor)
+    } else {
+        context.backward(&anchor)
+    };
+    let Some((start, end, _wrapped)) = found else {
+        return false;
+    };
+    buffer.select_range(&start, &end);
+    let mut start = start;
+    view.scroll_to_iter(&mut start, 0.15, true, 0.0, 0.5);
+    true
+}
+
 impl Editor {
     pub fn new() -> Self {
         let tags = build_tags();
@@ -1495,9 +1542,110 @@ impl Editor {
         self.search_context.occurrences_count()
     }
 
+    /// Re-fija el patrón (quítalo y ponlo) para forzar que GtkSourceView
+    /// recompile y recompute tras un `replace()`, que deja el contexto en un
+    /// estado del que `forward` no vuelve por sí solo.
+    pub fn refresh_search(&self) {
+        let patron = self.search_settings.search_text();
+        self.search_settings.set_search_text(None);
+        self.search_settings.set_search_text(patron.as_deref());
+    }
+
     /// Enciende o apaga el resaltado de todas las coincidencias.
     pub fn set_search_highlight(&self, on: bool) {
         self.search_context.set_highlight(on);
+    }
+
+    /// Sensibilidad a mayúsculas/minúsculas del patrón (issue #50). Cada
+    /// documento conserva su propio ajuste.
+    pub fn set_search_case_sensitive(&self, on: bool) {
+        self.search_settings.set_case_sensitive(on);
+    }
+
+    pub fn search_case_sensitive(&self) -> bool {
+        self.search_settings.is_case_sensitive()
+    }
+
+    /// Trata el patrón como expresión regular (issue #50).
+    pub fn set_search_regex(&self, on: bool) {
+        self.search_settings.set_regex_enabled(on);
+    }
+
+    pub fn search_regex(&self) -> bool {
+        self.search_settings.is_regex_enabled()
+    }
+
+    /// El patrón actual no compila como expresión regular. GtkSourceView no
+    /// expone el error de compilación, así que se valida aparte para pintar
+    /// la entrada; glib y gtksourceview usan sintaxis PCRE compatibles.
+    pub fn search_pattern_has_error(&self) -> bool {
+        if !self.search_settings.is_regex_enabled() {
+            return false;
+        }
+        match self.search_settings.search_text() {
+            Some(patron) => {
+                !patron.is_empty()
+                    && glib::Regex::new(
+                        &patron,
+                        glib::RegexCompileFlags::DEFAULT,
+                        glib::RegexMatchFlags::DEFAULT,
+                    )
+                    .is_err()
+            }
+            None => false,
+        }
+    }
+
+    /// Reemplaza la coincidencia seleccionada, si lo seleccionado es una
+    /// coincidencia completa, y salta a la siguiente. Devuelve si hubo
+    /// reemplazo.
+    pub fn replace_current(&self, replacement: &str) -> bool {
+        let Some((mut start, mut end)) = self.buffer.selection_bounds() else {
+            return false;
+        };
+        // occurrence_position es 1-based y -1 cuando el rango no es una
+        // coincidencia: así no se pisa texto arbitrario seleccionado a mano.
+        if self.search_context.occurrence_position(&start, &end) < 1 {
+            return false;
+        }
+        if self
+            .search_context
+            .replace(&mut start, &mut end, replacement)
+            .is_err()
+        {
+            return false;
+        }
+        // El replace deja el contexto en un estado del que `forward` no
+        // vuelve por sí solo (ver refresh_search): se re-fija el patrón y el
+        // salto a la siguiente se difiere al idle, tras la recomputación.
+        self.refresh_search();
+        let buffer = self.buffer.clone();
+        let context = self.search_context.clone();
+        let view = self.view.clone();
+        glib::idle_add_local_once(move || {
+            search_step(&buffer, &context, &view, true);
+        });
+        true
+    }
+
+    /// Reemplaza todas las coincidencias y avisa en `hecho` con cuántas
+    /// fueron. El trabajo se difiere a un idle: tras un cambio del buffer
+    /// (o un `replace()`) hay que dejar que GtkSourceView recompute; el patrón
+    /// se re-fija para forzar la recuperación de un estado usable, y en el
+    /// idle `replace_all` de C ya no tropieza con el assert de la crate.
+    pub fn replace_all_matches<F: FnOnce(usize) + 'static>(&self, replacement: &str, hecho: F) {
+        self.refresh_search();
+        let context = self.search_context.clone();
+        let replacement = replacement.to_string();
+        glib::idle_add_local_once(move || {
+            let n = context.occurrences_count().max(0) as usize;
+            let hechas = if n > 0 && context.replace_all(&replacement).is_ok() {
+                n
+            } else {
+                0
+            };
+            hecho(hechas);
+        });
     }
 
     /// Total de coincidencias y número de la que tiene el cursor (0 si el
@@ -1524,42 +1672,7 @@ impl Editor {
     }
 
     fn search_step(&self, forward: bool) -> bool {
-        if self.search_context.occurrences_count() <= 0 {
-            return false;
-        }
-        // Con una coincidencia ya seleccionada se sigue desde su borde: si se
-        // partiera del cursor, que está dentro de la coincidencia, se volvería
-        // a encontrar la misma una y otra vez.
-        let anchor = match self.buffer.selection_bounds() {
-            Some((start, end)) => {
-                if forward {
-                    end
-                } else {
-                    start
-                }
-            }
-            None => {
-                let mut iter = self.buffer.iter_at_mark(&self.buffer.get_insert());
-                if forward && !iter.is_end() {
-                    iter.forward_char();
-                }
-                iter
-            }
-        };
-        let found = if forward {
-            self.search_context.forward(&anchor)
-        } else {
-            self.search_context.backward(&anchor)
-        };
-        // `forward`/`backward` solo devuelven el rango: seleccionarlo es cosa
-        // nuestra (si no, la coincidencia no se ve ni cuenta el contador).
-        let Some((start, end, _wrapped)) = found else {
-            return false;
-        };
-        self.buffer.select_range(&start, &end);
-        let mut start = start;
-        self.view.scroll_to_iter(&mut start, 0.15, true, 0.0, 0.5);
-        true
+        search_step(&self.buffer, &self.search_context, &self.view, forward)
     }
 
     pub fn refresh(&self) {
