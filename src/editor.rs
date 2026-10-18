@@ -1484,7 +1484,13 @@ impl Editor {
                 if width <= 0 {
                     return;
                 }
-                let margin = ((width - column_width.get()) / 2).max(MIN_MARGIN);
+                // Margen lateral acotado: nunca más de 1/8 de la ventana por
+                // lado (issue #63). En pantallas anchas la columna crece con
+                // la ventana en vez de dejar grandes huecos; en estrechas
+                // manda el ancho configurado (minimo 24 px).
+                let margin = ((width - column_width.get()) / 2)
+                    .max(MIN_MARGIN)
+                    .min((width / 8).max(MIN_MARGIN));
                 apply_column_margins_deferred(&view, &tags, margin);
                 // El layout del lienzo de tabla depende del ancho: al
                 // cambiarlo hay que re-decorar para recalcular sus huecos.

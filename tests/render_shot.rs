@@ -246,3 +246,45 @@ fn ortografia_subraya_y_se_apaga() {
         "vuelve a subrayar"
     );
 }
+
+/// Margen lateral acotado (issue #63): en una ventana ancha el margen no pasa
+/// de 1/8 de la ventana; en una estrecha manda el minimo de 24 px.
+#[test]
+#[ignore = "requiere display"]
+fn margen_acotado_en_ventana_ancha() {
+    gtk4::init().expect("GTK necesita un display");
+    libadwaita::init().expect("libadwaita init");
+    let ctx = gtk4::glib::MainContext::default();
+    let editor = Editor::new();
+    let win = gtk4::Window::builder()
+        .default_width(1500)
+        .default_height(500)
+        .build();
+    win.set_child(Some(&editor.widget));
+    win.present();
+    editor.set_text("pros\n");
+    pump(&ctx, 1500);
+
+    // 1500/8 = 187: el margen se queda ahi en vez de (1500-720)/2 = 390.
+    assert_eq!(
+        editor.view.left_margin(),
+        187,
+        "el margen lateral se acota a 1/8 de la ventana"
+    );
+
+    // Ventana estrecha: manda el minimo de 24 px.
+    let estrecha = gtk4::Window::builder()
+        .default_width(760)
+        .default_height(400)
+        .build();
+    let editor2 = Editor::new();
+    estrecha.set_child(Some(&editor2.widget));
+    estrecha.present();
+    editor2.set_text("pros\n");
+    pump(&ctx, 1500);
+    assert_eq!(
+        editor2.view.left_margin(),
+        24,
+        "en ventana estrecha manda el minimo"
+    );
+}
