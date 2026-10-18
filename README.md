@@ -93,11 +93,10 @@ actually use to draft notes and docs.
   columns line up in the source.
 - **List continuation**: pressing Enter starts the next item and re-numbers
   ordered lists. Leaving an item empty closes the list.
-- **Zoom** (Ctrl +/&minus;/0) with controls in the main menu.
+- **Zoom** (Ctrl +/&minus;/0).
 - **Go to line** from the status bar.
 - **Header bar** follows GNOME Text Editor: open button with recent files
-  dropdown, new tab button, centered title, split preview toggle and main menu
-  with the colour schemes and zoom row.
+  dropdown, new tab button, centered title, split preview toggle and main menu.
 - **Preferences** window with three pages: Appearance, Editor and Export.
 - **Export to PDF** (Ctrl+P): print or export the document through the GTK
   print pipeline, reusing the same span/ornament analysis as the editor.
@@ -107,8 +106,8 @@ actually use to draft notes and docs.
 - **Files**: open, save and save-as with `GtkFileDialog`, atomic writes,
   unsaved-changes warning, configurable autosave.
 - **Sidebar** (F9) with filterable recent files and a navigable outline.
-- **Light and dark theme** follows the GtkSourceView style scheme; the main
-  menu picks the colour scheme explicitly (follow system, light, dark).
+- **Light and dark theme** follows the GtkSourceView style scheme; the
+  Preferences pick the colour scheme explicitly (follow system, light, dark).
 - **Integration**: `scribe file.md` and "Open with" from the file manager.
 - **Translated UI** (gettext): English and Spanish. New translations go in
   `po/` (see `po/update-pot.sh`).
