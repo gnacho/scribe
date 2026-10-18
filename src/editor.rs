@@ -704,18 +704,26 @@ fn decorate(
     // a una marca (los pipes de una tabla, su fila de guiones) quedan detrás de
     // lo que el usuario está editando. Fuera de las tablas no se revela nada,
     // que es la política que ya tenía la vista.
+    let mut starts = vec![0usize];
+    for (i, b) in text.bytes().enumerate() {
+        if b == b'\n' {
+            starts.push(i + 1);
+        }
+    }
+    let linea_desde = starts
+        .get(cursor_line as usize)
+        .copied()
+        .unwrap_or(text.len());
+    let linea_hasta = starts
+        .get(cursor_line as usize + 1)
+        .copied()
+        .unwrap_or(text.len());
     let (cursor_table, cursor_from, cursor_to) = {
         let line = cursor_line as usize;
         let in_table = analysis.ornaments.iter().any(
             |o| matches!(o, Ornament::Table { first, last } if *first <= line && line <= *last),
         );
         if in_table {
-            let mut starts = vec![0usize];
-            for (i, b) in text.bytes().enumerate() {
-                if b == b'\n' {
-                    starts.push(i + 1);
-                }
-            }
             let from = starts.get(line).copied().unwrap_or(text.len());
             let to = starts.get(line + 1).copied().unwrap_or(text.len());
             (true, from, to)
@@ -728,6 +736,10 @@ fn decorate(
     };
 
     for span in &analysis.spans {
+        eprintln!(
+            "LOOP DBG {:?} tag={} rango=({},{})",
+            span.kind, span.tag, span.start, span.end
+        );
         // Los rangos del parser deberían estar siempre dentro del texto, pero
         // un cambio en pulldown-cmark o en analyze no debe convertirse en un
         // panic en producción.
@@ -749,24 +761,70 @@ fn decorate(
         let name = match span.kind {
             SpanKind::Style => span.tag,
             SpanKind::Marker => {
-                // Las marcas normales solo se ocultan con un GTK sano; sin la
-                // puerta se atenúan en todos los modos.
-                if dim || !gate {
+                // Las marcas se muestran en la línea del cursor (para poder
+                // editarlas) y se encogen en el resto: la escala minima es el
+                // ocultado seguro sin depender de la puerta GTK.
+                if revealed(span) {
                     "syn_shown"
                 } else {
-                    "syn_hidden"
+                    let en_cursor = span.start >= linea_desde && span.end <= linea_hasta;
+                    match config.markup {
+                        MarkupVisibility::Dim => {
+                            if en_cursor {
+                                "syn_shown"
+                            } else {
+                                "syn_shrink"
+                            }
+                        }
+                        MarkupVisibility::Focus => {
+                            if en_cursor {
+                                "syn_shown"
+                            } else {
+                                "syn_shrink"
+                            }
+                        }
+                        MarkupVisibility::Hidden => {
+                            if gate {
+                                "syn_hidden"
+                            } else {
+                                "syn_shrink"
+                            }
+                        }
+                    }
                 }
             }
             SpanKind::Replaced => {
-                // Las marcas sustituidas por un adorno se encogen (nunca se
-                // ocultan sin la puerta): encoger no excluye texto del layout
-                // y por eso es seguro donde `invisible` no lo es.
-                if dim || revealed(span) {
+                // Las marcas sustituidas por un adorno (el `- ` de las listas,
+                // el `# ` de los titulos) se muestran en la línea del cursor y
+                // se encogen en el resto. Sin la puerta GTK, encoger es el
+                // ocultado seguro.
+                let en_cursor = span.start >= linea_desde && span.end <= linea_hasta;
+                if revealed(span) {
                     "syn_shown"
-                } else if gate {
-                    "syn_hidden"
                 } else {
-                    "syn_shrink"
+                    match config.markup {
+                        MarkupVisibility::Dim => {
+                            if en_cursor {
+                                "syn_shown"
+                            } else {
+                                "syn_shrink"
+                            }
+                        }
+                        MarkupVisibility::Focus => {
+                            if en_cursor {
+                                "syn_shown"
+                            } else {
+                                "syn_shrink"
+                            }
+                        }
+                        MarkupVisibility::Hidden => {
+                            if gate {
+                                "syn_hidden"
+                            } else {
+                                "syn_shrink"
+                            }
+                        }
+                    }
                 }
             }
         };
@@ -1528,7 +1586,6 @@ impl Editor {
         let on_changed = self.on_changed.clone();
         let last_line = self.last_line.clone();
         let ctx = self.decoracion_ctx.clone();
-        let view = self.view.downgrade();
         self.buffer.connect_changed(move |buf| {
             let text = buf.text(&buf.start_iter(), &buf.end_iter(), true);
             if let Some(cb) = on_changed.borrow().as_ref() {
@@ -1542,6 +1599,7 @@ impl Editor {
         let decoration = self.decoration.clone();
         let ctx = self.decoracion_ctx.clone();
         let typewriter = self.typewriter.clone();
+        let view = self.view.downgrade();
         self.buffer.connect_cursor_position_notify(move |buf| {
             if typewriter.get() {
                 if let Some(view) = view.upgrade() {
@@ -1555,20 +1613,12 @@ impl Editor {
             if last_line.get() == line {
                 return;
             }
-            let previous = last_line.get();
             last_line.set(line);
-            // La visibilidad del marcado ya no depende del cursor (solo el
-            // atenuado del modo foco lo sigue, y se re-aplica en el acto porque
-            // es barato). La excepción son las tablas: sin ver los `|` crudos
-            // no hay forma de editar sus filas, así que la fila del cursor se
-            // revela. Se re-decora solo al entrar, salir o cambiar de fila
-            // dentro de una tabla; fuera de ellas `decorate()` sigue siendo
-            // O(n) y no se toca.
-            if let Some(view) = view.upgrade() {
-                if view.line_in_table(line) || view.line_in_table(previous) {
-                    schedule_decoration(&ctx, Duration::from_millis(45));
-                }
-            }
+            // El decorado depende del cursor: las marcas de sintaxis solo se
+            // muestran en su línea, el atenuado del modo foco lo sigue y el
+            // lienzo de tablas revela su fila. La generación invalida las
+            // pasadas que se solapen.
+            schedule_decoration(&ctx, Duration::ZERO);
             if decoration.get().focus_mode {
                 apply_focus_shade(buf, line);
             }

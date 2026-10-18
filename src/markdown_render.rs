@@ -3500,7 +3500,7 @@ mod prueba_tmp {
     use super::*;
     #[test]
     fn listas_spans_tmp() {
-        let doc = "- **negrita** en lista\n- texto normal **en medio** de la linea\n- [enlace](https://example.com) en lista\n";
+        let doc = "# Titulo\n\n- **negrita** en lista\n";
         let a = analyze(doc);
         for span in &a.spans {
             println!(
