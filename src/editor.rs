@@ -71,6 +71,54 @@ impl Default for Decoration {
     }
 }
 
+/// Corrector ortográfico sobre enchant: el diccionario del locale del
+/// sistema (hunspell es_ES, en_US, ...). Con `dict` a `None` (sin
+/// diccionario instalado) no marca nada y todo valida.
+struct Ortografia {
+    dict: Option<enchant::Dict>,
+}
+
+impl Ortografia {
+    /// Resuelve el diccionario con el locale del sistema (LC_MESSAGES o
+    /// LANG, sin codificacion ni modificador); si enchant no lo tiene,
+    /// prueba ingles y se queda sin.
+    fn con_locale_del_sistema() -> Self {
+        let mut broker = enchant::Broker::new();
+        let mut dict = None;
+        let senales = [
+            std::env::var("LC_MESSAGES").ok(),
+            std::env::var("LANG").ok(),
+        ];
+        for valor in senales.iter().flatten() {
+            let base = valor
+                .split('.')
+                .next()
+                .and_then(|sin_codigo| sin_codigo.split('@').next())
+                .unwrap_or_default();
+            if base.chars().count() < 2 {
+                continue;
+            }
+            if let Ok(encontrado) = broker.request_dict(base) {
+                dict = Some(encontrado);
+                break;
+            }
+        }
+        if dict.is_none() {
+            dict = broker.request_dict("en_US").ok();
+        }
+        Self { dict }
+    }
+
+    /// Valida una palabra: `true` si el diccionario la conoce (o si no hay
+    /// diccionario, en cuyo caso no se marca nada).
+    fn valida(&self, palabra: &str) -> bool {
+        match &self.dict {
+            Some(dict) => dict.check(palabra).unwrap_or(true),
+            None => true,
+        }
+    }
+}
+
 /// Contexto de una pasada de decoración: todo lo que `decorate` necesita
 /// sobre el documento activo. Clonable: los cierres de señales capturan una
 /// copia y cada re-decoración la consume.
@@ -82,7 +130,7 @@ struct DecoracionCtx {
     generation: Rc<Cell<u64>>,
     base_dir: Rc<RefCell<Option<PathBuf>>>,
     unclosed_fences: Rc<RefCell<Vec<UnclosedFence>>>,
-    checker: Rc<libspelling::Checker>,
+    ortografia: Rc<Ortografia>,
 }
 
 pub struct Editor {
@@ -110,8 +158,8 @@ pub struct Editor {
     /// Contexto de búsqueda del documento, vivo toda la vida del editor: el
     /// índice se mantiene caliente aunque la barra de búsqueda esté cerrada.
     search_context: gtksourceview5::SearchContext,
-    /// Contexto de las pasadas de decoración (issue #51 entre otras): lo
-    /// capturan los cierres de señales por copia.
+    /// Contexto de las pasadas de decoración: lo capturan los cierres de
+    /// señales por copia y lleva dentro el corrector ortográfico.
     decoracion_ctx: DecoracionCtx,
 }
 
@@ -265,8 +313,7 @@ fn build_tags() -> gtk4::TextTagTable {
     // Filas fuente de un lienzo de tabla pintado: colapsan (igual que las
     // marcas encogidas) y la vista pinta la fila real bajo su hueco.
     // Corrector ortografico (issue #51): subrayado de las palabras que el
-    // checker no valida. El color es el rojo de error de GNOME, el mismo que
-    // usa libspelling para su propio subrayado.
+    // diccionario no valida, en el rojo de error de GNOME.
     add(gtk4::TextTag::builder()
         .name("ortografia")
         .underline(pango::Underline::Single)
@@ -509,22 +556,22 @@ fn es_de_palabra(ch: char, previa: Option<char>) -> bool {
 }
 
 /// Pase de ortografia (issue #51): recorre el texto, marca con el tag
-/// «ortografia» las palabras que el checker de libspelling no valida y, si
-/// el corrector esta apagado, limpia cualquier marca previa.
+/// «ortografia» las palabras que el diccionario no valida y, si el
+/// corrector esta apagado, limpia cualquier marca previa.
 fn revisa_ortografia(
     buffer: &gtksourceview5::Buffer,
-    checker: &libspelling::Checker,
+    ortografia: &Ortografia,
     text: &str,
     byte_to_char: &[i32],
     enabled: bool,
 ) {
     let start = buffer.start_iter();
     let end = buffer.end_iter();
-    let ortografia = match buffer.tag_table().lookup("ortografia") {
+    let subrayado = match buffer.tag_table().lookup("ortografia") {
         Some(tag) => tag,
         None => return,
     };
-    buffer.remove_tag(&ortografia, &start, &end);
+    buffer.remove_tag(&subrayado, &start, &end);
     if !enabled {
         return;
     }
@@ -550,7 +597,7 @@ fn revisa_ortografia(
                     revisadas += 1;
                     if revisadas <= ORTOGRAFIA_MAX_PALABRAS
                         && palabra.chars().count() >= 2
-                        && !checker.check_word(palabra)
+                        && !ortografia.valida(palabra)
                     {
                         let (Some(&from), Some(&to)) =
                             (byte_to_char.get(desde), byte_to_char.get(i.min(text.len())))
@@ -583,7 +630,7 @@ fn decorate(
 ) {
     let base_dir = &ctx.base_dir;
     let unclosed_fences = &ctx.unclosed_fences;
-    let checker = &ctx.checker;
+    let ortografia = &ctx.ortografia;
     let start = buffer.start_iter();
     let end = buffer.end_iter();
     // Se retiran SOLO los tags con nombre (los nuestros): el buffer puede
@@ -621,11 +668,11 @@ fn decorate(
     }
 
     // Corrector ortografico (issue #51): subraya las palabras que el checker
-    // de libspelling no valida. Va aqui, donde byte_to_char ya traduce a
+    // del diccionario no valida. Va aqui, donde byte_to_char ya traduce a
     // offsets del widget. La pasada anterior se borro al inicio.
     revisa_ortografia(
         buffer,
-        checker,
+        ortografia,
         text.as_str(),
         &byte_to_char,
         config.spellcheck,
@@ -1379,11 +1426,10 @@ impl Editor {
         let search_context = gtksourceview5::SearchContext::new(&buffer, Some(&search_settings));
         search_context.set_highlight(false);
 
-        // Corrector ortografico (issue #51): el checker de libspelling se
-        // consulta en el pase de decoracion (véase revisa_ortografia); el
-        // adaptador asincrono de libspelling 0.4 se descarta porque su ciclo
-        // apagar/encender deja el motor sin volver a marcar.
-        let checker = Rc::new(libspelling::Checker::default());
+        // Corrector ortografico (issue #51): el diccionario lo resuelve
+        // enchant con el locale del sistema; sin diccionario, la revision
+        // no marca nada (y la preferencia sigue funcionando).
+        let ortografia = Rc::new(Ortografia::con_locale_del_sistema());
 
         let on_changed = Rc::new(RefCell::new(None));
         let last_line = Rc::new(Cell::new(-1));
@@ -1402,7 +1448,7 @@ impl Editor {
             generation: generation.clone(),
             base_dir: base_dir.clone(),
             unclosed_fences: unclosed_fences.clone(),
-            checker,
+            ortografia,
         };
 
         let editor = Self {
@@ -1767,9 +1813,8 @@ impl Editor {
     }
 
     /// Corrector ortográfico: enciende o apaga el subrayado de las palabras
-    /// que el checker no valida (issue #51). Apagarlo no detiene el motor
-    /// (el ciclo apagar/encender de libspelling 0.4 deja de marcar): oculta
-    /// el subrayado. El menú contextual de sugerencias sigue disponible.
+    /// que el diccionario no valida (issue #51). El motor es parte del pase
+    /// de decoración: apagarlo simplemente salta la revisión.
     pub fn set_spellcheck(&self, enabled: bool) {
         let mut config = self.decoration.get();
         config.spellcheck = enabled;

@@ -73,6 +73,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "enchant"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "dafd018f9ff5933b0cf9d89a095c31125890f2246952749cbaad230b537644db"
+dependencies = [
+ "enchant-sys",
+]
+
+[[package]]
+name = "enchant-sys"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "97af59f7a6d8a217695598f23dc12051734322e60b58e5ca2f3a2fffa59ba34f"
+dependencies = [
+ "pkg-config",
+]
+
+[[package]]
 name = "equivalent"
 version = "1.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -499,35 +517,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3eaf3ede3fee6db1a4c2ee091bf8a8b4dccdc6d17f656fb07896ee72867612f2"
 
 [[package]]
-name = "libspelling"
-version = "0.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ea569bc46e8fdd62ef4533b88467d6db5ab2be88dc6c883ce4cef090b986aeff"
-dependencies = [
- "gio",
- "glib",
- "gtk4",
- "libc",
- "libspelling-sys",
- "sourceview5",
-]
-
-[[package]]
-name = "libspelling-sys"
-version = "0.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3d90a26bd4fdb3502347f3fb5f2498469bb83fe90e2f794a646857c8918243c3"
-dependencies = [
- "gio-sys",
- "glib-sys",
- "gobject-sys",
- "gtk4-sys",
- "libc",
- "sourceview5-sys",
- "system-deps",
-]
-
-[[package]]
 name = "locale_config"
 version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -717,6 +706,7 @@ dependencies = [
 name = "scribe"
 version = "0.3.12"
 dependencies = [
+ "enchant",
  "gdk-pixbuf",
  "gdk4",
  "gettext-rs",
@@ -724,7 +714,6 @@ dependencies = [
  "glib",
  "gtk4",
  "libadwaita",
- "libspelling",
  "pulldown-cmark",
  "sourceview5",
 ]

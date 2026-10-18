@@ -62,7 +62,6 @@ static RECUPERACION_OFRECIDA: AtomicBool = AtomicBool::new(false);
 
 fn main() -> glib::ExitCode {
     init_gettext();
-    libspelling::init();
     let app = adw::Application::builder()
         .application_id(APP_ID)
         // HANDLES_OPEN para `scribe fichero.md` y «Abrir con»; HANDLES_COMMAND_LINE
