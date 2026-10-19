@@ -43,6 +43,20 @@
   </screenshots>
   <content_rating type="oars-1.1" />
   <releases>
+    <release version="0.3.16" date="2026-10-19">
+      <description>
+        <p>El corrector ortográfico gana su menú contextual: clic derecho sobre
+        una palabra mal escrita ofrece hasta seis sugerencias del diccionario,
+        ignorarla durante la sesión o añadirla al diccionario personal.</p>
+        <p>Las casillas de las listas de tareas se marcan con un clic y las
+        marcas de sintaxis solo se muestran en la línea que estás editando:
+        el resto del documento se lee limpio.</p>
+        <p>Temas nativos de la vista: claro, oscuro, sepia, Solarized oscuro y
+        Gruvbox oscuro, con el fondo del documento pintado de verdad por el
+        tema. Los márgenes laterales se acotan en pantallas anchas y las tablas
+        pintadas dan aire entre el texto y sus líneas.</p>
+      </description>
+    </release>
     <release version="0.3.14" date="2026-10-19">
       <description>
         <p>Corrector ortográfico: las palabras que el diccionario del sistema
