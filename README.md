@@ -18,7 +18,7 @@
   </picture>
 </p>
 
-Scribe is a native GNOME Markdown editor built with Rust, GTK4 and libadwaita.
+Scribe is a native GNOME Markdown editor that renders your document as you type — no preview switch, one surface. Built with Rust, GTK 4 and libadwaita.
 It renders Markdown live on the editing buffer so headings look like headings
 and bold text looks bold, without switching to a separate preview or a browser
 engine.

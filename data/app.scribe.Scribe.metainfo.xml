@@ -4,9 +4,9 @@
   <metadata_license>CC0-1.0</metadata_license>
   <project_license>AGPL-3.0-or-later</project_license>
   <name>Scribe</name>
-  <summary>Editor Markdown nativo para GNOME</summary>
+  <summary>Editor Markdown con vista en vivo</summary>
   <description>
-    <p>Scribe es un editor Markdown diseñado para integrarse perfectamente con el escritorio GNOME.</p>
+    <p>Scribe es un editor Markdown nativo de GNOME que genera la previsualización mientras escribes: el documento se decora en vivo a medida que tecleas, sin cambiar de vista. Escrito en Rust sobre GTK 4 y libadwaita.</p>
     <p>Características:</p>
     <ul>
       <li>Edición Markdown con syntax highlighting avanzado</li>
