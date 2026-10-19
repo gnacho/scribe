@@ -23,6 +23,24 @@
   <developer id="io.github.gnacho">
     <name>gnacho</name>
   </developer>
+  <screenshots>
+    <screenshot type="default">
+      <image>https://raw.githubusercontent.com/gnacho/scribe/master/assets/hero-en-light.png</image>
+      <caption>Escritura de prosa con corrector ortografico</caption>
+    </screenshot>
+    <screenshot>
+      <image>https://raw.githubusercontent.com/gnacho/scribe/master/assets/screenshot-split-en-light.png</image>
+      <caption>Vista dividida del editor y la previsualizacion</caption>
+    </screenshot>
+    <screenshot>
+      <image>https://raw.githubusercontent.com/gnacho/scribe/master/assets/screenshot-focus-en-light.png</image>
+      <caption>Modo foco: solo ilumina el parrafo en edicion</caption>
+    </screenshot>
+    <screenshot>
+      <image>https://raw.githubusercontent.com/gnacho/scribe/master/assets/screenshot-find-en-light.png</image>
+      <caption>Buscar en el documento con contador de coincidencias</caption>
+    </screenshot>
+  </screenshots>
   <content_rating type="oars-1.1" />
   <releases>
     <release version="0.3.14" date="2026-10-19">
