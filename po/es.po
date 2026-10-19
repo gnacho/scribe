@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: scribe\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-18 20:13+0200\n"
+"POT-Creation-Date: 2026-10-19 09:49+0200\n"
 "PO-Revision-Date: 2026-09-19 19:58+0200\n"
 "Last-Translator: Automatically generated\n"
 "Language-Team: none\n"
@@ -17,19 +17,19 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=2; plural=(n != 1);\n"
 
-#: src/main.rs:238
+#: src/main.rs:237
 msgid "Recover unsaved documents?"
 msgstr "¿Recuperar los documentos sin guardar?"
 
-#: src/main.rs:241
+#: src/main.rs:240
 msgid "_Recover All"
 msgstr "_Recuperar todo"
 
-#: src/main.rs:242
+#: src/main.rs:241
 msgid "_Discard All"
 msgstr "_Descartar todo"
 
-#: src/main.rs:243
+#: src/main.rs:242
 msgid "Decide Later"
 msgstr "Decidir más tarde"
 
@@ -245,19 +245,27 @@ msgstr "{n} coincidencias reemplazadas"
 msgid "Could not autosave: {e}"
 msgstr "No se pudo autoguardar: {e}"
 
-#: src/editor.rs:1036 src/editor.rs:1041 src/editor.rs:1046
+#: src/editor.rs:1347 src/editor.rs:1352 src/editor.rs:1357
 msgid "Could not save the image"
 msgstr "No se pudo guardar la imagen"
 
-#: src/editor.rs:1086
+#: src/editor.rs:1397
 msgid "Save the document before pasting images"
 msgstr "Guarda el documento antes de pegar imágenes"
 
-#: src/editor.rs:1106 src/editor.rs:1123 src/editor.rs:1162
+#: src/editor.rs:1417 src/editor.rs:1434 src/editor.rs:1473
 msgid "Save the document before dropping images"
 msgstr "Guarda el documento antes de soltar imágenes"
 
-#: src/editor.rs:1582
+#: src/editor.rs:1969
+msgid "Ignore word"
+msgstr "Ignorar palabra"
+
+#: src/editor.rs:1976
+msgid "Add to dictionary"
+msgstr "Aniadir al diccionario"
+
+#: src/editor.rs:2003
 #, rust-format
 msgid "Ctrl+click to open {url}"
 msgstr "Ctrl+clic para abrir {url}"

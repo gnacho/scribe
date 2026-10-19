@@ -466,3 +466,62 @@ fn arranque_sin_salto_de_ancho() {
         "el margen acotado ya esta aplicado al revelar"
     );
 }
+
+/// Corrector (issue #62): las acciones spellcheck.* anaden al diccionario,
+/// ignoran la sesion y reemplazan la palabra bajo el cursor.
+#[test]
+#[ignore = "requiere display y diccionario del sistema (es_ES)"]
+fn menu_ortografia_sugerencias_y_diccionario() {
+    gtk4::init().expect("GTK necesita un display");
+    libadwaita::init().expect("libadwaita init");
+    let ctx = gtk4::glib::MainContext::default();
+    let editor = Editor::new();
+    let win = gtk4::Window::builder()
+        .default_width(760)
+        .default_height(400)
+        .build();
+    win.set_child(Some(&editor.widget));
+    win.present();
+    editor.set_text("el qwerz raro\n\notra linea con xyzzy suelta\n");
+    pump(&ctx, 1200);
+
+    let buffer = editor.view.buffer();
+    let subrayado = buffer
+        .tag_table()
+        .lookup("ortografia")
+        .expect("tag de ortografia");
+    let marcada = |offset: i32| buffer.iter_at_offset(offset).has_tag(&subrayado);
+
+    // "qwerz" ocupa los offsets 3..8 de la linea 0.
+    assert!(marcada(3), "qwerz arranca marcada");
+
+    // Anadir al diccionario personal: la palabra deja de marcarse.
+    editor.place_cursor_at(1, 5);
+    pump(&ctx, 100);
+    editor
+        .view
+        .activate_action("spellcheck.anadir", Some(&"qwerz".to_variant()))
+        .expect("la accion anadir existe y se activa");
+    pump(&ctx, 700);
+    assert!(!marcada(3), "tras anadir al diccionario, qwerz no se marca");
+
+    // Reemplazar la palabra bajo el cursor: "xyzzy" -> "quiso".
+    editor.place_cursor_at(3, 17);
+    pump(&ctx, 100);
+    editor
+        .view
+        .activate_action("spellcheck.reemplazar", Some(&"quiso".to_variant()))
+        .expect("la accion reemplazar existe y se activa");
+    pump(&ctx, 700);
+    let texto = buffer
+        .text(&buffer.start_iter(), &buffer.end_iter(), true)
+        .to_string();
+    assert!(
+        texto.contains("quiso"),
+        "el reemplazo inserta la sugerencia: {texto:?}"
+    );
+    assert!(
+        !texto.contains("xyzzy"),
+        "el reemplazo elimina la palabra: {texto:?}"
+    );
+}

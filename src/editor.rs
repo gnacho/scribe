@@ -117,6 +117,30 @@ impl Ortografia {
             None => true,
         }
     }
+
+    /// Sugerencias del diccionario para una palabra (las que ofrezca enchant,
+    /// acotadas a seis para no desbordar el menu).
+    fn sugerencias(&self, palabra: &str) -> Vec<String> {
+        match &self.dict {
+            Some(dict) => dict.suggest(palabra).into_iter().take(6).collect(),
+            None => Vec::new(),
+        }
+    }
+
+    /// Anade la palabra al diccionario personal (persistente en
+    /// `~/.config/enchant`).
+    fn anade_al_personal(&self, palabra: &str) {
+        if let Some(dict) = &self.dict {
+            dict.add(palabra);
+        }
+    }
+
+    /// Ignora la palabra durante esta sesion.
+    fn ignora_sesion(&self, palabra: &str) {
+        if let Some(dict) = &self.dict {
+            dict.add_to_session(palabra);
+        }
+    }
 }
 
 /// Contexto de una pasada de decoración: todo lo que `decorate` necesita
@@ -165,6 +189,9 @@ pub struct Editor {
     /// Contexto de las pasadas de decoración: lo capturan los cierres de
     /// señales por copia y lleva dentro el corrector ortográfico.
     decoracion_ctx: DecoracionCtx,
+    /// Menú contextual del corrector ortográfico: sugerencias de la palabra
+    /// bajo el clic derecho, ignorar y añadir al diccionario.
+    menu_ortografia: gio::Menu,
 }
 
 fn build_tags() -> gtk4::TextTagTable {
@@ -638,6 +665,39 @@ fn revisa_ortografia(
                 }
             }
         }
+    }
+}
+
+/// Palabra (limites de Pango) que contiene el iterador, con su texto. `None`
+/// si el iterador no cae sobre una palabra.
+fn palabra_bajo_iter(
+    buffer: &gtksourceview5::Buffer,
+    iter: &gtk4::TextIter,
+) -> Option<(gtk4::TextIter, gtk4::TextIter, String)> {
+    if !iter.char().is_alphabetic() {
+        return None;
+    }
+    let mut desde = *iter;
+    while desde.backward_char() && desde.char().is_alphabetic() {}
+    if desde.char().is_alphabetic() {
+        desde = *iter;
+    } else {
+        desde.forward_char();
+    }
+    let mut hasta = *iter;
+    while hasta.char().is_alphabetic() && !hasta.forward_char() {}
+    let hasta = if hasta.char().is_alphabetic() {
+        hasta
+    } else {
+        let mut fin = hasta;
+        fin.backward_char();
+        fin
+    };
+    let palabra = buffer.text(&desde, &hasta, false).to_string();
+    if palabra.is_empty() {
+        None
+    } else {
+        Some((desde, hasta, palabra))
     }
 }
 
@@ -1518,6 +1578,13 @@ impl Editor {
         // enchant con el locale del sistema; sin diccionario, la revision
         // no marca nada (y la preferencia sigue funcionando).
         let ortografia = Rc::new(Ortografia::con_locale_del_sistema());
+        let ortografia_acciones = ortografia.clone();
+
+        // Menu contextual del corrector (issue #62): sugerencias, ignorar y
+        // anadir al diccionario, con acciones del grupo spellcheck que vive
+        // en la vista. El menu se rellena en cada clic derecho.
+        let menu_ortografia = gio::Menu::new();
+        view.set_extra_menu(Some(&menu_ortografia));
 
         // Anti-salto de arranque: la vista arranca invisible y se revela al
         // terminar la primera decoracion que corre con la geometria real ya
@@ -1559,6 +1626,57 @@ impl Editor {
             por_revelar: por_revelar.clone(),
         };
 
+        // Acciones del corrector (issue #62): reemplazar por una sugerencia,
+        // ignorar durante la sesion y anadir al diccionario personal.
+        let grupo = gio::SimpleActionGroup::new();
+        let reemplazar = gio::SimpleAction::new("reemplazar", Some(glib::VariantTy::STRING));
+        {
+            let buffer = buffer.clone();
+            reemplazar.connect_activate(move |_accion, parametro| {
+                let Some(sugerencia) = parametro.and_then(|p| p.str()) else {
+                    return;
+                };
+                let insert = buffer.iter_at_mark(&buffer.get_insert());
+                let Some((mut desde, mut hasta, _)) = palabra_bajo_iter(&buffer, &insert) else {
+                    return;
+                };
+                buffer.begin_user_action();
+                buffer.delete(&mut desde, &mut hasta);
+                buffer.insert(&mut desde, sugerencia);
+                buffer.end_user_action();
+            });
+        }
+        grupo.add_action(&reemplazar);
+
+        let ignorar = gio::SimpleAction::new("ignorar", Some(glib::VariantTy::STRING));
+        {
+            let ortografia_acc = ortografia_acciones.clone();
+            let ctx_refresco = decoracion_ctx.clone();
+            ignorar.connect_activate(move |_accion, parametro| {
+                let Some(palabra) = parametro.and_then(|p| p.str()) else {
+                    return;
+                };
+                ortografia_acc.ignora_sesion(palabra);
+                schedule_decoration(&ctx_refresco, Duration::ZERO);
+            });
+        }
+        grupo.add_action(&ignorar);
+
+        let anadir = gio::SimpleAction::new("anadir", Some(glib::VariantTy::STRING));
+        {
+            let ortografia_acc = ortografia_acciones.clone();
+            let ctx_refresco = decoracion_ctx.clone();
+            anadir.connect_activate(move |_accion, parametro| {
+                let Some(palabra) = parametro.and_then(|p| p.str()) else {
+                    return;
+                };
+                ortografia_acc.anade_al_personal(palabra);
+                schedule_decoration(&ctx_refresco, Duration::ZERO);
+            });
+        }
+        grupo.add_action(&anadir);
+        view.insert_action_group("spellcheck", Some(&grupo));
+
         let editor = Self {
             widget,
             view,
@@ -1576,6 +1694,7 @@ impl Editor {
             search_settings,
             search_context,
             decoracion_ctx,
+            menu_ortografia,
         };
         editor.connect_signals();
         editor
@@ -1802,6 +1921,69 @@ impl Editor {
             }
         });
         self.view.add_controller(click);
+
+        // Clic derecho sobre una palabra mal escrita: mueve el cursor a esa
+        // palabra y rellena el menu extra con sugerencias, ignorar y anadir
+        // al diccionario. Sobre una palabra valida, el menu extra queda
+        // vacio y sale el popup por defecto del TextView.
+        let menu_click = gtk4::GestureClick::new();
+        menu_click.set_button(gdk4::BUTTON_SECONDARY);
+        menu_click.set_propagation_phase(gtk4::PropagationPhase::Capture);
+        let menu_view = self.view.clone();
+        let menu_view_click = menu_view.clone();
+        let menu_buffer = self.buffer.clone();
+        let menu_ortografia = self.decoracion_ctx.ortografia.clone();
+        let menu_modelo = self.menu_ortografia.clone();
+        menu_click.connect_pressed(move |_gesture, _n, x, y| {
+            menu_modelo.remove_all();
+            let (bx, by) = menu_view_click.window_to_buffer_coords(
+                gtk4::TextWindowType::Widget,
+                x as i32,
+                y as i32,
+            );
+            let Some((iter, _)) = menu_view_click.iter_at_position(bx, by) else {
+                return;
+            };
+            let Some((_desde, _hasta, palabra)) = palabra_bajo_iter(&menu_buffer, &iter) else {
+                return;
+            };
+            if menu_ortografia.valida(&palabra) {
+                return;
+            }
+            let Some((inicio, _fin, _)) = palabra_bajo_iter(&menu_buffer, &iter) else {
+                return;
+            };
+            menu_buffer.place_cursor(&inicio);
+            let sugerencias = gio::Menu::new();
+            for sugerencia in menu_ortografia.sugerencias(&palabra) {
+                let item = gio::MenuItem::new(Some(&sugerencia), Some("spellcheck.reemplazar"));
+                item.set_action_and_target_value(
+                    Some("spellcheck.reemplazar"),
+                    Some(&glib::Variant::from(sugerencia.as_str())),
+                );
+                sugerencias.append_item(&item);
+            }
+            menu_modelo.append_section(None, &sugerencias);
+            let acciones = gio::Menu::new();
+            let ignorar =
+                gio::MenuItem::new(Some(&gettext("Ignore word")), Some("spellcheck.ignorar"));
+            ignorar.set_action_and_target_value(
+                Some("spellcheck.ignorar"),
+                Some(&glib::Variant::from(palabra.as_str())),
+            );
+            acciones.append_item(&ignorar);
+            let anadir = gio::MenuItem::new(
+                Some(&gettext("Add to dictionary")),
+                Some("spellcheck.anadir"),
+            );
+            anadir.set_action_and_target_value(
+                Some("spellcheck.anadir"),
+                Some(&glib::Variant::from(palabra.as_str())),
+            );
+            acciones.append_item(&anadir);
+            menu_modelo.append_section(None, &acciones);
+        });
+        menu_view.add_controller(menu_click);
 
         // El globo de ayuda con el destino solo sale con Ctrl pulsado, como en
         // el editor de texto de GNOME: sin Ctrl el puntero está escribiendo, no
