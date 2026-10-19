@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: scribe\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-19 09:49+0200\n"
+"POT-Creation-Date: 2026-10-19 14:14+0200\n"
 "PO-Revision-Date: 2026-09-19 19:58+0200\n"
 "Last-Translator: Automatically generated\n"
 "Language-Team: none\n"
@@ -245,27 +245,27 @@ msgstr "{n} coincidencias reemplazadas"
 msgid "Could not autosave: {e}"
 msgstr "No se pudo autoguardar: {e}"
 
-#: src/editor.rs:1347 src/editor.rs:1352 src/editor.rs:1357
+#: src/editor.rs:1343 src/editor.rs:1348 src/editor.rs:1353
 msgid "Could not save the image"
 msgstr "No se pudo guardar la imagen"
 
-#: src/editor.rs:1397
+#: src/editor.rs:1393
 msgid "Save the document before pasting images"
 msgstr "Guarda el documento antes de pegar imágenes"
 
-#: src/editor.rs:1417 src/editor.rs:1434 src/editor.rs:1473
+#: src/editor.rs:1413 src/editor.rs:1430 src/editor.rs:1469
 msgid "Save the document before dropping images"
 msgstr "Guarda el documento antes de soltar imágenes"
 
-#: src/editor.rs:1969
+#: src/editor.rs:1965
 msgid "Ignore word"
 msgstr "Ignorar palabra"
 
-#: src/editor.rs:1976
+#: src/editor.rs:1972
 msgid "Add to dictionary"
 msgstr "Aniadir al diccionario"
 
-#: src/editor.rs:2003
+#: src/editor.rs:1999
 #, rust-format
 msgid "Ctrl+click to open {url}"
 msgstr "Ctrl+clic para abrir {url}"
@@ -385,7 +385,8 @@ msgstr "Atenuar siempre"
 #: src/preferences.rs:187
 msgid "Hiding text still crashes this GTK: the marks shrink instead"
 msgstr ""
-"Ocultar texto aún aborta con este GTK: las marcas se encogen en su lugar"
+"Ocultar texto aún hace abortar este GTK: las marcas se encogen en su "
+"lugarOcultar texto aún aborta con este GTK: las marcas se encogen en su lugar"
 
 #: src/preferences.rs:189
 msgid "Always hide (shrinks the marks; GTK cannot hide them yet)"
@@ -406,7 +407,8 @@ msgstr "Continuar listas"
 #: src/preferences.rs:205
 msgid "Enter repeats the dash or number; on an empty item, it closes the list"
 msgstr ""
-"Intro repite el guion o el número; en un elemento vacío, cierra la lista"
+"Enter repite el guion o el número; en un elemento vacío, cierra la "
+"listaIntro repite el guion o el número; en un elemento vacío, cierra la lista"
 
 #: src/preferences.rs:210
 msgid "Focus mode"
