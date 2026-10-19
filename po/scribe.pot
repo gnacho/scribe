@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PACKAGE VERSION\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-19 09:49+0200\n"
+"POT-Creation-Date: 2026-10-19 14:14+0200\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -245,27 +245,27 @@ msgstr ""
 msgid "Could not autosave: {e}"
 msgstr ""
 
-#: src/editor.rs:1347 src/editor.rs:1352 src/editor.rs:1357
+#: src/editor.rs:1343 src/editor.rs:1348 src/editor.rs:1353
 msgid "Could not save the image"
 msgstr ""
 
-#: src/editor.rs:1397
+#: src/editor.rs:1393
 msgid "Save the document before pasting images"
 msgstr ""
 
-#: src/editor.rs:1417 src/editor.rs:1434 src/editor.rs:1473
+#: src/editor.rs:1413 src/editor.rs:1430 src/editor.rs:1469
 msgid "Save the document before dropping images"
 msgstr ""
 
-#: src/editor.rs:1969
+#: src/editor.rs:1965
 msgid "Ignore word"
 msgstr ""
 
-#: src/editor.rs:1976
+#: src/editor.rs:1972
 msgid "Add to dictionary"
 msgstr ""
 
-#: src/editor.rs:2003
+#: src/editor.rs:1999
 #, rust-format
 msgid "Ctrl+click to open {url}"
 msgstr ""
