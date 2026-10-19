@@ -25,6 +25,19 @@
   </developer>
   <content_rating type="oars-1.1" />
   <releases>
+    <release version="0.3.14" date="2026-10-19">
+      <description>
+        <p>Corrector ortográfico: las palabras que el diccionario del sistema
+        no valida se subrayan al escribir; se puede apagar en Preferencias.
+        Las marcas de sintaxis solo se muestran en la línea del cursor y el
+        resto del texto se lee limpio.</p>
+        <p>El texto aprovecha mejor las ventanas anchas (los márgenes laterales
+        dejan de crecer sin límite), las tablas pintadas dan aire entre el
+        texto y sus líneas, y las casillas de las listas de tareas se marcan
+        con un clic. El arranque con un documento ya no muestra el reajuste
+        de ancho.</p>
+      </description>
+    </release>
     <release version="0.3.12" date="2026-10-18">
       <description>
         <p>Vista dividida desde la cabecera, esquemas de color (seguir el
