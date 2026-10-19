@@ -439,7 +439,6 @@ fn apply_theme(tags: &gtk4::TextTagTable, view: &MarkdownView, dark: bool) {
         quote: crate::tema::Tema::rgba(&tema.barra_cita, 1.0),
         on_accent: crate::tema::Tema::rgba(&tema.sobre_acento, 1.0),
     });
-    view.set_colores_widget(&tema.primer_plano, &tema.fondo);
 }
 
 /// Aplica el ancho de columna **fuera** del ciclo de validación del
