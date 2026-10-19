@@ -415,6 +415,19 @@ impl AppSettings {
         30
     );
 
+    /// Id del tema semántico (`auto`, `light`, `dark`, `sepia`,
+    /// `solarized-dark`, `gruvbox-dark` o el id de un tema de usuario).
+    pub fn theme(&self) -> String {
+        self.get("auto".to_string(), |s| s.string("theme").to_string())
+    }
+    pub fn set_theme(&self, v: &str) {
+        self.set(|s| {
+            if let Err(e) = s.set_string("theme", v) {
+                log_set_error("theme", e);
+            }
+        });
+    }
+
     pub fn markup_visibility(&self) -> MarkupVisibility {
         MarkupVisibility::from_nick(&self.get("focus".to_string(), |s| {
             s.string("markup-visibility").to_string()

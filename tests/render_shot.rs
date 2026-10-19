@@ -475,7 +475,7 @@ fn menu_ortografia_sugerencias_y_diccionario() {
         .build();
     win.set_child(Some(&editor.widget));
     win.present();
-    editor.set_text("el qwerz raro\n\notra linea con xyzzy suelta\n");
+    editor.set_text("el ZXQVWKJ raro\n\notra linea con xyzzy suelta\n");
     pump(&ctx, 1200);
 
     let buffer = editor.view.buffer();
@@ -485,18 +485,21 @@ fn menu_ortografia_sugerencias_y_diccionario() {
         .expect("tag de ortografia");
     let marcada = |offset: i32| buffer.iter_at_offset(offset).has_tag(&subrayado);
 
-    // "qwerz" ocupa los offsets 3..8 de la linea 0.
-    assert!(marcada(3), "qwerz arranca marcada");
+    // "zxqvwkj" ocupa los offsets 3..8 de la linea 0.
+    assert!(marcada(3), "zxqvwkj arranca marcada");
 
     // Anadir al diccionario personal: la palabra deja de marcarse.
     editor.place_cursor_at(1, 5);
     pump(&ctx, 100);
     editor
         .view
-        .activate_action("spellcheck.anadir", Some(&"qwerz".to_variant()))
+        .activate_action("spellcheck.anadir", Some(&"zxqvwkj".to_variant()))
         .expect("la accion anadir existe y se activa");
     pump(&ctx, 700);
-    assert!(!marcada(3), "tras anadir al diccionario, qwerz no se marca");
+    assert!(
+        !marcada(3),
+        "tras anadir al diccionario, zxqvwkj no se marca"
+    );
 
     // Reemplazar la palabra bajo el cursor: "xyzzy" -> "quiso".
     editor.place_cursor_at(3, 17);

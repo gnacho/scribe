@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: scribe\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-19 14:14+0200\n"
+"POT-Creation-Date: 2026-10-19 14:53+0200\n"
 "PO-Revision-Date: 2026-09-19 19:58+0200\n"
 "Last-Translator: Automatically generated\n"
 "Language-Team: none\n"
@@ -17,19 +17,19 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=2; plural=(n != 1);\n"
 
-#: src/main.rs:237
+#: src/main.rs:238
 msgid "Recover unsaved documents?"
 msgstr "¿Recuperar los documentos sin guardar?"
 
-#: src/main.rs:240
+#: src/main.rs:241
 msgid "_Recover All"
 msgstr "_Recuperar todo"
 
-#: src/main.rs:241
+#: src/main.rs:242
 msgid "_Discard All"
 msgstr "_Descartar todo"
 
-#: src/main.rs:242
+#: src/main.rs:243
 msgid "Decide Later"
 msgstr "Decidir más tarde"
 
@@ -245,27 +245,27 @@ msgstr "{n} coincidencias reemplazadas"
 msgid "Could not autosave: {e}"
 msgstr "No se pudo autoguardar: {e}"
 
-#: src/editor.rs:1343 src/editor.rs:1348 src/editor.rs:1353
+#: src/editor.rs:1336 src/editor.rs:1341 src/editor.rs:1346
 msgid "Could not save the image"
 msgstr "No se pudo guardar la imagen"
 
-#: src/editor.rs:1393
+#: src/editor.rs:1386
 msgid "Save the document before pasting images"
 msgstr "Guarda el documento antes de pegar imágenes"
 
-#: src/editor.rs:1413 src/editor.rs:1430 src/editor.rs:1469
+#: src/editor.rs:1406 src/editor.rs:1423 src/editor.rs:1462
 msgid "Save the document before dropping images"
 msgstr "Guarda el documento antes de soltar imágenes"
 
-#: src/editor.rs:1965
+#: src/editor.rs:1985
 msgid "Ignore word"
 msgstr "Ignorar palabra"
 
-#: src/editor.rs:1972
+#: src/editor.rs:1992
 msgid "Add to dictionary"
 msgstr "Aniadir al diccionario"
 
-#: src/editor.rs:1999
+#: src/editor.rs:2019
 #, rust-format
 msgid "Ctrl+click to open {url}"
 msgstr "Ctrl+clic para abrir {url}"
@@ -278,7 +278,7 @@ msgstr "Apariencia"
 msgid "Theme"
 msgstr "Tema"
 
-#: src/preferences.rs:58 src/preferences.rs:369
+#: src/preferences.rs:58 src/preferences.rs:403
 msgid "Color scheme"
 msgstr "Esquema de color"
 
@@ -286,257 +286,283 @@ msgstr "Esquema de color"
 msgid "Follows the system unless you force one"
 msgstr "Sigue al sistema salvo que fuerces uno"
 
-#: src/preferences.rs:60 src/preferences.rs:372
+#: src/preferences.rs:60 src/preferences.rs:406
 msgid "System"
 msgstr "Sistema"
 
-#: src/preferences.rs:60 src/preferences.rs:373
+#: src/preferences.rs:60 src/preferences.rs:80 src/preferences.rs:407
 msgid "Light"
 msgstr "Claro"
 
-#: src/preferences.rs:60 src/preferences.rs:374
+#: src/preferences.rs:60 src/preferences.rs:81 src/preferences.rs:408
 msgid "Dark"
 msgstr "Oscuro"
 
-#: src/preferences.rs:67
+#: src/preferences.rs:76
+#, fuzzy
+#| msgid "Theme"
+msgid "Text theme"
+msgstr "Tema"
+
+#: src/preferences.rs:77
+msgid "Semantic colors of the document, applied live"
+msgstr "Colores semánticos del documento, aplicados en vivo"
+
+#: src/preferences.rs:79
+msgid "Automatic (follows the color scheme)"
+msgstr "Automático (sigue el esquema de color)"
+
+#: src/preferences.rs:82
+msgid "Sepia"
+msgstr ""
+
+#: src/preferences.rs:83
+msgid "Solarized Dark"
+msgstr "Solarized oscuro"
+
+#: src/preferences.rs:84
+msgid "Gruvbox Dark"
+msgstr "Gruvbox oscuro"
+
+#: src/preferences.rs:101
 msgid "Text"
 msgstr "Texto"
 
-#: src/preferences.rs:68
+#: src/preferences.rs:102
 msgid "Code and tables always use a monospaced font"
 msgstr "El código y las tablas usan siempre monoespaciada"
 
-#: src/preferences.rs:72 src/preferences.rs:380
+#: src/preferences.rs:106 src/preferences.rs:414
 msgid "Font family"
 msgstr "Familia tipográfica"
 
-#: src/preferences.rs:73 src/preferences.rs:381
+#: src/preferences.rs:107 src/preferences.rs:415
 msgid "Document body"
 msgstr "Cuerpo del documento"
 
-#: src/preferences.rs:75 src/preferences.rs:383
+#: src/preferences.rs:109 src/preferences.rs:417
 msgid "Sans (Cantarell)"
 msgstr "Sans (Cantarell)"
 
-#: src/preferences.rs:76 src/preferences.rs:384
+#: src/preferences.rs:110 src/preferences.rs:418
 msgid "Serif"
 msgstr "Serif"
 
-#: src/preferences.rs:77 src/preferences.rs:385
+#: src/preferences.rs:111 src/preferences.rs:419
 msgid "Monospace"
 msgstr "Monoespaciada"
 
-#: src/preferences.rs:82
+#: src/preferences.rs:116
 msgid "Size"
 msgstr "Tamaño"
 
-#: src/preferences.rs:83
+#: src/preferences.rs:117
 msgid "Pixels"
 msgstr "Píxeles"
 
-#: src/preferences.rs:88
+#: src/preferences.rs:122
 msgid "Line spacing"
 msgstr "Interlineado"
 
-#: src/preferences.rs:89
+#: src/preferences.rs:123
 msgid "Multiplier on the font size"
 msgstr "Multiplicador sobre el tamaño de fuente"
 
-#: src/preferences.rs:94
+#: src/preferences.rs:128
 msgid "Column width"
 msgstr "Ancho de la columna"
 
-#: src/preferences.rs:95
+#: src/preferences.rs:129
 msgid "Maximum text width, in pixels"
 msgstr "Ancho máximo del texto, en píxeles"
 
-#: src/preferences.rs:158
+#: src/preferences.rs:192
 msgid "Editor"
 msgstr "Editor"
 
-#: src/preferences.rs:163
+#: src/preferences.rs:197
 msgid "Markup"
 msgstr "Marcado"
 
-#: src/preferences.rs:165
+#: src/preferences.rs:199
 msgid "What to do with asterisks, hash marks and URLs while you write"
 msgstr "Qué hacer con los asteriscos, almohadillas y URLs mientras escribes"
 
-#: src/preferences.rs:175 src/preferences.rs:186
+#: src/preferences.rs:209 src/preferences.rs:220
 msgid "Markdown marks"
 msgstr "Marcas de Markdown"
 
-#: src/preferences.rs:176
+#: src/preferences.rs:210
 msgid "“On focus” reveals them only on the cursor line"
 msgstr "«Al enfocar» las revela solo en la línea del cursor"
 
-#: src/preferences.rs:178
+#: src/preferences.rs:212
 msgid "Always hide"
 msgstr "Ocultar siempre"
 
-#: src/preferences.rs:179
+#: src/preferences.rs:213
 msgid "Show on focus"
 msgstr "Mostrar al enfocar"
 
-#: src/preferences.rs:180 src/preferences.rs:191
+#: src/preferences.rs:214 src/preferences.rs:225
 msgid "Always dim"
 msgstr "Atenuar siempre"
 
-#: src/preferences.rs:187
+#: src/preferences.rs:221
 msgid "Hiding text still crashes this GTK: the marks shrink instead"
 msgstr ""
 "Ocultar texto aún hace abortar este GTK: las marcas se encogen en su "
 "lugarOcultar texto aún aborta con este GTK: las marcas se encogen en su lugar"
 
-#: src/preferences.rs:189
+#: src/preferences.rs:223
 msgid "Always hide (shrinks the marks; GTK cannot hide them yet)"
 msgstr "Ocultar siempre (encoge las marcas; GTK aún no permite ocultarlas)"
 
-#: src/preferences.rs:190
+#: src/preferences.rs:224
 msgid "Show on focus (shrinks the marks; GTK cannot hide them yet)"
 msgstr "Mostrar al enfocar (encoge las marcas; GTK aún no permite ocultarlas)"
 
-#: src/preferences.rs:200
+#: src/preferences.rs:234
 msgid "Writing"
 msgstr "Escritura"
 
-#: src/preferences.rs:203
+#: src/preferences.rs:237
 msgid "Continue lists"
 msgstr "Continuar listas"
 
-#: src/preferences.rs:205
+#: src/preferences.rs:239
 msgid "Enter repeats the dash or number; on an empty item, it closes the list"
 msgstr ""
 "Enter repite el guion o el número; en un elemento vacío, cierra la "
 "listaIntro repite el guion o el número; en un elemento vacío, cierra la lista"
 
-#: src/preferences.rs:210
+#: src/preferences.rs:244
 msgid "Focus mode"
 msgstr "Modo foco"
 
-#: src/preferences.rs:211
+#: src/preferences.rs:245
 msgid "Dims everything except the current paragraph"
 msgstr "Atenúa todo salvo el párrafo actual"
 
-#: src/preferences.rs:215
+#: src/preferences.rs:249
 msgid "Typewriter mode"
 msgstr "Máquina de escribir"
 
-#: src/preferences.rs:216
+#: src/preferences.rs:250
 msgid "Keeps the cursor line vertically centered"
 msgstr "Mantiene la línea del cursor centrada verticalmente"
 
-#: src/preferences.rs:220
+#: src/preferences.rs:254
 msgid "Spell checking"
 msgstr "Corrector ortográfico"
 
-#: src/preferences.rs:222
+#: src/preferences.rs:256
 msgid "Underlines misspelt words; right-click offers fixes"
 msgstr "Subraya las palabras mal escritas; el clic derecho ofrece correcciones"
 
-#: src/preferences.rs:227
+#: src/preferences.rs:261
 msgid "Tab width"
 msgstr "Ancho de tabulación"
 
-#: src/preferences.rs:228
+#: src/preferences.rs:262
 msgid "Spaces per indent level"
 msgstr "Espacios por nivel de sangría"
 
-#: src/preferences.rs:239
+#: src/preferences.rs:273
 msgid "Saving"
 msgstr "Guardado"
 
-#: src/preferences.rs:242
+#: src/preferences.rs:276
 msgid "Autosave"
 msgstr "Guardado automático"
 
-#: src/preferences.rs:243
+#: src/preferences.rs:277
 msgid "Only when the document already has a file"
 msgstr "Solo si el documento ya tiene un fichero asociado"
 
-#: src/preferences.rs:247
+#: src/preferences.rs:281
 msgid "Interval"
 msgstr "Intervalo"
 
-#: src/preferences.rs:248
+#: src/preferences.rs:282
 msgid "Seconds between saves"
 msgstr "Segundos entre guardados"
 
-#: src/preferences.rs:265
+#: src/preferences.rs:299
 msgid "History"
 msgstr "Historial"
 
-#: src/preferences.rs:268
+#: src/preferences.rs:302
 msgid "Clear"
 msgstr "Vaciar"
 
-#: src/preferences.rs:273
+#: src/preferences.rs:307
 msgid "Recent documents"
 msgstr "Documentos recientes"
 
-#: src/preferences.rs:274
+#: src/preferences.rs:308
 msgid "Clears the list shown in the sidebar"
 msgstr "Borra la lista que aparece en la barra lateral"
 
-#: src/preferences.rs:357
+#: src/preferences.rs:391
 msgid "Export"
 msgstr "Exportar"
 
-#: src/preferences.rs:362
+#: src/preferences.rs:396
 msgid "PDF"
 msgstr "PDF"
 
-#: src/preferences.rs:364
+#: src/preferences.rs:398
 msgid "These settings apply to PDF export only, not to the editor view"
 msgstr ""
 "Estos ajustes se aplican solo a la exportación a PDF, no a la vista del "
 "editor"
 
-#: src/preferences.rs:370
+#: src/preferences.rs:404
 msgid "Monochrome prints everything in black on white"
 msgstr "Monocromo imprime todo en negro sobre blanco"
 
-#: src/preferences.rs:375
+#: src/preferences.rs:409
 msgid "Monochrome"
 msgstr "Monocromo"
 
-#: src/preferences.rs:390
+#: src/preferences.rs:424
 msgid "Font size"
 msgstr "Tamaño de fuente"
 
-#: src/preferences.rs:391
+#: src/preferences.rs:425
 msgid "Points"
 msgstr "Puntos"
 
-#: src/preferences.rs:396
+#: src/preferences.rs:430
 msgid "Monospace font"
 msgstr "Fuente monoespaciada"
 
-#: src/preferences.rs:397
+#: src/preferences.rs:431
 msgid "Used for code blocks and tables"
 msgstr "Se usa en bloques de código y tablas"
 
-#: src/preferences.rs:406
+#: src/preferences.rs:440
 msgid "Page size"
 msgstr "Tamaño de página"
 
-#: src/preferences.rs:407
+#: src/preferences.rs:441
 msgid "Paper"
 msgstr "Papel"
 
-#: src/preferences.rs:412
+#: src/preferences.rs:446
 msgid "Orientation"
 msgstr "Orientación"
 
-#: src/preferences.rs:413
+#: src/preferences.rs:447
 msgid "Paper orientation"
 msgstr "Orientación del papel"
 
-#: src/preferences.rs:414
+#: src/preferences.rs:448
 msgid "Portrait"
 msgstr "Vertical"
 
-#: src/preferences.rs:414
+#: src/preferences.rs:448
 msgid "Landscape"
 msgstr "Horizontal"
 

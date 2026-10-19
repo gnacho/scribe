@@ -61,6 +61,47 @@ fn appearance_page(settings: &Rc<AppSettings>, apply: &Rc<dyn Fn()>) -> adw::Pre
         settings.color_scheme_index(),
     );
     theme_group.add(&theme);
+
+    // Temas: automático + integrados (los de usuario se anaden en el PR C).
+    let mut opciones: Vec<(String, String)> = vec![(
+        "auto".into(),
+        gettext("Automatic (follows the color scheme)"),
+    )];
+    for tema in crate::tema::Tema::integrados() {
+        opciones.push((tema.id, tema.nombre));
+    }
+    let usuarios = crate::tema::Tema::temas_de_usuario(
+        &crate::tema::Tema::dir_usuario(),
+        &crate::tema::Tema::claro(),
+    );
+    for tema in usuarios {
+        opciones.push((tema.id.clone(), tema.nombre.clone()));
+    }
+    let tema_actual = settings.theme();
+    let seleccion = opciones
+        .iter()
+        .position(|(id, _)| *id == tema_actual)
+        .unwrap_or(0) as u32;
+    let nombres: Vec<String> = opciones.iter().map(|(_, n)| n.clone()).collect();
+    let texto_tema = combo_i18n(
+        &gettext("Text theme"),
+        &gettext("Semantic colors of the document, applied live"),
+        &nombres,
+        seleccion,
+    );
+    {
+        let settings = settings.clone();
+        let apply = apply.clone();
+        let opciones = opciones.clone();
+        texto_tema.connect_selected_notify(move |fila| {
+            let indice = fila.selected() as usize;
+            if let Some((id, _)) = opciones.get(indice) {
+                settings.set_theme(id);
+                apply();
+            }
+        });
+    }
+    theme_group.add(&texto_tema);
     page.add(&theme_group);
 
     let text_group = adw::PreferencesGroup::builder()
