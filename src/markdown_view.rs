@@ -119,7 +119,7 @@ mod imp {
         pub ornaments: RefCell<Vec<Ornament>>,
         pub palette: Cell<OrnamentPalette>,
         /// CSS del tema (fondo/primer plano) aplicado a la vista.
-        pub css_tema: std::cell::RefCell<Option<gtk4::CssProvider>>,
+
         /// Numero de lineas del buffer cuando se calcularon los adornos. Si el
         /// buffer ya no coincide, los adornos apuntan a lineas que se han
         /// movido y no se dibuja nada hasta que llegue la siguiente pasada.
@@ -1496,23 +1496,6 @@ impl MarkdownView {
         self.imp().remote_pending.borrow_mut().remove(url);
         self.imp().cache_texture(url, texture);
         self.queue_draw();
-    }
-
-    /// Fondo y primer plano del widget por CSS mínimo (issue #25: los temas
-    /// cambian el lienzo, no solo los adornos).
-    #[allow(deprecated)] // style_context por widget: sin reemplazo directo
-    pub fn set_colores_widget(&self, primer_plano: &str, fondo: &str) {
-        let provider = gtk4::CssProvider::new();
-        provider.load_from_string(&format!(
-            "textview {{ background-color: {fondo}; color: {primer_plano}; }}"
-        ));
-        let ctx = self.style_context();
-        let imp = self.imp();
-        if let Some(previo) = imp.css_tema.take() {
-            ctx.remove_provider(&previo);
-        }
-        ctx.add_provider(&provider, gtk4::STYLE_PROVIDER_PRIORITY_APPLICATION);
-        imp.css_tema.replace(Some(provider));
     }
 
     pub fn set_palette(&self, palette: OrnamentPalette) {
