@@ -826,10 +826,6 @@ fn decorate(
     }
 
     for span in &analysis.spans {
-        eprintln!(
-            "LOOP DBG {:?} tag={} rango=({},{})",
-            span.kind, span.tag, span.start, span.end
-        );
         // Los rangos del parser deberían estar siempre dentro del texto, pero
         // un cambio en pulldown-cmark o en analyze no debe convertirse en un
         // panic en producción.
