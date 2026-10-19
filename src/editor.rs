@@ -426,12 +426,18 @@ fn apply_theme(tags: &gtk4::TextTagTable, view: &MarkdownView, dark: bool) {
 /// el flag en FALSE y aborta la aplicación (GTK >= 4.22.5, `gtktextview.c:4924`).
 /// Por eso el cambio se programa en un idle: cuando corre, la validación ya
 /// terminó y su invalidación solo pide otra, que es el camino previsto por GTK.
-fn apply_column_margins_deferred(view: &MarkdownView, tags: &gtk4::TextTagTable, margin: i32) {
+fn apply_column_margins_deferred(
+    view: &MarkdownView,
+    tags: &gtk4::TextTagTable,
+    ctx: &DecoracionCtx,
+    margin: i32,
+) {
     if view.left_margin() == margin {
         return;
     }
     let view = view.clone();
     let tags = tags.clone();
+    let ctx = ctx.clone();
     glib::idle_add_local_once(move || {
         if view.left_margin() == margin {
             return;
@@ -439,6 +445,12 @@ fn apply_column_margins_deferred(view: &MarkdownView, tags: &gtk4::TextTagTable,
         view.set_left_margin(margin);
         view.set_right_margin(margin);
         set_column_margins(&tags, margin);
+        // Arranque sin salto: el margen recien aplicado es el que usa la
+        // decoracion de revelado; armar aqui (despues de aplicar) y pedir
+        // una pasada garantiza que lo primero visible ya sale compuesto.
+        if !ctx.revelada.get() && ctx.por_revelar.take() {
+            schedule_decoration(&ctx, Duration::ZERO);
+        }
     });
 }
 
@@ -1572,16 +1584,11 @@ impl Editor {
             let tags = self.tags.clone();
             let column_width = self.column_width.clone();
             let ctx = self.decoracion_ctx.clone();
-            let por_revelar = self.decoracion_ctx.por_revelar.clone();
             hadj.connect_page_size_notify(move |adj| {
                 let width = adj.page_size() as i32;
                 if width <= 0 {
                     return;
                 }
-                // Primer ancho valido: se arma el revelado; la decoracion
-                // que corre a continuacion ya usa la geometria definitiva y
-                // revela la vista al terminar.
-                por_revelar.take();
                 // Margen lateral acotado: nunca más de 1/8 de la ventana por
                 // lado (issue #63). En pantallas anchas la columna crece con
                 // la ventana en vez de dejar grandes huecos; en estrechas
@@ -1589,7 +1596,7 @@ impl Editor {
                 let margin = ((width - column_width.get()) / 2)
                     .max(MIN_MARGIN)
                     .min((width / 8).max(MIN_MARGIN));
-                apply_column_margins_deferred(&view, &tags, margin);
+                apply_column_margins_deferred(&view, &tags, &ctx, margin);
                 // El layout del lienzo de tabla depende del ancho: al
                 // cambiarlo hay que re-decorar para recalcular sus huecos.
                 schedule_decoration(&ctx, Duration::ZERO);
@@ -2159,7 +2166,7 @@ impl Editor {
         if let Some(hadj) = self.view.hadjustment() {
             let available = hadj.page_size() as i32;
             let margin = ((available - self.column_width.get()) / 2).max(MIN_MARGIN);
-            apply_column_margins_deferred(&self.view, &self.tags, margin);
+            apply_column_margins_deferred(&self.view, &self.tags, &self.decoracion_ctx, margin);
         }
     }
 
