@@ -399,16 +399,6 @@ fn marcas_solo_en_la_linea_del_cursor() {
         "syn_shrink",
         "el guion de la lista (otra linea) queda encogido"
     );
-    for off in 0..20 {
-        let it = buffer.iter_at_offset(off);
-        let nombres: Vec<String> = it
-            .tags()
-            .iter()
-            .filter_map(|t| t.name().map(|n| n.as_str().to_string()))
-            .collect();
-        println!("DUMP off={off} char={:?} tags={nombres:?}", it.char());
-    }
-    println!("DUMP cursor_offset={}", buffer.cursor_position());
     assert_eq!(
         nombre_en(13),
         "syn_shrink",
