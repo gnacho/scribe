@@ -452,16 +452,8 @@ fn arranque_sin_salto_de_ancho() {
     win.present();
     editor.set_text("# Doc\n\npros de relleno para que haya algo que decorar\n");
 
-    // Aun no revelado: el re-decorado con la geometria definitiva gana a la
-    // primera pintura visible.
-    pump(&ctx, 60);
-    assert!(
-        (editor.view.opacity() - 0.0).abs() < 0.01,
-        "la vista arranca oculta (opacity={})",
-        editor.view.opacity()
-    );
-
-    // Pasado el respiro de revelado, la vista aparece ya compuesta.
+    // La vista se revela en cuanto la primera decoracion corre con la
+    // geometria definitiva (antes de que el usuario vea nada a medio hacer).
     pump(&ctx, 700);
     assert!(
         (editor.view.opacity() - 1.0).abs() < 0.01,

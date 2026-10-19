@@ -131,6 +131,10 @@ struct DecoracionCtx {
     base_dir: Rc<RefCell<Option<PathBuf>>>,
     unclosed_fences: Rc<RefCell<Vec<UnclosedFence>>>,
     ortografia: Rc<Ortografia>,
+    /// Arranque sin salto: `por_revelar` se arma con el primer ancho valido;
+    /// la primera decoracion que corre con el arma consumido revela la vista.
+    revelada: Rc<Cell<bool>>,
+    por_revelar: Rc<Cell<bool>>,
 }
 
 pub struct Editor {
@@ -161,8 +165,6 @@ pub struct Editor {
     /// Contexto de las pasadas de decoración: lo capturan los cierres de
     /// señales por copia y lleva dentro el corrector ortográfico.
     decoracion_ctx: DecoracionCtx,
-    /// Anti-salto de arranque: la vista se revela al tener la geometría real.
-    por_revelar: Rc<Cell<bool>>,
 }
 
 fn build_tags() -> gtk4::TextTagTable {
@@ -654,6 +656,10 @@ fn decorate(
     if text.is_empty() || text.len() > MAX_LIVE_BYTES {
         unclosed_fences.borrow_mut().clear();
         view.set_ornaments(Vec::new(), Vec::new(), line_count);
+        if !ctx.revelada.get() && !ctx.por_revelar.get() {
+            ctx.revelada.set(true);
+            view.set_opacity(1.0);
+        }
         return;
     }
 
@@ -736,6 +742,13 @@ fn decorate(
     let revealed = |span: &Span| -> bool {
         !dim && cursor_table && span.start >= cursor_from && span.end <= cursor_to
     };
+
+    // Revelado de arranque: cuando el ancho real ya aplico sus margenes y
+    // esta pasada termina, todo lo visible sale compuesto de una pieza.
+    if !ctx.revelada.get() && !ctx.por_revelar.get() {
+        ctx.revelada.set(true);
+        view.set_opacity(1.0);
+    }
 
     for span in &analysis.spans {
         eprintln!(
@@ -1491,17 +1504,19 @@ impl Editor {
         // no marca nada (y la preferencia sigue funcionando).
         let ortografia = Rc::new(Ortografia::con_locale_del_sistema());
 
-        // Anti-salto de arranque: la vista arranca invisible y se revela
-        // cuando la geometria real ya esta aplicada (el primer ancho valido
-        // llega con el mapeo de la ventana); si nunca llega, una red de
-        // seguridad la revela a los dos segundos.
+        // Anti-salto de arranque: la vista arranca invisible y se revela al
+        // terminar la primera decoracion que corre con la geometria real ya
+        // aplicada (el primer ancho valido llega con el mapeo de la ventana);
+        // si nunca llega, una red de seguridad la revela a los dos segundos.
         view.set_opacity(0.0);
-        let por_revelar = Rc::new(Cell::new(true));
+        let revelada = Rc::new(Cell::new(false));
+        let por_revelar = Rc::new(Cell::new(false));
         {
             let view_reveal = view.clone();
-            let por_revelar_seguridad = por_revelar.clone();
+            let revelada_seguridad = revelada.clone();
             glib::timeout_add_local_once(Duration::from_millis(2000), move || {
-                if por_revelar_seguridad.take() {
+                if !revelada_seguridad.get() {
+                    revelada_seguridad.set(true);
                     view_reveal.set_opacity(1.0);
                 }
             });
@@ -1525,6 +1540,8 @@ impl Editor {
             base_dir: base_dir.clone(),
             unclosed_fences: unclosed_fences.clone(),
             ortografia,
+            revelada,
+            por_revelar: por_revelar.clone(),
         };
 
         let editor = Self {
@@ -1544,7 +1561,6 @@ impl Editor {
             search_settings,
             search_context,
             decoracion_ctx,
-            por_revelar,
         };
         editor.connect_signals();
         editor
@@ -1556,22 +1572,14 @@ impl Editor {
             let tags = self.tags.clone();
             let column_width = self.column_width.clone();
             let ctx = self.decoracion_ctx.clone();
-            let por_revelar = self.por_revelar.clone();
-            let vista_reveal = self.view.clone();
             hadj.connect_page_size_notify(move |adj| {
                 let width = adj.page_size() as i32;
                 if width <= 0 {
                     return;
                 }
-                // Primer ancho valido: la decoracion que viene ya usa la
-                // geometria definitiva, asi que se revela la vista (con un
-                // respiro para que el re-decorado gane a la primera pintura).
-                if por_revelar.take() {
-                    let vista_reveal = vista_reveal.clone();
-                    glib::timeout_add_local_once(Duration::from_millis(80), move || {
-                        vista_reveal.set_opacity(1.0);
-                    });
-                }
+                // Primer ancho valido: la geometria definitiva esta aplicada
+                // y la primera decoracion ya tiene lo que necesita para
+                // pintar coherente; el final de esa pasada revela la vista.
                 // Margen lateral acotado: nunca más de 1/8 de la ventana por
                 // lado (issue #63). En pantallas anchas la columna crece con
                 // la ventana en vez de dejar grandes huecos; en estrechas
