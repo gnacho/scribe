@@ -5,6 +5,31 @@ All notable changes to Scribe will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.16] - 2026-10-19
+
+### Added
+
+- **Spell-check context menu** (#62): right-click a misspelt word for up to
+  six dictionary suggestions, ignore it for the session or add it to the
+  persistent personal dictionary.
+- **Clickable task checkboxes** (#67): click the box of a `- [ ]` task to
+  toggle it in the source.
+- **Semantic themes** (#25): native theme files paint the buffer background,
+  text and ornaments; five built-ins (Light, Dark, Sepia, Solarized Dark,
+  Gruvbox Dark) selectable in Preferences > Appearance, applied live, with
+  user themes supported in `$XDG_DATA_HOME/scribe/themes/*.ini`.
+- **Syntax marks only on the cursor line** (#70): `**`, `#`, `-` markers show
+  on the line being edited and collapse everywhere else.
+
+### Fixed
+
+- Painted canvas tables: wrapped cell text keeps 2-3 px of air before the
+  vertical lines (#66) and the collapsed source rows no longer leave faint
+  dashes over the first column.
+- The spell-check underline no longer recolors the text.
+- Substitute ornaments (bullet, checkbox, heading rule) stay off the cursor
+  line so what you edit matches what is in the buffer (#41).
+
 ## [0.3.14] - 2026-10-19
 
 ### Added

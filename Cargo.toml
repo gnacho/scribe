@@ -1,6 +1,6 @@
 [package]
 name = "scribe"
-version = "0.3.14"
+version = "0.3.16"
 edition = "2021"
 authors = ["gnacho"]
 description = "A native GNOME Markdown editor"
