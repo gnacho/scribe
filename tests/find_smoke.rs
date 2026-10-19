@@ -10,6 +10,9 @@
 // use (mismo criterio que tests/render_shot.rs).
 #![allow(dead_code)]
 
+#[path = "../src/tema.rs"]
+mod tema;
+
 #[path = "../src/editor.rs"]
 mod editor;
 #[path = "../src/markdown_render.rs"]
