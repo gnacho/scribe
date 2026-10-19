@@ -1572,14 +1572,16 @@ impl Editor {
             let tags = self.tags.clone();
             let column_width = self.column_width.clone();
             let ctx = self.decoracion_ctx.clone();
+            let por_revelar = self.decoracion_ctx.por_revelar.clone();
             hadj.connect_page_size_notify(move |adj| {
                 let width = adj.page_size() as i32;
                 if width <= 0 {
                     return;
                 }
-                // Primer ancho valido: la geometria definitiva esta aplicada
-                // y la primera decoracion ya tiene lo que necesita para
-                // pintar coherente; el final de esa pasada revela la vista.
+                // Primer ancho valido: se arma el revelado; la decoracion
+                // que corre a continuacion ya usa la geometria definitiva y
+                // revela la vista al terminar.
+                por_revelar.take();
                 // Margen lateral acotado: nunca más de 1/8 de la ventana por
                 // lado (issue #63). En pantallas anchas la columna crece con
                 // la ventana en vez de dejar grandes huecos; en estrechas
