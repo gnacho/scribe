@@ -131,8 +131,8 @@ struct DecoracionCtx {
     base_dir: Rc<RefCell<Option<PathBuf>>>,
     unclosed_fences: Rc<RefCell<Vec<UnclosedFence>>>,
     ortografia: Rc<Ortografia>,
-    /// Arranque sin salto: `por_revelar` se arma con el primer ancho valido;
-    /// la primera decoracion que corre con el arma consumido revela la vista.
+    /// Arranque sin salto: el primer ancho valido arma `por_revelar` y la
+    /// siguiente pasada de decoracion revela la vista ya compuesta.
     revelada: Rc<Cell<bool>>,
     por_revelar: Rc<Cell<bool>>,
 }
@@ -448,9 +448,12 @@ fn apply_column_margins_deferred(
         // Arranque sin salto: el margen recien aplicado es el que usa la
         // decoracion de revelado; armar aqui (despues de aplicar) y pedir
         // una pasada garantiza que lo primero visible ya sale compuesto.
-        if !ctx.revelada.get() && ctx.por_revelar.take() {
-            schedule_decoration(&ctx, Duration::ZERO);
+        if !ctx.revelada.get() {
+            // Armado del revelado de arranque: la proxima pasada ya corre
+            // con este margen aplicado y sale compuesta.
+            ctx.por_revelar.set(true);
         }
+        schedule_decoration(&ctx, Duration::ZERO);
     });
 }
 
@@ -757,7 +760,7 @@ fn decorate(
 
     // Revelado de arranque: cuando el ancho real ya aplico sus margenes y
     // esta pasada termina, todo lo visible sale compuesto de una pieza.
-    if !ctx.revelada.get() && !ctx.por_revelar.get() {
+    if !ctx.revelada.get() && ctx.por_revelar.get() {
         ctx.revelada.set(true);
         view.set_opacity(1.0);
     }
