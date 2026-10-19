@@ -434,3 +434,43 @@ fn marcas_solo_en_la_linea_del_cursor() {
         "los asteriscos de la linea del cursor se muestran"
     );
 }
+
+/// Arranque sin salto de ancho (petición): la vista arranca oculta y se
+/// revela cuando el primer ancho real ya aplico sus margenes.
+#[test]
+#[ignore = "requiere display"]
+fn arranque_sin_salto_de_ancho() {
+    gtk4::init().expect("GTK necesita un display");
+    libadwaita::init().expect("libadwaita init");
+    let ctx = gtk4::glib::MainContext::default();
+    let editor = Editor::new();
+    let win = gtk4::Window::builder()
+        .default_width(1500)
+        .default_height(500)
+        .build();
+    win.set_child(Some(&editor.widget));
+    win.present();
+    editor.set_text("# Doc\n\npros de relleno para que haya algo que decorar\n");
+
+    // Aun no revelado: el re-decorado con la geometria definitiva gana a la
+    // primera pintura visible.
+    pump(&ctx, 60);
+    assert!(
+        (editor.view.opacity() - 0.0).abs() < 0.01,
+        "la vista arranca oculta (opacity={})",
+        editor.view.opacity()
+    );
+
+    // Pasado el respiro de revelado, la vista aparece ya compuesta.
+    pump(&ctx, 700);
+    assert!(
+        (editor.view.opacity() - 1.0).abs() < 0.01,
+        "la vista se revela (opacity={})",
+        editor.view.opacity()
+    );
+    assert_eq!(
+        editor.view.left_margin(),
+        187,
+        "el margen acotado ya esta aplicado al revelar"
+    );
+}
