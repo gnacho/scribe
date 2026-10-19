@@ -20,6 +20,7 @@ mod preferences;
 mod preview;
 mod recovery;
 mod settings;
+mod tema;
 mod window;
 
 use settings::AppSettings;

@@ -14,6 +14,9 @@
 // use (mismo criterio que tests/crash_stress.rs).
 #![allow(dead_code)]
 
+#[path = "../src/tema.rs"]
+mod tema;
+
 #[path = "../src/editor.rs"]
 mod editor;
 #[path = "../src/markdown_render.rs"]

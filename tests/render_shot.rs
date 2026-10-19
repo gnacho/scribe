@@ -11,6 +11,9 @@
 // use (mismo criterio que tests/crash_stress.rs).
 #![allow(dead_code)]
 
+#[path = "../src/tema.rs"]
+mod tema;
+
 #[path = "../src/editor.rs"]
 mod editor;
 #[path = "../src/markdown_render.rs"]
@@ -513,5 +516,62 @@ fn menu_ortografia_sugerencias_y_diccionario() {
     assert!(
         !texto.contains("xyzzy"),
         "el reemplazo elimina la palabra: {texto:?}"
+    );
+}
+
+/// Temas semánticos (issue #25): con el tema sepia elegido en la preferencia
+/// `theme`, los tags y la paleta toman sus colores.
+#[test]
+#[ignore = "requiere display"]
+fn tema_sepia_aplica_sus_colores() {
+    gtk4::init().expect("GTK necesita un display");
+    libadwaita::init().expect("libadwaita init");
+    let ctx = gtk4::glib::MainContext::default();
+    // El tema se lee de gsettings en la creacion del editor: keyfile previo.
+    let xdg = std::path::PathBuf::from("/tmp/opencode/xdg-tema-test");
+    std::fs::create_dir_all(xdg.join("glib-2.0/settings")).ok();
+    std::fs::write(
+        xdg.join("glib-2.0/settings/keyfile"),
+        "[app/scribe/Scribe]\ntheme=\"sepia\"\n",
+    )
+    .ok();
+    // Sin poder re-dirigir el backend del proceso, se fija la propiedad
+    // directamente sobre el esquema instalado y se restaura al terminar.
+    let ajustes = gio::Settings::new("app.scribe.Scribe");
+    let previo = ajustes.string("theme").to_string();
+    ajustes.set_string("theme", "sepia").unwrap();
+    let editor = Editor::new();
+    ajustes.set_string("theme", &previo).unwrap();
+    let win = gtk4::Window::builder()
+        .default_width(760)
+        .default_height(400)
+        .build();
+    win.set_child(Some(&editor.widget));
+    win.present();
+    editor.set_text("# Titulo\n\n[enlace](https://example.com)\n");
+    pump(&ctx, 1200);
+
+    let buffer = editor.view.buffer();
+    let color_de = |nombre: &str| -> (u8, u8, u8) {
+        let c = buffer
+            .tag_table()
+            .lookup(nombre)
+            .and_then(|t| t.foreground_rgba())
+            .expect("color del tag");
+        (
+            (c.red() * 255.0) as u8,
+            (c.green() * 255.0) as u8,
+            (c.blue() * 255.0) as u8,
+        )
+    };
+    assert_eq!(
+        color_de("link"),
+        (138, 90, 43),
+        "el enlace toma el acento sepia"
+    );
+    assert_eq!(
+        color_de("h1"),
+        (58, 47, 33),
+        "el encabezado toma el color sepia"
     );
 }

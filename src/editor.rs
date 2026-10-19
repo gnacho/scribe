@@ -384,63 +384,56 @@ fn rgba(hex: u32, alpha: f32) -> gtk4::gdk::RGBA {
     )
 }
 
+/// Tema semántico activo: el integrado elegido en la preferencia `theme`
+/// (`auto` sigue el esquema de color del sistema).
+fn tema_activo(dark: bool) -> crate::tema::Tema {
+    let ajustes = gio::Settings::new("app.scribe.Scribe");
+    let id = ajustes.string("theme").to_string();
+    crate::tema::Tema::integrado_por_id(&id).unwrap_or_else(|| {
+        if dark {
+            crate::tema::Tema::oscuro()
+        } else {
+            crate::tema::Tema::claro()
+        }
+    })
+}
+
 fn apply_theme(tags: &gtk4::TextTagTable, view: &MarkdownView, dark: bool) {
-    let set = |name: &str, fg: Option<&str>, para_bg: Option<&str>| {
+    let tema = tema_activo(dark);
+    let set = |name: &str, fg: Option<&str>| {
         if let Some(tag) = tags.lookup(name) {
             tag.set_foreground(fg);
-            tag.set_paragraph_background(para_bg);
         }
     };
 
-    // Las citas y los bloques de código ya no llevan fondo de párrafo: su caja
+    // Las citas y los bloques de código no llevan fondo de párrafo: su caja
     // y su barra se dibujan, que permite esquinas redondeadas y márgenes.
-    if dark {
-        set("code", Some("#f0a868"), None);
-        set("tablecode", Some("#f0a868"), None);
-        set("codeblock", Some("#e4e4e4"), None);
-        set("table", Some("#e0e0e0"), None);
-        set("tablehead", Some("#e0e0e0"), None);
-        set("fence", Some("#8a8a8a"), None);
-        set("quote", Some("#c2c2c2"), None);
-        set("link", Some("#82b8f0"), None);
-        set("footnote", Some("#82b8f0"), None);
-        set("listmarker", Some("#82b8f0"), None);
-        set("html", Some("#8f8f8f"), None);
-        set("footnotedef", Some("#a0a0a0"), None);
-        set("syn_shown", Some("#787878"), None);
-        set("unfocused", Some("#5c5c5c"), None);
-        view.set_palette(OrnamentPalette {
-            accent: rgba(0x82b8f0, 1.0),
-            muted: rgba(0x6f6f6f, 1.0),
-            block: rgba(0xffffff, 0.07),
-            table: rgba(0xffffff, 0.05),
-            quote: rgba(0x6f6f6f, 1.0),
-            on_accent: rgba(0x1b1b1b, 1.0),
-        });
-    } else {
-        set("code", Some("#a34a00"), None);
-        set("tablecode", Some("#a34a00"), None);
-        set("codeblock", Some("#1f1f1f"), None);
-        set("table", Some("#1f1f1f"), None);
-        set("tablehead", Some("#1f1f1f"), None);
-        set("fence", Some("#8b8a88"), None);
-        set("quote", Some("#54535a"), None);
-        set("link", Some("#1a6ed8"), None);
-        set("footnote", Some("#1a6ed8"), None);
-        set("listmarker", Some("#1a6ed8"), None);
-        set("html", Some("#8b8a88"), None);
-        set("footnotedef", Some("#77767b"), None);
-        set("syn_shown", Some("#b5b4b1"), None);
-        set("unfocused", Some("#bdbcba"), None);
-        view.set_palette(OrnamentPalette {
-            accent: rgba(0x1a6ed8, 1.0),
-            muted: rgba(0xc0bfbc, 1.0),
-            block: rgba(0x000000, 0.05),
-            table: rgba(0x000000, 0.035),
-            quote: rgba(0xc0bfbc, 1.0),
-            on_accent: rgba(0xffffff, 1.0),
-        });
+    set("code", Some(&tema.codigo));
+    set("tablecode", Some(&tema.codigo));
+    set("codeblock", Some(&tema.bloque_codigo));
+    set("table", Some(&tema.tabla));
+    set("tablehead", Some(&tema.tabla));
+    set("fence", Some(&tema.atenuado));
+    set("quote", Some(&tema.cita));
+    set("link", Some(&tema.acento));
+    set("footnote", Some(&tema.acento));
+    set("listmarker", Some(&tema.acento));
+    set("html", Some(&tema.atenuado));
+    set("footnotedef", Some(&tema.atenuado));
+    set("syn_shown", Some(&tema.marcas));
+    set("unfocused", Some(&tema.desenfocado));
+    for nivel in ["h1", "h2", "h3", "h4", "h5", "h6"] {
+        set(nivel, Some(&tema.encabezado));
     }
+    view.set_palette(OrnamentPalette {
+        accent: crate::tema::Tema::rgba(&tema.acento, 1.0),
+        muted: crate::tema::Tema::rgba(&tema.borde, 1.0),
+        block: crate::tema::Tema::rgba(&tema.bloque, tema.bloque_alfa),
+        table: crate::tema::Tema::rgba(&tema.bloque, tema.bloque_alfa * 0.7),
+        quote: crate::tema::Tema::rgba(&tema.barra_cita, 1.0),
+        on_accent: crate::tema::Tema::rgba(&tema.sobre_acento, 1.0),
+    });
+    view.set_colores_widget(&tema.primer_plano, &tema.fondo);
 }
 
 /// Aplica el ancho de columna **fuera** del ciclo de validación del

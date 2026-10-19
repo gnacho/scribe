@@ -58,6 +58,10 @@
       <summary>Show split preview</summary>
     </key>
 
+    <key name="theme" type="s">
+      <default>'auto'</default>
+      <summary>Semantic theme of the text view (auto, light, dark, sepia)</summary>
+    </key>
     <key name="color-scheme" enum="app.scribe.Scribe.ColorScheme">
       <default>'system'</default>
       <summary>Color scheme</summary>
