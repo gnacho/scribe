@@ -192,6 +192,15 @@ mod imp {
 
         /// `(x, y, alto)` de la primera línea de pantalla: `x` es el margen
         /// izquierdo del párrafo, que depende del tag y no del widget.
+        /// Línea lógica del cursor. En esa línea no se pintan los adornos
+        /// que sustituyen al fuente (issue #41): lo que se edita es el
+        /// texto crudo y las marcas ya se muestran solas.
+        pub(super) fn cursor_line(&self) -> i32 {
+            let view = self.obj();
+            let buffer = view.buffer();
+            buffer.iter_at_mark(&buffer.get_insert()).line()
+        }
+
         pub(super) fn line_origin(&self, line: i32) -> Option<(f32, f32, f32)> {
             let view = self.obj();
             let iter = view.buffer().iter_at_line(line)?;
@@ -603,6 +612,7 @@ mod imp {
             let palette = self.palette.get();
             let (first_visible, last_visible) = self.visible_lines();
             let (left, right) = self.column();
+            let cursor_line = self.cursor_line();
 
             for ornament in ornaments.iter() {
                 let line = match ornament {
@@ -613,7 +623,7 @@ mod imp {
                     | Ornament::Rule { line } => *line as i32,
                     _ => continue,
                 };
-                if line < first_visible || line > last_visible {
+                if line < first_visible || line > last_visible || line == cursor_line {
                     continue;
                 }
                 let Some((x, y, height)) = self.line_origin(line) else {
@@ -821,6 +831,9 @@ mod imp {
                     continue;
                 };
                 let line = *line as i32;
+                if line == self.cursor_line() {
+                    continue;
+                }
                 let Some(top) = self.gap_top(line, first_visible, last_visible, IMAGE_GAP_HEIGHT)
                 else {
                     continue;
@@ -1060,6 +1073,9 @@ mod imp {
                 let Ornament::Youtube { line, id, .. } = ornament else {
                     continue;
                 };
+                if *line as i32 == self.cursor_line() {
+                    continue;
+                }
                 let Some(top) = self.gap_top(
                     *line as i32,
                     first_visible,
