@@ -389,12 +389,18 @@ fn rgba(hex: u32, alpha: f32) -> gtk4::gdk::RGBA {
 fn tema_activo(dark: bool) -> crate::tema::Tema {
     let ajustes = gio::Settings::new("app.scribe.Scribe");
     let id = ajustes.string("theme").to_string();
+    let base = if dark {
+        crate::tema::Tema::oscuro()
+    } else {
+        crate::tema::Tema::claro()
+    };
     crate::tema::Tema::integrado_por_id(&id).unwrap_or_else(|| {
-        if dark {
-            crate::tema::Tema::oscuro()
-        } else {
-            crate::tema::Tema::claro()
-        }
+        // Tema de usuario: ~/.local/share/scribe/themes/<id>.ini
+        crate::tema::Tema::cargar(
+            &crate::tema::Tema::dir_usuario().join(format!("{id}.ini")),
+            &base,
+        )
+        .unwrap_or(base)
     })
 }
 
@@ -2115,6 +2121,14 @@ impl Editor {
 
     /// Sensibilidad a mayúsculas/minúsculas del patrón (issue #50). Cada
     /// documento conserva su propio ajuste.
+    /// Re-aplica esquema y tema semántico al buffer y la vista (issue #25).
+    /// Lo llama la ventana al cambiar la preferencia `theme` y el esquema.
+    pub fn reaplicar_tema(&self, oscuro: bool) {
+        apply_scheme(&self.buffer, oscuro);
+        apply_theme(&self.tags, &self.view, oscuro);
+        self.refresh();
+    }
+
     pub fn set_search_case_sensitive(&self, on: bool) {
         self.search_settings.set_case_sensitive(on);
     }

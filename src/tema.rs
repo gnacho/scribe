@@ -10,8 +10,9 @@ use gtk4::gdk;
 /// Colores semánticos de un tema. Todos en `#rrggbb`.
 #[derive(Debug, Clone)]
 pub struct Tema {
-    /// Nombre visible (se usa en el selector de Preferencias, PR del picker).
-    #[allow(dead_code)]
+    /// Identificador estable (para gsettings y el selector).
+    pub id: String,
+    /// Nombre visible en el selector de Preferencias.
     pub nombre: String,
     /// Fondo de la vista (CSS del widget).
     pub fondo: String,
@@ -50,6 +51,7 @@ impl Tema {
     /// Tema claro por defecto (los valores que ya llevaba la app).
     pub fn claro() -> Self {
         Self {
+            id: "light".into(),
             nombre: "Light".into(),
             fondo: "#ffffff".into(),
             primer_plano: "#1f1f1f".into(),
@@ -73,6 +75,7 @@ impl Tema {
     /// Tema oscuro por defecto.
     pub fn oscuro() -> Self {
         Self {
+            id: "dark".into(),
             nombre: "Dark".into(),
             fondo: "#1e1e1e".into(),
             primer_plano: "#e4e4e4".into(),
@@ -96,6 +99,7 @@ impl Tema {
     /// Sepia: lectura prolongada sobre papel cálido.
     pub fn sepia() -> Self {
         Self {
+            id: "sepia".into(),
             nombre: "Sepia".into(),
             fondo: "#f5efe0".into(),
             primer_plano: "#43392a".into(),
@@ -116,10 +120,98 @@ impl Tema {
         }
     }
 
+    /// Solarized Dark, de Ethan Schoonower (paleta MIT, solarized.org).
+    pub fn solarized_dark() -> Self {
+        Self {
+            id: "solarized-dark".into(),
+            nombre: "Solarized Dark".into(),
+            fondo: "#002b36".into(),
+            primer_plano: "#839496".into(),
+            encabezado: "#93a1a1".into(),
+            acento: "#268bd2".into(),
+            atenuado: "#586e75".into(),
+            marcas: "#586e75".into(),
+            codigo: "#cb4b16".into(),
+            bloque_codigo: "#93a1a1".into(),
+            cita: "#93a1a1".into(),
+            tabla: "#93a1a1".into(),
+            borde: "#586e75".into(),
+            bloque: "#ffffff".into(),
+            bloque_alfa: 0.06,
+            barra_cita: "#586e75".into(),
+            sobre_acento: "#002b36".into(),
+            desenfocado: "#586e75".into(),
+        }
+    }
+
+    /// Gruvbox Dark, de Pavel Pertsev (paleta MIT, github.com/morhetz/gruvbox).
+    pub fn gruvbox_dark() -> Self {
+        Self {
+            id: "gruvbox-dark".into(),
+            nombre: "Gruvbox Dark".into(),
+            fondo: "#282828".into(),
+            primer_plano: "#ebdbb2".into(),
+            encabezado: "#fbf1c7".into(),
+            acento: "#83a598".into(),
+            atenuado: "#928374".into(),
+            marcas: "#928374".into(),
+            codigo: "#fe8019".into(),
+            bloque_codigo: "#ebdbb2".into(),
+            cita: "#d5c4a1".into(),
+            tabla: "#ebdbb2".into(),
+            borde: "#928374".into(),
+            bloque: "#ffffff".into(),
+            bloque_alfa: 0.07,
+            barra_cita: "#928374".into(),
+            sobre_acento: "#282828".into(),
+            desenfocado: "#665c54".into(),
+        }
+    }
+
+    /// Directorio de temas de usuario (`XDG_DATA_HOME/scribe/themes`).
+    pub fn dir_usuario() -> std::path::PathBuf {
+        let base = std::env::var_os("XDG_DATA_HOME")
+            .map(std::path::PathBuf::from)
+            .unwrap_or_else(|| glib::home_dir().join(".local").join("share"));
+        base.join("scribe").join("themes")
+    }
+
+    /// Temas de usuario: los `*.ini` del directorio, ordenados por fichero.
+    /// Cada uno hereda lo que no declare del tema base.
+    pub fn temas_de_usuario(dir: &std::path::Path, base: &Tema) -> Vec<Self> {
+        let mut salida = Vec::new();
+        let Ok(entradas) = std::fs::read_dir(dir) else {
+            return salida;
+        };
+        let mut rutas: Vec<std::path::PathBuf> = entradas
+            .flatten()
+            .map(|e| e.path())
+            .filter(|p| p.extension().map(|e| e == "ini").unwrap_or(false))
+            .collect();
+        rutas.sort();
+        for ruta in rutas {
+            if let Some(mut tema) = Tema::cargar(&ruta, base) {
+                // El id de un tema de usuario es el nombre de su fichero: es
+                // lo que guarda la preferencia `theme`.
+                tema.id = ruta
+                    .file_stem()
+                    .map(|s| s.to_string_lossy().into_owned())
+                    .unwrap_or_default();
+                salida.push(tema);
+            }
+        }
+        salida
+    }
+
     /// Temas integrados, en el orden del selector.
-    #[allow(dead_code)] // el selector de Preferencias llega en la siguiente unidad
     pub fn integrados() -> Vec<Self> {
-        vec![Self::claro(), Self::oscuro(), Self::sepia()]
+        vec![
+            Self::claro(),
+            Self::oscuro(),
+            Self::sepia(),
+            Self::solarized_dark(),
+            Self::gruvbox_dark(),
+        ]
     }
 
     /// Busca un tema integrado por id (`light`, `dark`, `sepia`).
@@ -128,6 +220,8 @@ impl Tema {
             "light" => Some(Self::claro()),
             "dark" => Some(Self::oscuro()),
             "sepia" => Some(Self::sepia()),
+            "solarized-dark" => Some(Self::solarized_dark()),
+            "gruvbox-dark" => Some(Self::gruvbox_dark()),
             _ => None,
         }
     }
@@ -232,6 +326,30 @@ mod tests {
         let tema = Tema::cargar(&dir, &Tema::oscuro()).expect("carga igual");
         assert_eq!(tema.fondo, "#101010");
         std::fs::remove_file(&dir).ok();
+    }
+
+    #[test]
+    fn temas_de_usuario_ordenados_y_completos() {
+        let dir = std::env::temp_dir().join("scribe-usuarios-test");
+        std::fs::create_dir_all(&dir).ok();
+        std::fs::write(
+            dir.join("b-mi-tema.ini"),
+            "[theme]\nname=B\nbackground=#111111\n",
+        )
+        .unwrap();
+        std::fs::write(
+            dir.join("a-otro.ini"),
+            "[theme]\nname=A\nbackground=#222222\n",
+        )
+        .unwrap();
+        std::fs::write(dir.join("no-es-tema.txt"), "x").unwrap();
+
+        let temas = Tema::temas_de_usuario(&dir, &Tema::claro());
+        assert_eq!(temas.len(), 2, "solo los .ini");
+        assert_eq!(temas[0].nombre, "A", "orden por fichero");
+        assert_eq!(temas[1].nombre, "B");
+        assert_eq!(temas[0].id, "a-otro", "el id es el nombre de fichero");
+        std::fs::remove_dir_all(&dir).ok();
     }
 
     #[test]
