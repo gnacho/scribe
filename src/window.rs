@@ -620,6 +620,12 @@ impl ScribeWindow {
             .tooltip_text(gettext("Find Next"))
             .action_name("win.find-next")
             .build();
+        // Botón para revelar la fila de reemplazar, como en gnome-text-editor:
+        // un conmutador con el icono estándar edit-find-replace-symbolic.
+        let replace_toggle = gtk4::ToggleButton::builder()
+            .icon_name("edit-find-replace-symbolic")
+            .tooltip_text(gettext("Search & Replace"))
+            .build();
         let search_box = gtk4::Box::new(gtk4::Orientation::Horizontal, 6);
         search_box.append(&search_entry);
         search_box.append(&case_toggle);
@@ -627,6 +633,7 @@ impl ScribeWindow {
         search_box.append(&search_count);
         search_box.append(&search_prev_button);
         search_box.append(&search_next_button);
+        search_box.append(&replace_toggle);
 
         // Fila de reemplazar (Ctrl+H), como en gnome-text-editor: aparece bajo
         // la de búsqueda al pedirla y se oculta al cerrar el modo.
@@ -1994,6 +2001,18 @@ impl ScribeWindow {
                     search_entry.grab_focus();
                 }
             });
+        }
+        {
+            // El conmutador con icono de la barra activa la misma acción que
+            // Ctrl+H, y su estado visual sigue a la visibilidad de la fila,
+            // así el botón y el atajo siempre coinciden.
+            let replace_box = replace_box.clone();
+            let replace_toggle = replace_toggle.clone();
+            replace_box
+                .bind_property("visible", &replace_toggle, "active")
+                .sync_create()
+                .build();
+            replace_toggle.connect_clicked(move |_| action_find_replace.activate(None));
         }
         {
             // Intros en captura: se adelantan al GtkText interno, que si no
