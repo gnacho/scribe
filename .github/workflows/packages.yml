@@ -123,16 +123,16 @@ jobs:
 
       - name: install appimagetool
         run: |
-          curl -sSL -o "$HOME/appimagetool" \
+          curl -sSL -o /tmp/appimagetool \
             https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage
-          chmod +x "$HOME/appimagetool"
+          chmod +x /tmp/appimagetool
 
       - name: build scribe
         run: cargo build --release --locked
 
       - name: build AppImage
         env:
-          APPIMAGETOOL: /home/runner/appimagetool
+          APPIMAGETOOL: /tmp/appimagetool
         run: |
           VERSION="$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -1)"
           packaging/appimage/build-appimage.sh "target/release/scribe" "$VERSION"
