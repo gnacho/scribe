@@ -85,6 +85,15 @@ fn decidir_recarga(
     }
 }
 
+/// Decide si cerrar un documento pide confirmación «Guardar/Descartar/
+/// Cancelar». Un borrador sin título cuyo buffer está vacío no tiene nada
+/// que perder: cierra directamente aunque el flag de modificado siga activo
+/// (p. ej. el usuario escribió y borró todo). Pura (sin GTK) para poder
+/// probarla en unit tests.
+fn requiere_confirmacion_cierre(modificado: bool, tiene_fichero: bool, buffer_vacio: bool) -> bool {
+    modificado && (tiene_fichero || !buffer_vacio)
+}
+
 /// Visibilidad de la barra de pestañas (issue #26): se oculta mientras haya
 /// un único documento, de modo que la ventana se lea como un documento
 /// simple, y se muestra a partir de dos pestañas.
@@ -2211,7 +2220,11 @@ impl ScribeWindow {
                 let Some(doc) = docs.borrow().iter().find(|d| &d.page == page).cloned() else {
                     return glib::Propagation::Proceed;
                 };
-                if !doc.is_modified.get() {
+                if !requiere_confirmacion_cierre(
+                    doc.is_modified.get(),
+                    doc.current_file.borrow().is_some(),
+                    doc.editor.text().is_empty(),
+                ) {
                     finish_close(page, true);
                     return glib::Propagation::Stop;
                 }
@@ -2419,7 +2432,13 @@ impl ScribeWindow {
                 let modified: Vec<Rc<Document>> = docs
                     .borrow()
                     .iter()
-                    .filter(|d| d.is_modified.get())
+                    .filter(|d| {
+                        requiere_confirmacion_cierre(
+                            d.is_modified.get(),
+                            d.current_file.borrow().is_some(),
+                            d.editor.text().is_empty(),
+                        )
+                    })
                     .cloned()
                     .rev()
                     .collect();
@@ -2521,6 +2540,16 @@ impl ScribeWindow {
     pub fn document_count(&self) -> usize {
         self.documents.borrow().len()
     }
+
+    /// Buffer del documento activo (smoke tests; el binario no lo usa).
+    #[allow(dead_code)]
+    pub fn active_buffer(&self) -> Option<gtksourceview5::Buffer> {
+        self.documents
+            .borrow()
+            .iter()
+            .find(|d| self.tab_view.selected_page().as_ref() == Some(&d.page))
+            .map(|d| d.editor.buffer())
+    }
 }
 
 #[cfg(test)]
@@ -2567,5 +2596,30 @@ mod tests {
             decidir_recarga(false, true, false),
             AccionRecarga::MantenerSinFichero
         );
+    }
+
+    #[test]
+    fn cierre_borrador_vacio_no_pregunta() {
+        // Borrador sin título con el buffer vacío: no hay nada que perder, se
+        // cierra directamente aunque el flag de modificado siga activo (issue
+        // #101: escribir y borrar todo no debe pedir confirmación).
+        assert!(!requiere_confirmacion_cierre(true, false, true));
+        assert!(!requiere_confirmacion_cierre(false, false, true));
+    }
+
+    #[test]
+    fn cierre_borrador_con_texto_pregunta() {
+        // Borrador sin título con contenido: perdería texto, confirmar.
+        assert!(requiere_confirmacion_cierre(true, false, false));
+    }
+
+    #[test]
+    fn cierre_fichero_modificado_pregunta() {
+        // Documento con fichero: el vaciado del buffer es un cambio real
+        // sobre el fichero en disco; confirmar. Limpio: cerrar directo.
+        assert!(requiere_confirmacion_cierre(true, true, true));
+        assert!(requiere_confirmacion_cierre(true, true, false));
+        assert!(!requiere_confirmacion_cierre(false, true, true));
+        assert!(!requiere_confirmacion_cierre(false, true, false));
     }
 }

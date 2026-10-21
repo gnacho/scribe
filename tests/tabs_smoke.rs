@@ -238,3 +238,94 @@ fn ciclo_de_vida_de_pestanas() {
 
     std::fs::remove_dir_all(&dir).ok();
 }
+
+/// Issue #101: un borrador sin título cuyo buffer está vacío se cierra sin
+/// el diálogo «Guardar/Descartar/Cancelar», aunque el flag de modificado
+/// siga activo (escribir y borrar todo). Con un diálogo pendiente la
+/// pestaña seguiría abierta, así que page_count discrimina el resultado.
+#[test]
+#[ignore = "requiere display: xvfb-run -a cargo test --test tabs_smoke -- --ignored --nocapture"]
+fn cierre_borrador_vacio_sin_dialogo() {
+    gtk4::init().expect("GTK necesita un display; ejecuta bajo xvfb-run");
+    libadwaita::init().expect("libadwaita init");
+
+    let app = libadwaita::Application::builder()
+        .application_id("app.scribe.Scribe.UntitledCloseSmoke")
+        .build();
+    app.register(gtk4::gio::Cancellable::NONE)
+        .expect("registrar la app de test");
+
+    let settings = Rc::new(AppSettings::new());
+    let win = ScribeWindow::new(&app, &settings);
+    win.present();
+
+    let ctx = gtk4::glib::MainContext::default();
+    pump(&ctx, 300);
+
+    // Un documento con fichero (la primera apertura reutiliza la pestaña
+    // virgen del arranque) y un borrador sin título: dos pestañas.
+    let dir = std::env::temp_dir().join("scribe-untitled-close-smoke");
+    std::fs::create_dir_all(&dir).expect("crear dir temporal");
+    let path = dir.join("alfa.md");
+    std::fs::write(&path, "# Alfa\n\ncontenido de prueba\n").expect("escribir doc de prueba");
+    win.open_path(&path);
+    pump(&ctx, 150);
+    assert_eq!(
+        win.page_count(),
+        1,
+        "la apertura reutiliza la pestaña virgen"
+    );
+
+    act(&win.window, "win.new-document", None).expect("activar win.new-document");
+    pump(&ctx, 150);
+    assert_eq!(win.page_count(), 2, "borrador nuevo en segunda pestaña");
+
+    // Escribir en el borrador activo…
+    let buffer = win.active_buffer().expect("buffer del borrador activo");
+    assert_eq!(buffer.char_count(), 0, "el borrador nuevo está vacío");
+    let mut iter = buffer.end_iter();
+    buffer.insert(&mut iter, "escrito y borrado\n");
+    pump(&ctx, 150);
+    let title = win
+        .window
+        .title()
+        .map(|t| t.to_string())
+        .unwrap_or_default();
+    assert!(
+        title.starts_with('•'),
+        "escribir marca el título con «• »: {title}"
+    );
+
+    // …y borrarlo todo: el buffer queda vacío pero el documento sigue
+    // marcado como modificado (el flag no se reevalúa al borrar).
+    let mut start = buffer.start_iter();
+    let mut end = buffer.end_iter();
+    buffer.delete(&mut start, &mut end);
+    pump(&ctx, 150);
+    assert_eq!(buffer.char_count(), 0, "el buffer quedó vacío");
+
+    // Cerrar el borrador: al estar vacío no hay nada que perder y cierra
+    // directamente; si apareciera el diálogo la pestaña seguiría abierta.
+    act(&win.window, "win.close-tab", None).expect("cerrar el borrador");
+    pump(&ctx, 150);
+    assert_eq!(
+        win.page_count(),
+        1,
+        "el borrador vacío cierra sin diálogo (issue #101)"
+    );
+    assert_eq!(win.document_count(), 1);
+    let title = win
+        .window
+        .title()
+        .map(|t| t.to_string())
+        .unwrap_or_default();
+    assert!(
+        title.contains("alfa.md"),
+        "queda el documento con fichero: {title}"
+    );
+
+    win.window.close();
+    pump(&ctx, 100);
+
+    std::fs::remove_dir_all(&dir).ok();
+}
