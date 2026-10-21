@@ -107,6 +107,10 @@ msgstr ""
 msgid "Find Next"
 msgstr ""
 
+#: src/window.rs:627
+msgid "Search & Replace"
+msgstr ""
+
 #: src/window.rs:633 src/shortcuts.ui:102
 msgid "Replace"
 msgstr ""
