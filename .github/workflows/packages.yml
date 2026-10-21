@@ -96,6 +96,52 @@ jobs:
           name: scribe-rpm
           path: target/generate-rpm/*.rpm
 
+  appimage:
+    name: AppImage (Ubuntu 24.04)
+    runs-on: ubuntu-latest
+    container: ubuntu:24.04
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: install build deps
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends \
+            build-essential curl ca-certificates pkg-config gettext file \
+            libgtk-4-dev libadwaita-1-dev libgtksourceview-5-dev \
+            libenchant-2-dev libgdk-pixbuf-2.0-dev libgdk-pixbuf2.0-bin libpixman-1-dev
+
+      - name: install rustup
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
+            | sh -s -- -y --default-toolchain stable --profile minimal
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+
+      - uses: swatinem/rust-cache@v2
+        with:
+          key: appimage
+
+      - name: install appimagetool
+        run: |
+          curl -sSL -o /tmp/appimagetool \
+            https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage
+          chmod +x /tmp/appimagetool
+
+      - name: build scribe
+        run: cargo build --release --locked
+
+      - name: build AppImage
+        env:
+          APPIMAGETOOL: /tmp/appimagetool
+        run: |
+          VERSION="$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -1)"
+          packaging/appimage/build-appimage.sh "target/release/scribe" "$VERSION"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: scribe-appimage
+          path: target/appimage/Scribe-*-x86_64.AppImage
+
   release:
     name: attach packages to the release
     if: startsWith(github.ref, 'refs/tags/v')
@@ -110,4 +156,4 @@ jobs:
       - name: upload packages
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh release upload "$GITHUB_REF_NAME" dist/*.deb dist/*.rpm --clobber
+        run: gh release upload "$GITHUB_REF_NAME" dist/*.deb dist/*.rpm dist/*.AppImage --clobber

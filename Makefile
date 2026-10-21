@@ -33,7 +33,7 @@ TARGET_DIR := target
 endif
 BIN := $(TARGET_DIR)/release/scribe
 
-.PHONY: all build check install
+.PHONY: all build check install appimage
 
 all: build
 
@@ -60,3 +60,9 @@ install: build
 	for icon in data/icons/hicolor/scalable/actions/*.svg; do \
 		install -Dm644 "$$icon" "$(ICONDIR)/scalable/actions/$$(basename "$$icon")"; \
 	done
+
+# AppImage para uso fuera de la distro de compilación. Necesita appimagetool
+# en el PATH o en APPIMAGETOOL (ver packaging/appimage/build-appimage.sh).
+appimage: build
+	VERSION="$$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -1)"; \
+	packaging/appimage/build-appimage.sh "$(BIN)" "$$VERSION"
