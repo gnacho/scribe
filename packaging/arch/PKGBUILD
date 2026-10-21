@@ -1,0 +1,40 @@
+# Maintainer: gnacho <vnacho@proton.me>
+
+pkgname=scribe
+pkgver=0.3.16
+pkgrel=1
+pkgdesc="A lightweight, native GNOME Markdown editor with live preview"
+arch=(x86_64)
+url="https://github.com/gnacho/scribe"
+license=(AGPL-3.0-or-later)
+depends=(gtk4 libadwaita gtksourceview5 enchant gdk-pixbuf2 glib2 hicolor-icon-theme)
+makedepends=(cargo gettext)
+source=("$pkgname-$pkgver.tar.gz::https://github.com/gnacho/scribe/archive/refs/tags/v$pkgver.tar.gz")
+sha256sums=('4fcaeea793c75e00b040033164c54c8f0bf56f5e388faafef4b0b3fdb66835ca')
+
+prepare() {
+	cd "$pkgname-$pkgver"
+	export CARGO_HOME="$srcdir/cargo-home"
+	cargo fetch --locked --target "$CARCH-unknown-linux-gnu"
+}
+
+build() {
+	cd "$pkgname-$pkgver"
+	export CARGO_HOME="$srcdir/cargo-home"
+	export CARGO_TARGET_DIR="$srcdir/target"
+	cargo build --release --frozen
+	msgfmt po/es.po -o scribe.mo
+}
+
+package() {
+	cd "$pkgname-$pkgver"
+	install -Dm755 "$srcdir/target/release/scribe" "$pkgdir/usr/bin/scribe"
+	install -Dm644 data/app.scribe.Scribe.gschema.xml "$pkgdir/usr/share/glib-2.0/schemas/app.scribe.Scribe.gschema.xml"
+	install -Dm644 data/app.scribe.Scribe.desktop "$pkgdir/usr/share/applications/app.scribe.Scribe.desktop"
+	install -Dm644 data/app.scribe.Scribe.metainfo.xml "$pkgdir/usr/share/metainfo/app.scribe.Scribe.metainfo.xml"
+	install -Dm644 data/icons/hicolor/scalable/apps/app.scribe.Scribe.svg "$pkgdir/usr/share/icons/hicolor/scalable/apps/app.scribe.Scribe.svg"
+	install -Dm644 data/icons/hicolor/scalable/actions/scribe-preview-off-symbolic.svg "$pkgdir/usr/share/icons/hicolor/scalable/actions/scribe-preview-off-symbolic.svg"
+	install -Dm644 data/icons/hicolor/scalable/actions/scribe-preview-on-symbolic.svg "$pkgdir/usr/share/icons/hicolor/scalable/actions/scribe-preview-on-symbolic.svg"
+	install -Dm644 scribe.mo "$pkgdir/usr/share/locale/es/LC_MESSAGES/scribe.mo"
+	install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+}

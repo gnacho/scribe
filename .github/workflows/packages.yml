@@ -1,0 +1,113 @@
+name: packages
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  deb:
+    name: .deb (Debian trixie)
+    runs-on: ubuntu-latest
+    container: debian:trixie
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: install build deps
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends \
+            build-essential curl ca-certificates pkg-config gettext \
+            libgtk-4-dev libadwaita-1-dev libgtksourceview-5-dev \
+            libenchant-2-dev libgdk-pixbuf-2.0-dev
+
+      - name: install rustup
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
+            | sh -s -- -y --default-toolchain stable --profile minimal
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+
+      - uses: swatinem/rust-cache@v2
+        with:
+          key: deb
+
+      - name: build scribe
+        run: cargo build --release --locked
+
+      - name: build spanish translation
+        run: |
+          mkdir -p target/scribe-locale/es/LC_MESSAGES
+          msgfmt po/es.po -o target/scribe-locale/es/LC_MESSAGES/scribe.mo
+
+      - name: install cargo-deb
+        run: cargo install cargo-deb --locked
+
+      - name: build .deb
+        run: cargo deb
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: scribe-deb
+          path: target/debian/*.deb
+
+  rpm:
+    name: .rpm (Fedora latest)
+    runs-on: ubuntu-latest
+    container: fedora:latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: install build deps
+        run: |
+          dnf install -y gcc make curl pkgconf-pkg-config gettext \
+            gtk4-devel libadwaita-devel gtksourceview5-devel \
+            enchant2-devel gdk-pixbuf2-devel
+
+      - name: install rustup
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
+            | sh -s -- -y --default-toolchain stable --profile minimal
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+
+      - uses: swatinem/rust-cache@v2
+        with:
+          key: rpm
+
+      - name: build scribe
+        run: cargo build --release --locked
+
+      - name: build spanish translation
+        run: |
+          mkdir -p target/scribe-locale/es/LC_MESSAGES
+          msgfmt po/es.po -o target/scribe-locale/es/LC_MESSAGES/scribe.mo
+
+      - name: install cargo-generate-rpm
+        run: cargo install cargo-generate-rpm --locked
+
+      - name: build .rpm
+        run: cargo generate-rpm
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: scribe-rpm
+          path: target/generate-rpm/*.rpm
+
+  release:
+    name: attach packages to the release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [deb, rpm]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: upload packages
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release upload "$GITHUB_REF_NAME" dist/*.deb dist/*.rpm --clobber

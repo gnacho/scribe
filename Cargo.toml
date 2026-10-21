@@ -18,3 +18,81 @@ gdk4 = "0.9"
 gdk-pixbuf = "0.20"
 pulldown-cmark = "0.12"
 gettext-rs = { version = "0.8", features = ["gettext-system"] }
+
+# .deb (cargo-deb) and .rpm (cargo-generate-rpm) metadata. Built by the
+# "packages" workflow on debian:trixie and fedora:latest; do not build these
+# on other distros, the linked libraries and the auto-generated dependencies
+# would not match the target.
+[package.metadata.deb]
+maintainer = "gnacho"
+copyright = "2017-2026, gnacho"
+license-file = ["LICENSE", "0"]
+section = "editors"
+priority = "optional"
+assets = [
+    ["target/release/scribe", "usr/bin/", "755"],
+    ["data/app.scribe.Scribe.desktop", "usr/share/applications/", "644"],
+    ["data/app.scribe.Scribe.metainfo.xml", "usr/share/metainfo/", "644"],
+    ["data/app.scribe.Scribe.gschema.xml", "usr/share/glib-2.0/schemas/", "644"],
+    ["data/icons/hicolor/scalable/apps/app.scribe.Scribe.svg", "usr/share/icons/hicolor/scalable/apps/", "644"],
+    ["data/icons/hicolor/scalable/actions/scribe-preview-off-symbolic.svg", "usr/share/icons/hicolor/scalable/actions/", "644"],
+    ["data/icons/hicolor/scalable/actions/scribe-preview-on-symbolic.svg", "usr/share/icons/hicolor/scalable/actions/", "644"],
+    ["target/scribe-locale/es/LC_MESSAGES/scribe.mo", "usr/share/locale/es/LC_MESSAGES/", "644"],
+]
+
+[package.metadata.generate-rpm]
+name = "scribe"
+license = "AGPL-3.0-or-later"
+summary = "A lightweight, native GNOME Markdown editor with live preview"
+url = "https://github.com/gnacho/scribe"
+
+[package.metadata.generate-rpm.requires]
+gtk4 = "*"
+libadwaita = "*"
+gtksourceview5 = "*"
+enchant2 = "*"
+
+[[package.metadata.generate-rpm.assets]]
+source = "target/release/scribe"
+dest = "/usr/bin/scribe"
+mode = "755"
+
+[[package.metadata.generate-rpm.assets]]
+source = "data/app.scribe.Scribe.desktop"
+dest = "/usr/share/applications/app.scribe.Scribe.desktop"
+mode = "644"
+
+[[package.metadata.generate-rpm.assets]]
+source = "data/app.scribe.Scribe.metainfo.xml"
+dest = "/usr/share/metainfo/app.scribe.Scribe.metainfo.xml"
+mode = "644"
+
+[[package.metadata.generate-rpm.assets]]
+source = "data/app.scribe.Scribe.gschema.xml"
+dest = "/usr/share/glib-2.0/schemas/app.scribe.Scribe.gschema.xml"
+mode = "644"
+
+[[package.metadata.generate-rpm.assets]]
+source = "data/icons/hicolor/scalable/apps/app.scribe.Scribe.svg"
+dest = "/usr/share/icons/hicolor/scalable/apps/app.scribe.Scribe.svg"
+mode = "644"
+
+[[package.metadata.generate-rpm.assets]]
+source = "data/icons/hicolor/scalable/actions/scribe-preview-off-symbolic.svg"
+dest = "/usr/share/icons/hicolor/scalable/actions/scribe-preview-off-symbolic.svg"
+mode = "644"
+
+[[package.metadata.generate-rpm.assets]]
+source = "data/icons/hicolor/scalable/actions/scribe-preview-on-symbolic.svg"
+dest = "/usr/share/icons/hicolor/scalable/actions/scribe-preview-on-symbolic.svg"
+mode = "644"
+
+[[package.metadata.generate-rpm.assets]]
+source = "target/scribe-locale/es/LC_MESSAGES/scribe.mo"
+dest = "/usr/share/locale/es/LC_MESSAGES/scribe.mo"
+mode = "644"
+
+[[package.metadata.generate-rpm.assets]]
+source = "LICENSE"
+dest = "/usr/share/licenses/scribe/LICENSE"
+doc = true
