@@ -535,7 +535,7 @@ fn tema_sepia_aplica_sus_colores() {
     std::fs::create_dir_all(xdg.join("glib-2.0/settings")).ok();
     std::fs::write(
         xdg.join("glib-2.0/settings/keyfile"),
-        "[app/scribe/Scribe]\ntheme=\"sepia\"\n",
+        "[io/github/gnacho/Scribe]\ntheme=\"sepia\"\n",
     )
     .ok();
     // Sin poder re-dirigir el backend del proceso, se fija la propiedad
