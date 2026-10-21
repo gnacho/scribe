@@ -31,10 +31,10 @@ section = "editors"
 priority = "optional"
 assets = [
     ["target/release/scribe", "usr/bin/", "755"],
-    ["data/app.scribe.Scribe.desktop", "usr/share/applications/", "644"],
-    ["data/app.scribe.Scribe.metainfo.xml", "usr/share/metainfo/", "644"],
-    ["data/app.scribe.Scribe.gschema.xml", "usr/share/glib-2.0/schemas/", "644"],
-    ["data/icons/hicolor/scalable/apps/app.scribe.Scribe.svg", "usr/share/icons/hicolor/scalable/apps/", "644"],
+    ["data/io.github.gnacho.Scribe.desktop", "usr/share/applications/", "644"],
+    ["data/io.github.gnacho.Scribe.metainfo.xml", "usr/share/metainfo/", "644"],
+    ["data/io.github.gnacho.Scribe.gschema.xml", "usr/share/glib-2.0/schemas/", "644"],
+    ["data/icons/hicolor/scalable/apps/io.github.gnacho.Scribe.svg", "usr/share/icons/hicolor/scalable/apps/", "644"],
     ["data/icons/hicolor/scalable/actions/scribe-preview-off-symbolic.svg", "usr/share/icons/hicolor/scalable/actions/", "644"],
     ["data/icons/hicolor/scalable/actions/scribe-preview-on-symbolic.svg", "usr/share/icons/hicolor/scalable/actions/", "644"],
     ["target/scribe-locale/es/LC_MESSAGES/scribe.mo", "usr/share/locale/es/LC_MESSAGES/", "644"],
@@ -58,23 +58,23 @@ dest = "/usr/bin/scribe"
 mode = "755"
 
 [[package.metadata.generate-rpm.assets]]
-source = "data/app.scribe.Scribe.desktop"
-dest = "/usr/share/applications/app.scribe.Scribe.desktop"
+source = "data/io.github.gnacho.Scribe.desktop"
+dest = "/usr/share/applications/io.github.gnacho.Scribe.desktop"
 mode = "644"
 
 [[package.metadata.generate-rpm.assets]]
-source = "data/app.scribe.Scribe.metainfo.xml"
-dest = "/usr/share/metainfo/app.scribe.Scribe.metainfo.xml"
+source = "data/io.github.gnacho.Scribe.metainfo.xml"
+dest = "/usr/share/metainfo/io.github.gnacho.Scribe.metainfo.xml"
 mode = "644"
 
 [[package.metadata.generate-rpm.assets]]
-source = "data/app.scribe.Scribe.gschema.xml"
-dest = "/usr/share/glib-2.0/schemas/app.scribe.Scribe.gschema.xml"
+source = "data/io.github.gnacho.Scribe.gschema.xml"
+dest = "/usr/share/glib-2.0/schemas/io.github.gnacho.Scribe.gschema.xml"
 mode = "644"
 
 [[package.metadata.generate-rpm.assets]]
-source = "data/icons/hicolor/scalable/apps/app.scribe.Scribe.svg"
-dest = "/usr/share/icons/hicolor/scalable/apps/app.scribe.Scribe.svg"
+source = "data/icons/hicolor/scalable/apps/io.github.gnacho.Scribe.svg"
+dest = "/usr/share/icons/hicolor/scalable/apps/io.github.gnacho.Scribe.svg"
 mode = "644"
 
 [[package.metadata.generate-rpm.assets]]

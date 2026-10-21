@@ -540,7 +540,7 @@ fn tema_sepia_aplica_sus_colores() {
     .ok();
     // Sin poder re-dirigir el backend del proceso, se fija la propiedad
     // directamente sobre el esquema instalado y se restaura al terminar.
-    let ajustes = gio::Settings::new("app.scribe.Scribe");
+    let ajustes = gio::Settings::new("io.github.gnacho.Scribe");
     let previo = ajustes.string("theme").to_string();
     ajustes.set_string("theme", "sepia").unwrap();
     let editor = Editor::new();

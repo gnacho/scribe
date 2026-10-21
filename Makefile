@@ -50,10 +50,10 @@ check:
 #   msgfmt po/es.po -o ~/.local/share/locale/es/LC_MESSAGES/scribe.mo
 install: build
 	install -Dm755 "$(BIN)" "$(BINDIR)/scribe"
-	install -Dm644 data/app.scribe.Scribe.gschema.xml "$(SCHEMADIR)/app.scribe.Scribe.gschema.xml"
+	install -Dm644 data/io.github.gnacho.Scribe.gschema.xml "$(SCHEMADIR)/io.github.gnacho.Scribe.gschema.xml"
 	glib-compile-schemas "$(SCHEMADIR)"
-	install -Dm644 data/app.scribe.Scribe.desktop "$(APPDIR)/app.scribe.Scribe.desktop"
-	install -Dm644 data/icons/hicolor/scalable/apps/app.scribe.Scribe.svg "$(ICONDIR)/scalable/apps/app.scribe.Scribe.svg"
+	install -Dm644 data/io.github.gnacho.Scribe.desktop "$(APPDIR)/io.github.gnacho.Scribe.desktop"
+	install -Dm644 data/icons/hicolor/scalable/apps/io.github.gnacho.Scribe.svg "$(ICONDIR)/scalable/apps/io.github.gnacho.Scribe.svg"
 	# Los simbólicos van a scalable/actions: el index.theme de hicolor declara
 	# scalable/* pero no symbolic/*, así que una carpeta symbolic propia aquí
 	# nunca se escanea.

@@ -106,6 +106,32 @@
     {
         "type": "archive",
         "archive-type": "tar-gzip",
+        "url": "https://static.crates.io/crates/enchant/enchant-0.3.0.crate",
+        "sha256": "dafd018f9ff5933b0cf9d89a095c31125890f2246952749cbaad230b537644db",
+        "dest": "cargo/vendor/enchant-0.3.0"
+    },
+    {
+        "type": "inline",
+        "contents": "{\"package\": \"dafd018f9ff5933b0cf9d89a095c31125890f2246952749cbaad230b537644db\", \"files\": {}}",
+        "dest": "cargo/vendor/enchant-0.3.0",
+        "dest-filename": ".cargo-checksum.json"
+    },
+    {
+        "type": "archive",
+        "archive-type": "tar-gzip",
+        "url": "https://static.crates.io/crates/enchant-sys/enchant-sys-0.2.1.crate",
+        "sha256": "97af59f7a6d8a217695598f23dc12051734322e60b58e5ca2f3a2fffa59ba34f",
+        "dest": "cargo/vendor/enchant-sys-0.2.1"
+    },
+    {
+        "type": "inline",
+        "contents": "{\"package\": \"97af59f7a6d8a217695598f23dc12051734322e60b58e5ca2f3a2fffa59ba34f\", \"files\": {}}",
+        "dest": "cargo/vendor/enchant-sys-0.2.1",
+        "dest-filename": ".cargo-checksum.json"
+    },
+    {
+        "type": "archive",
+        "archive-type": "tar-gzip",
         "url": "https://static.crates.io/crates/equivalent/equivalent-1.0.2.crate",
         "sha256": "877a4ace8713b0bcf2a4e7eec82529c029f1d0619886d18145fea96c3ffe5c0f",
         "dest": "cargo/vendor/equivalent-1.0.2"

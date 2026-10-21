@@ -90,7 +90,7 @@ fn ciclo_de_vida_de_pestanas() {
     // Sin GSETTINGS_SCHEMA_DIR el esquema no se encuentra y AppSettings
     // trabaja con los valores por defecto: el test no toca el dconf real.
     let app = libadwaita::Application::builder()
-        .application_id("app.scribe.Scribe.TabsSmoke")
+        .application_id("io.github.gnacho.Scribe.TabsSmoke")
         .build();
     app.register(gtk4::gio::Cancellable::NONE)
         .expect("registrar la app de test");

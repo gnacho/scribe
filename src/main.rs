@@ -26,7 +26,7 @@ mod window;
 use settings::AppSettings;
 use window::ScribeWindow;
 
-const APP_ID: &str = "app.scribe.Scribe";
+const APP_ID: &str = "io.github.gnacho.Scribe";
 const GETTEXT_DOMAIN: &str = "scribe";
 
 /// Locale dir relative to the binary: <prefix>/bin/scribe -> <prefix>/share/locale.

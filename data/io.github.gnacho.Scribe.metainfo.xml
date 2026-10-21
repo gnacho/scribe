@@ -1,0 +1,149 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>io.github.gnacho.Scribe</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>AGPL-3.0-or-later</project_license>
+  <name>Scribe</name>
+  <summary>Markdown editor with live rendering</summary>
+  <summary xml:lang="es">Editor Markdown con vista en vivo</summary>
+  <description>
+    <p>Scribe is a native GNOME Markdown editor that renders the document as you type: the text is decorated in place, with no separate preview pane to switch to. It is written in Rust on GTK 4 and libadwaita.</p>
+    <p>Features:</p>
+    <ul>
+      <li>Markdown editing with syntax highlighting</li>
+      <li>Live in-place rendering of headings, tables, quotes, lists and code blocks</li>
+      <li>Multiple documents in tabs, with a list of recent files</li>
+      <li>Light and dark themes that follow the system</li>
+      <li>Spell checking with suggestions from the context menu</li>
+      <li>Find and replace, with regular expressions and case sensitivity</li>
+      <li>Export to PDF</li>
+      <li>Draft recovery and automatic reload when the file changes on disk</li>
+    </ul>
+    <p xml:lang="es">Scribe es un editor Markdown nativo de GNOME que genera la previsualizacion mientras escribes: el documento se decora en vivo a medida que tecleas, sin cambiar de vista. Escrito en Rust sobre GTK 4 y libadwaita.</p>
+    <p xml:lang="es">Incluye edicion Markdown con resaltado de sintaxis, render en vivo de titulos, tablas, citas, listas y bloques de codigo, varios documentos en pestanas con lista de ficheros recientes, temas claro y oscuro que siguen al sistema, corrector ortografico con sugerencias en el menu contextual, buscar y reemplazar con expresiones regulares, exportacion a PDF, recuperacion de borradores y recarga automatica si el fichero cambia en disco.</p>
+  </description>
+  <launchable type="desktop-id">io.github.gnacho.Scribe.desktop</launchable>
+  <url type="homepage">https://github.com/gnacho/scribe</url>
+  <url type="bugtracker">https://github.com/gnacho/scribe/issues</url>
+  <url type="vcs-browser">https://github.com/gnacho/scribe</url>
+  <developer id="io.github.gnacho">
+    <name>gnacho</name>
+  </developer>
+  <screenshots>
+    <screenshot type="default">
+      <image>https://raw.githubusercontent.com/gnacho/scribe/master/assets/hero-en-light.png</image>
+      <caption>Writing prose with spell checking enabled</caption>
+      <caption xml:lang="es">Escritura de prosa con el corrector ortografico activo</caption>
+    </screenshot>
+    <screenshot>
+      <image>https://raw.githubusercontent.com/gnacho/scribe/master/assets/screenshot-split-en-light.png</image>
+      <caption>Editor and preview side by side</caption>
+      <caption xml:lang="es">Editor y previsualizacion lado a lado</caption>
+    </screenshot>
+    <screenshot>
+      <image>https://raw.githubusercontent.com/gnacho/scribe/master/assets/screenshot-focus-en-light.png</image>
+      <caption>Focus mode: only the paragraph being edited stays bright</caption>
+      <caption xml:lang="es">Modo foco: solo se ilumina el parrafo en edicion</caption>
+    </screenshot>
+    <screenshot>
+      <image>https://raw.githubusercontent.com/gnacho/scribe/master/assets/screenshot-find-en-light.png</image>
+      <caption>Searching the document, with a match counter</caption>
+      <caption xml:lang="es">Busqueda en el documento con contador de coincidencias</caption>
+    </screenshot>
+  </screenshots>
+  <content_rating type="oars-1.1" />
+  <releases>
+    <release version="0.3.16" date="2026-10-19">
+      <description>
+        <p>Spell checking gets its context menu: right-clicking a misspelled word offers up to six dictionary suggestions, ignoring it for the session or adding it to the personal dictionary.</p>
+        <p>Task list checkboxes are toggled with a click, and syntax marks are only shown on the line you are editing, so the rest of the document reads clean.</p>
+        <p>Native view themes: light, dark, sepia, Solarized dark and Gruvbox dark, with the document background painted by the theme itself. Side margins are capped on wide screens and painted tables add breathing room between text and rules.</p>
+        <p xml:lang="es">El corrector ortografico gana su menu contextual: clic derecho sobre una palabra mal escrita ofrece hasta seis sugerencias del diccionario, ignorarla durante la sesion o anadirla al diccionario personal.</p>
+        <p xml:lang="es">Las casillas de las listas de tareas se marcan con un clic y las marcas de sintaxis solo se muestran en la linea que estas editando: el resto del documento se lee limpio.</p>
+        <p xml:lang="es">Temas nativos de la vista: claro, oscuro, sepia, Solarized oscuro y Gruvbox oscuro, con el fondo del documento pintado de verdad por el tema. Los margenes laterales se acotan en pantallas anchas y las tablas pintadas dan aire entre el texto y sus lineas.</p>
+      </description>
+    </release>
+    <release version="0.3.14" date="2026-10-19">
+      <description>
+        <p>Spell checking: words the system dictionary does not recognise are underlined as you type, and it can be turned off in Preferences. Syntax marks are only shown on the cursor line and the rest of the text reads clean.</p>
+        <p>Text makes better use of wide windows, painted tables add breathing room between text and rules, and task list checkboxes are toggled with a click. Opening a document no longer shows the width reflow.</p>
+        <p xml:lang="es">Corrector ortografico: las palabras que el diccionario del sistema no valida se subrayan al escribir; se puede apagar en Preferencias. Las marcas de sintaxis solo se muestran en la linea del cursor y el resto del texto se lee limpio.</p>
+        <p xml:lang="es">El texto aprovecha mejor las ventanas anchas (los margenes laterales dejan de crecer sin limite), las tablas pintadas dan aire entre el texto y sus lineas, y las casillas de las listas de tareas se marcan con un clic. El arranque con un documento ya no muestra el reajuste de ancho.</p>
+      </description>
+    </release>
+    <release version="0.3.12" date="2026-10-18">
+      <description>
+        <p>Split view from the header, colour schemes (follow the system, light, dark) in the menu, and a search bar with a match counter (Ctrl+F).</p>
+        <p>Markdown: images with a URL are downloaded and cached on disk to be painted, a YouTube video on its own line is drawn as a 16:9 card with its thumbnail, and Ctrl+click on a link opens it with the default application.</p>
+        <p>Tables: columns are measured from the delimiter row and the cursor row is shown in its source form for editing. Fixed the abort when starting under Wayland with GTK 4.22.5 and later. PDF export, automatic file reload and draft recovery.</p>
+        <p>New icon: a notepad with a fountain pen. The status bar is removed and the menu is tidied up (the Ctrl+Shift+P, Ctrl+Alt+T and Ctrl+Alt+F shortcuts are kept).</p>
+        <p xml:lang="es">Vista dividida desde la cabecera, esquemas de color (seguir el sistema, claro, oscuro) en el menu y barra de buscar con contador de coincidencias (Ctrl+F).</p>
+        <p xml:lang="es">Markdown: las imagenes con URL se descargan y se cachean en disco para pintarlas, un video de YouTube solo en su linea se dibuja como tarjeta 16:9 con su miniatura y Ctrl+clic en un enlace lo abre con la aplicacion predeterminada.</p>
+        <p xml:lang="es">Tablas: las columnas se miden desde la fila de guiones y la fila del cursor se muestra en su fuente para editarla. Arreglado el aborto al arrancar en Wayland con GTK 4.22.5 y posteriores. Exportacion a PDF, recarga automatica del fichero y recuperacion del borrador.</p>
+        <p xml:lang="es">Icono nuevo: un portanotas con una pluma estilografica. Se elimina la barra de estado y el menu se depura (los atajos Ctrl+Shift+P, Ctrl+Alt+T y Ctrl+Alt+F se conservan).</p>
+      </description>
+    </release>
+    <release version="0.3.10" date="2026-09-19">
+      <description>
+        <p>Interface translated with gettext: English source strings and a complete Spanish catalogue, with Scribe following the system language. Built-in templates are created in the current language and the shortcuts window is translated.</p>
+        <p>Unclosed code fences are detected and can be closed: a note in the status bar ("Fence open (line N)") and an action (Ctrl+Alt+F) that closes them heuristically, undoable with Ctrl+Z.</p>
+        <p xml:lang="es">Interfaz traducida con gettext: cadenas fuente en ingles y catalogo completo en espanol, con Scribe en el idioma del sistema. Las plantillas integradas se crean en el idioma actual y la ventana de atajos se traduce.</p>
+        <p xml:lang="es">Deteccion y cierre de vallas de codigo sin cerrar: aviso en la barra de estado ("Valla abierta (linea N)") y accion (Ctrl+Alt+F) que las cierra con heuristica, deshacible con Ctrl+Z.</p>
+      </description>
+    </release>
+    <release version="0.3.8" date="2026-08-22">
+      <description>
+        <p>The table box and header rule now hug the actual content (the phantom column and the margin-to-margin line are gone), and cells with an escaped pipe show only "|".</p>
+        <p xml:lang="es">La caja de las tablas y la regla de cabecera abrazan ahora el contenido real (desaparece la "columna fantasma" y la linea que cruzaba de margen a margen), y las celdas con pipe escapado muestran solo "|".</p>
+      </description>
+    </release>
+    <release version="0.3.6" date="2026-08-22">
+      <description>
+        <p>Real multi-document tabs (AdwTabView/AdwTabBar): each document has its own editor, undo history and state, with deduplication by path, Save/Discard/Cancel dialogs and per-document autosave. Also fixes the background box disappearing halfway through long code blocks.</p>
+        <p xml:lang="es">Pestanas reales multi-documento (AdwTabView/AdwTabBar): cada documento tiene editor, undo y estado propios, con dedupe por ruta, dialogos Guardar/Descartar/Cancelar y autoguardado por documento. Tambien se corrige la caja de fondo que desaparecia a mitad de los bloques de codigo largos.</p>
+      </description>
+    </release>
+    <release version="0.3.4" date="2026-08-22">
+      <description>
+        <p>Table content goes back to a monospace font so the visual grid lines up with the font padding; inline formatting still applies and "Format tables" (Ctrl+Alt+T) aligns the ones that do not line up. Adds a headless render test (render_shot) that checks the rich view as a PNG under xvfb.</p>
+        <p xml:lang="es">El contenido de las tablas vuelve a monoespaciada para que la rejilla visual cuadre con el padding del fuente; el inline sigue aplicando y "Formatear tablas" (Ctrl+Alt+T) alinea las que no cuadren. Anade un test de render headless (render_shot) que verifica la vista enriquecida a PNG bajo xvfb.</p>
+      </description>
+    </release>
+    <release version="0.3.2" date="2026-08-22">
+      <description>
+        <p>Fixes the "byte index off the end of the line" abort at the root: the editor no longer hides text with invisible runs, the precondition for the GTK bug (GNOME/gtk#8346), and brings back the rich view by shrinking syntax marks instead of hiding them: code boxes, visual tables with a bold header, rules on H1/H2, quote bars, painted bullets and local images in block. Also completes the Flatpak manifest (runtime 50, cargo-sources.json in the official format) and hardens CI, packaging and the AppStream metainfo.</p>
+        <p xml:lang="es">Corrige de raiz el aborto "byte index off the end of the line": el editor ya no oculta texto invisible, la precondicion del bug de GTK (GNOME/gtk#8346), y recupera la vista enriquecida encogiendo las marcas (syn_shrink) en vez de ocultarlas: cajas de codigo, tablas visuales con cabecera en negrita, filetes en H1/H2, barras de cita, vinetas dibujadas e imagenes locales en bloque. Cierra tambien el manifest Flatpak (runtime 50, cargo-sources.json en formato oficial) y endurece CI, packaging y metainfo AppStream.</p>
+      </description>
+    </release>
+    <release version="0.3.1" type="development" date="2026-08-08">
+      <description>
+        <p>Fixes a code fence followed by a tab not closing the block, which made the rest of the document render as code.</p>
+        <p xml:lang="es">Corrige que una valla de codigo seguida de un tabulador no cerrara el bloque, haciendo que el resto del documento se viera como codigo.</p>
+      </description>
+    </release>
+    <release version="0.3.0" type="development" date="2026-08-08">
+      <description>
+        <p>Tables are drawn with their box and header rule instead of showing the delimiter row, and there is an action to align the source of every table in the document.</p>
+        <p xml:lang="es">Las tablas se dibujan con su caja y su linea de cabecera en vez de mostrar la fila de guiones, y hay una accion para alinear el fuente de todas las tablas del documento.</p>
+      </description>
+    </release>
+    <release version="0.2.1" type="development" date="2026-08-08">
+      <description>
+        <p>Fixes an abort while editing caused by applying decorations inside buffer signals and by requesting line geometry outside the visible area while drawing.</p>
+        <p xml:lang="es">Corrige un aborto al editar causado por aplicar la decoracion dentro de las senales del buffer y por pedir geometria de lineas fuera de la zona visible durante el dibujado.</p>
+      </description>
+    </release>
+    <release version="0.2.0" type="development" date="2026-08-07">
+      <description>
+        <p>Live rendering with painted ornaments: bullets, task checkboxes, rules, quote bars and code block boxes. Interface aligned with the GNOME HIG, templates and Markdown editor preferences.</p>
+        <p xml:lang="es">Render en vivo con adornos dibujados: vinetas, casillas de tarea, reglas, barra de citas y caja de bloques de codigo. Interfaz alineada con las HIG de GNOME, plantillas y preferencias de editor Markdown.</p>
+      </description>
+    </release>
+    <release version="0.1.0" type="development" date="2026-08-03">
+      <description>
+        <p>First version with a native SourceView5 editor, preview and sidebar.</p>
+        <p xml:lang="es">Primera version con editor nativo SourceView5, preview y sidebar.</p>
+      </description>
+    </release>
+  </releases>
+</component>

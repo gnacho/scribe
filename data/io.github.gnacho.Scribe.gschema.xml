@@ -1,41 +1,41 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <schemalist>
-  <enum id="app.scribe.Scribe.MarkupVisibility">
+  <enum id="io.github.gnacho.Scribe.MarkupVisibility">
     <value nick="hidden" value="0"/>
     <value nick="focus" value="1"/>
     <value nick="dim" value="2"/>
   </enum>
-  <enum id="app.scribe.Scribe.ColorScheme">
+  <enum id="io.github.gnacho.Scribe.ColorScheme">
     <value nick="system" value="0"/>
     <value nick="light" value="1"/>
     <value nick="dark" value="2"/>
   </enum>
-  <enum id="app.scribe.Scribe.FontFamily">
+  <enum id="io.github.gnacho.Scribe.FontFamily">
     <value nick="sans" value="0"/>
     <value nick="serif" value="1"/>
     <value nick="mono" value="2"/>
   </enum>
-  <enum id="app.scribe.Scribe.ExportColorScheme">
+  <enum id="io.github.gnacho.Scribe.ExportColorScheme">
     <value nick="system" value="0"/>
     <value nick="light" value="1"/>
     <value nick="dark" value="2"/>
     <value nick="mono" value="3"/>
   </enum>
-  <enum id="app.scribe.Scribe.ExportMonoFont">
+  <enum id="io.github.gnacho.Scribe.ExportMonoFont">
     <value nick="adwaita-mono" value="0"/>
     <value nick="source-code-pro" value="1"/>
     <value nick="fira-mono" value="2"/>
   </enum>
-  <enum id="app.scribe.Scribe.ExportPageSize">
+  <enum id="io.github.gnacho.Scribe.ExportPageSize">
     <value nick="a4" value="0"/>
     <value nick="letter" value="1"/>
   </enum>
-  <enum id="app.scribe.Scribe.ExportOrientation">
+  <enum id="io.github.gnacho.Scribe.ExportOrientation">
     <value nick="portrait" value="0"/>
     <value nick="landscape" value="1"/>
   </enum>
 
-  <schema id="app.scribe.Scribe" path="/app/scribe/Scribe/">
+  <schema id="io.github.gnacho.Scribe" path="/io/github/gnacho/Scribe/">
     <key name="window-width" type="i">
       <default>1100</default>
       <summary>Window width</summary>
@@ -62,11 +62,11 @@
       <default>'auto'</default>
       <summary>Semantic theme of the text view (auto, light, dark, sepia)</summary>
     </key>
-    <key name="color-scheme" enum="app.scribe.Scribe.ColorScheme">
+    <key name="color-scheme" enum="io.github.gnacho.Scribe.ColorScheme">
       <default>'system'</default>
       <summary>Color scheme</summary>
     </key>
-    <key name="font-family" enum="app.scribe.Scribe.FontFamily">
+    <key name="font-family" enum="io.github.gnacho.Scribe.FontFamily">
       <default>'sans'</default>
       <summary>Editor font family</summary>
     </key>
@@ -86,7 +86,7 @@
       <summary>Maximum text column width in pixels</summary>
     </key>
 
-    <key name="markup-visibility" enum="app.scribe.Scribe.MarkupVisibility">
+    <key name="markup-visibility" enum="io.github.gnacho.Scribe.MarkupVisibility">
       <default>'focus'</default>
       <summary>When to show Markdown syntax markers</summary>
     </key>
@@ -127,11 +127,11 @@
       <summary>Recent files</summary>
     </key>
 
-    <key name="export-color-scheme" enum="app.scribe.Scribe.ExportColorScheme">
+    <key name="export-color-scheme" enum="io.github.gnacho.Scribe.ExportColorScheme">
       <default>'light'</default>
       <summary>PDF export color scheme</summary>
     </key>
-    <key name="export-font-family" enum="app.scribe.Scribe.FontFamily">
+    <key name="export-font-family" enum="io.github.gnacho.Scribe.FontFamily">
       <default>'sans'</default>
       <summary>PDF export body font family</summary>
     </key>
@@ -140,15 +140,15 @@
       <range min="8" max="24"/>
       <summary>PDF export body font size in points</summary>
     </key>
-    <key name="export-mono-font" enum="app.scribe.Scribe.ExportMonoFont">
+    <key name="export-mono-font" enum="io.github.gnacho.Scribe.ExportMonoFont">
       <default>'adwaita-mono'</default>
       <summary>PDF export monospace font</summary>
     </key>
-    <key name="export-page-size" enum="app.scribe.Scribe.ExportPageSize">
+    <key name="export-page-size" enum="io.github.gnacho.Scribe.ExportPageSize">
       <default>'a4'</default>
       <summary>PDF export page size</summary>
     </key>
-    <key name="export-orientation" enum="app.scribe.Scribe.ExportOrientation">
+    <key name="export-orientation" enum="io.github.gnacho.Scribe.ExportOrientation">
       <default>'portrait'</default>
       <summary>PDF export page orientation</summary>
     </key>

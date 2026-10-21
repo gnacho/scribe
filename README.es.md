@@ -290,7 +290,7 @@ y `Cargo.lock` está commiteado:
 cargo generate-lockfile
 python3 flatpak-cargo-generator.py Cargo.lock -o build-aux/flatpak/cargo-sources.json
 cd build-aux/flatpak
-flatpak-builder --user --install build-dir app.scribe.Scribe.json --force-clean
+flatpak-builder --user --install build-dir io.github.gnacho.Scribe.json --force-clean
 ```
 
 ## Desarrollo

@@ -2127,7 +2127,7 @@ impl ScribeWindow {
                     .transient_for(&window)
                     .modal(true)
                     .application_name("Scribe")
-                    .application_icon("app.scribe.Scribe")
+                    .application_icon("io.github.gnacho.Scribe")
                     .developer_name("gnacho")
                     .version(env!("CARGO_PKG_VERSION"))
                     .website("https://github.com/gnacho/scribe")

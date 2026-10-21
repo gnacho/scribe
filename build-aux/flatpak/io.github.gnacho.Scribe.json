@@ -1,5 +1,5 @@
 {
-    "app-id": "app.scribe.Scribe",
+    "app-id": "io.github.gnacho.Scribe",
     "runtime": "org.gnome.Platform",
     "runtime-version": "50",
     "sdk": "org.gnome.Sdk",
@@ -28,10 +28,10 @@
             "build-commands": [
                 "cargo --offline build --release",
                 "install -Dm755 target/release/scribe /app/bin/scribe",
-                "install -Dm644 data/app.scribe.Scribe.desktop /app/share/applications/app.scribe.Scribe.desktop",
-                "install -Dm644 data/app.scribe.Scribe.gschema.xml /app/share/glib-2.0/schemas/app.scribe.Scribe.gschema.xml",
-                "install -Dm644 data/app.scribe.Scribe.metainfo.xml /app/share/metainfo/app.scribe.Scribe.metainfo.xml",
-                "install -Dm644 data/icons/hicolor/scalable/apps/app.scribe.Scribe.svg /app/share/icons/hicolor/scalable/apps/app.scribe.Scribe.svg",
+                "install -Dm644 data/io.github.gnacho.Scribe.desktop /app/share/applications/io.github.gnacho.Scribe.desktop",
+                "install -Dm644 data/io.github.gnacho.Scribe.gschema.xml /app/share/glib-2.0/schemas/io.github.gnacho.Scribe.gschema.xml",
+                "install -Dm644 data/io.github.gnacho.Scribe.metainfo.xml /app/share/metainfo/io.github.gnacho.Scribe.metainfo.xml",
+                "install -Dm644 data/icons/hicolor/scalable/apps/io.github.gnacho.Scribe.svg /app/share/icons/hicolor/scalable/apps/io.github.gnacho.Scribe.svg",
                 "for lang in $(cat po/LINGUAS); do msgfmt po/$lang.po --output-file=$lang.mo && install -Dm644 $lang.mo /app/share/locale/$lang/LC_MESSAGES/scribe.mo; done",
                 "glib-compile-schemas /app/share/glib-2.0/schemas"
             ],
