@@ -109,7 +109,7 @@ jobs:
           apt-get install -y --no-install-recommends \
             build-essential curl ca-certificates pkg-config gettext file \
             libgtk-4-dev libadwaita-1-dev libgtksourceview-5-dev \
-            libenchant-2-dev libgdk-pixbuf-2.0-dev libpixman-1-dev
+            libenchant-2-dev libgdk-pixbuf-2.0-dev libgdk-pixbuf-2.0-bin libpixman-1-dev
 
       - name: install rustup
         run: |
