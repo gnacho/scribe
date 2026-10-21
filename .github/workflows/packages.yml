@@ -145,7 +145,7 @@ jobs:
   release:
     name: attach packages to the release
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: [deb, rpm]
+    needs: [deb, rpm, appimage]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4
