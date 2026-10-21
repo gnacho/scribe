@@ -33,8 +33,8 @@ package() {
 	install -Dm644 data/io.github.gnacho.Scribe.desktop "$pkgdir/usr/share/applications/io.github.gnacho.Scribe.desktop"
 	install -Dm644 data/io.github.gnacho.Scribe.metainfo.xml "$pkgdir/usr/share/metainfo/io.github.gnacho.Scribe.metainfo.xml"
 	install -Dm644 data/icons/hicolor/scalable/apps/io.github.gnacho.Scribe.svg "$pkgdir/usr/share/icons/hicolor/scalable/apps/io.github.gnacho.Scribe.svg"
-	install -Dm644 data/icons/hicolor/scalable/actions/scribe-preview-off-symbolic.svg "$pkgdir/usr/share/icons/hicolor/scalable/actions/scribe-preview-off-symbolic.svg"
-	install -Dm644 data/icons/hicolor/scalable/actions/scribe-preview-on-symbolic.svg "$pkgdir/usr/share/icons/hicolor/scalable/actions/scribe-preview-on-symbolic.svg"
+	install -Dm644 data/icons/hicolor/scalable/actions/io.github.gnacho.Scribe-preview-off-symbolic.svg "$pkgdir/usr/share/icons/hicolor/scalable/actions/io.github.gnacho.Scribe-preview-off-symbolic.svg"
+	install -Dm644 data/icons/hicolor/scalable/actions/io.github.gnacho.Scribe-preview-on-symbolic.svg "$pkgdir/usr/share/icons/hicolor/scalable/actions/io.github.gnacho.Scribe-preview-on-symbolic.svg"
 	install -Dm644 scribe.mo "$pkgdir/usr/share/locale/es/LC_MESSAGES/scribe.mo"
 	install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
 }

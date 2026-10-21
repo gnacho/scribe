@@ -35,8 +35,8 @@ assets = [
     ["data/io.github.gnacho.Scribe.metainfo.xml", "usr/share/metainfo/", "644"],
     ["data/io.github.gnacho.Scribe.gschema.xml", "usr/share/glib-2.0/schemas/", "644"],
     ["data/icons/hicolor/scalable/apps/io.github.gnacho.Scribe.svg", "usr/share/icons/hicolor/scalable/apps/", "644"],
-    ["data/icons/hicolor/scalable/actions/scribe-preview-off-symbolic.svg", "usr/share/icons/hicolor/scalable/actions/", "644"],
-    ["data/icons/hicolor/scalable/actions/scribe-preview-on-symbolic.svg", "usr/share/icons/hicolor/scalable/actions/", "644"],
+    ["data/icons/hicolor/scalable/actions/io.github.gnacho.Scribe-preview-off-symbolic.svg", "usr/share/icons/hicolor/scalable/actions/", "644"],
+    ["data/icons/hicolor/scalable/actions/io.github.gnacho.Scribe-preview-on-symbolic.svg", "usr/share/icons/hicolor/scalable/actions/", "644"],
     ["target/scribe-locale/es/LC_MESSAGES/scribe.mo", "usr/share/locale/es/LC_MESSAGES/", "644"],
 ]
 
@@ -78,13 +78,13 @@ dest = "/usr/share/icons/hicolor/scalable/apps/io.github.gnacho.Scribe.svg"
 mode = "644"
 
 [[package.metadata.generate-rpm.assets]]
-source = "data/icons/hicolor/scalable/actions/scribe-preview-off-symbolic.svg"
-dest = "/usr/share/icons/hicolor/scalable/actions/scribe-preview-off-symbolic.svg"
+source = "data/icons/hicolor/scalable/actions/io.github.gnacho.Scribe-preview-off-symbolic.svg"
+dest = "/usr/share/icons/hicolor/scalable/actions/io.github.gnacho.Scribe-preview-off-symbolic.svg"
 mode = "644"
 
 [[package.metadata.generate-rpm.assets]]
-source = "data/icons/hicolor/scalable/actions/scribe-preview-on-symbolic.svg"
-dest = "/usr/share/icons/hicolor/scalable/actions/scribe-preview-on-symbolic.svg"
+source = "data/icons/hicolor/scalable/actions/io.github.gnacho.Scribe-preview-on-symbolic.svg"
+dest = "/usr/share/icons/hicolor/scalable/actions/io.github.gnacho.Scribe-preview-on-symbolic.svg"
 mode = "644"
 
 [[package.metadata.generate-rpm.assets]]
