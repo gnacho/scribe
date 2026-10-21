@@ -31,28 +31,38 @@
   </developer>
   <screenshots>
     <screenshot type="default">
-      <image>https://raw.githubusercontent.com/gnacho/scribe/master/assets/hero-en-light.png</image>
+      <image>https://raw.githubusercontent.com/gnacho/scribe/1056c65165dba77b9214502d6302440d412c9ecd/assets/hero-en-light.png</image>
       <caption>Writing prose with spell checking enabled</caption>
       <caption xml:lang="es">Escritura de prosa con el corrector ortografico activo</caption>
     </screenshot>
     <screenshot>
-      <image>https://raw.githubusercontent.com/gnacho/scribe/master/assets/screenshot-split-en-light.png</image>
+      <image>https://raw.githubusercontent.com/gnacho/scribe/1056c65165dba77b9214502d6302440d412c9ecd/assets/screenshot-split-en-light.png</image>
       <caption>Editor and preview side by side</caption>
       <caption xml:lang="es">Editor y previsualizacion lado a lado</caption>
     </screenshot>
     <screenshot>
-      <image>https://raw.githubusercontent.com/gnacho/scribe/master/assets/screenshot-focus-en-light.png</image>
+      <image>https://raw.githubusercontent.com/gnacho/scribe/1056c65165dba77b9214502d6302440d412c9ecd/assets/screenshot-focus-en-light.png</image>
       <caption>Focus mode: only the paragraph being edited stays bright</caption>
       <caption xml:lang="es">Modo foco: solo se ilumina el parrafo en edicion</caption>
     </screenshot>
     <screenshot>
-      <image>https://raw.githubusercontent.com/gnacho/scribe/master/assets/screenshot-find-en-light.png</image>
+      <image>https://raw.githubusercontent.com/gnacho/scribe/1056c65165dba77b9214502d6302440d412c9ecd/assets/screenshot-find-en-light.png</image>
       <caption>Searching the document, with a match counter</caption>
       <caption xml:lang="es">Busqueda en el documento con contador de coincidencias</caption>
     </screenshot>
   </screenshots>
   <content_rating type="oars-1.1" />
   <releases>
+    <release version="0.3.17" date="2026-10-21">
+      <description>
+        <p>Search and replace is fully wired: Ctrl+H shows the replace row, Ctrl+G and Ctrl+Shift+G jump between matches, and the toggle shows a proper icon.</p>
+        <p>Closing an empty untitled draft no longer asks for confirmation.</p>
+        <p>An AppImage is built in CI and attached to every release, next to the Debian and Fedora packages. The app ID moved to io.github.gnacho.Scribe, preparing the Flathub submission.</p>
+        <p xml:lang="es">Buscar y reemplazar ya esta completo: Ctrl+H muestra la fila de reemplazo, Ctrl+G y Ctrl+Shift+G saltan entre coincidencias y el conmutador tiene icono propio.</p>
+        <p xml:lang="es">Cerrar un borrador vacio sin titulo ya no pide confirmacion.</p>
+        <p xml:lang="es">La CI genera un AppImage y lo adjunta a cada release, junto a los paquetes de Debian y Fedora. El app ID pasa a io.github.gnacho.Scribe, de cara a la submission de Flathub.</p>
+      </description>
+    </release>
     <release version="0.3.16" date="2026-10-19">
       <description>
         <p>Spell checking gets its context menu: right-clicking a misspelled word offers up to six dictionary suggestions, ignoring it for the session or adding it to the personal dictionary.</p>

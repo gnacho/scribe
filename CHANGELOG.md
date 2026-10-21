@@ -5,6 +5,30 @@ All notable changes to Scribe will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.17] - 2026-10-21
+
+### Added
+
+- **AppImage** (#95): built in CI on Ubuntu 24.04 and attached to every
+  release, alongside the .deb and the .rpm.
+- **Find & replace shortcuts** (#98): Ctrl+H toggles the replace row and
+  Ctrl+G / Ctrl+Shift+G jump between matches; the toggle gets the standard
+  replace icon.
+
+### Changed
+
+- **App ID renamed to `io.github.gnacho.Scribe`** (#103): desktop file,
+  metainfo, gschema, icons, Flatpak manifests and packaging scripts all move
+  to the GitHub-based ID so the Flathub submission can be verified. The
+  Flatpak manifests are now YAML and build fully offline from a generated
+  `cargo-sources.json`.
+
+### Fixed
+
+- **Closing an empty untitled draft no longer prompts** (#101): a buffer with
+  no file and no content closes directly; typed-then-cleared text still asks,
+  and modified saved files still ask.
+
 ## [0.3.16] - 2026-10-19
 
 ### Added
