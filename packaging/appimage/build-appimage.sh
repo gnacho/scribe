@@ -52,6 +52,9 @@ keep_host() {
 	libc.so*|libm.so*|libpthread.so*|libdl.so*|librt.so*|libutil.so*|libcrypt.so*|libresolv.so*|libnss_*|ld-linux*|libgcc_s.so*|libstdc++.so*) return 0 ;;
 	libX11*|libxcb*|libXau*|libXdmcp*|libXext*|libXrender*|libXi*|libXfixes*|libXcursor*|libXrandr*|libXdamage*|libXcomposite*|libXkbcommon*) return 0 ;;
 	libwayland*|libEGL*|libGL*|libgbm*|libdrm*|libvulkan*) return 0 ;;
+	# fontconfig parses /etc/fonts from the host; bundling it mixes an older
+	# parser with newer host config and floods the console with warnings.
+	libfontconfig*) return 0 ;;
 	esac
 	return 1
 }
