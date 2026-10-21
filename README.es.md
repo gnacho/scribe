@@ -281,16 +281,20 @@ por defecto (no guarda preferencias) y avisa por stderr.
 
 ## Flatpak
 
-Hay un manifiesto en [build-aux/flatpak](build-aux/flatpak) dirigido al runtime
-GNOME 50. `cargo-sources.json` se genera con
+Hay dos manifiestos dirigidos al runtime GNOME 51:
+[packaging/flatpak](packaging/flatpak) compila desde un commit fijado y es el que
+se envía a Flathub, y [build-aux/flatpak](build-aux/flatpak) compila el
+directorio de trabajo. Los dos son YAML y leen el mismo `cargo-sources.json`,
+generado con
 [flatpak-cargo-generator](https://github.com/flatpak/flatpak-builder-tools/tree/master/cargo)
-y `Cargo.lock` está commiteado:
+a partir del `Cargo.lock` commiteado. La copia canónica vive en
+`packaging/flatpak/`; la de `build-aux/flatpak/` es un enlace simbólico a ella:
 
 ```sh
 cargo generate-lockfile
-python3 flatpak-cargo-generator.py Cargo.lock -o build-aux/flatpak/cargo-sources.json
+python3 flatpak-cargo-generator.py Cargo.lock -o packaging/flatpak/cargo-sources.json
 cd build-aux/flatpak
-flatpak-builder --user --install build-dir io.github.gnacho.Scribe.json --force-clean
+flatpak-builder --user --install build-dir io.github.gnacho.Scribe.yml --force-clean
 ```
 
 ## Desarrollo

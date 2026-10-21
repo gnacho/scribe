@@ -261,16 +261,19 @@ are not saved) and logs a warning to stderr.
 
 ## Flatpak
 
-A Flatpak manifest is at [build-aux/flatpak](build-aux/flatpak) targeting the
-GNOME 50 runtime. `cargo-sources.json` is generated with
+Two manifests target the GNOME 51 runtime: [packaging/flatpak](packaging/flatpak)
+builds from a pinned git commit and is the one submitted to Flathub, while
+[build-aux/flatpak](build-aux/flatpak) builds the local checkout. Both are YAML
+and both read the same `cargo-sources.json`, generated with
 [flatpak-cargo-generator](https://github.com/flatpak/flatpak-builder-tools/tree/master/cargo)
-and `Cargo.lock` is committed:
+from the committed `Cargo.lock`. The canonical copy lives in
+`packaging/flatpak/`; the one in `build-aux/flatpak/` is a symlink to it:
 
 ```sh
 cargo generate-lockfile
-python3 flatpak-cargo-generator.py Cargo.lock -o build-aux/flatpak/cargo-sources.json
+python3 flatpak-cargo-generator.py Cargo.lock -o packaging/flatpak/cargo-sources.json
 cd build-aux/flatpak
-flatpak-builder --user --install build-dir io.github.gnacho.Scribe.json --force-clean
+flatpak-builder --user --install build-dir io.github.gnacho.Scribe.yml --force-clean
 ```
 
 ## Development
