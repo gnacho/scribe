@@ -1,7 +1,7 @@
 //! Test de consistencia de versiones (issue #16): la versión se sube a mano
 //! en varios sitios y pueden descuadrarse entre sí. Este test falla si:
 //! - la versión de `Cargo.toml` difiere de la release más reciente del
-//!   metainfo (`data/app.scribe.Scribe.metainfo.xml`);
+//!   metainfo (`data/io.github.gnacho.Scribe.metainfo.xml`);
 //! - la entrada más reciente del CHANGELOG no menciona esa versión;
 //! - el fichero `.desktop` o el metainfo no pasan sus validadores (cuando las
 //!   herramientas `appstreamcli` y `desktop-file-validate` están instaladas).
@@ -41,7 +41,7 @@ fn version_cargo() -> String {
 /// Versión de la release más reciente del metainfo: la primera aparición de
 /// `<release version="...">` (la lista va de más nueva a más antigua).
 fn version_metainfo() -> String {
-    let xml = leer("data/app.scribe.Scribe.metainfo.xml");
+    let xml = leer("data/io.github.gnacho.Scribe.metainfo.xml");
     for linea in xml.lines() {
         if let Some(idx) = linea.find("<release ") {
             let resto = &linea[idx..];
@@ -77,8 +77,8 @@ fn el_changelog_menciona_la_version_de_cargo() {
 
 #[test]
 fn el_desktop_y_el_metainfo_pasan_sus_validadores() {
-    let metainfo = raiz().join("data/app.scribe.Scribe.metainfo.xml");
-    let desktop = raiz().join("data/app.scribe.Scribe.desktop");
+    let metainfo = raiz().join("data/io.github.gnacho.Scribe.metainfo.xml");
+    let desktop = raiz().join("data/io.github.gnacho.Scribe.desktop");
 
     // `appstreamcli validate <metainfo>`; salto silencioso si no está instalado.
     match Command::new("appstreamcli")

@@ -30,18 +30,18 @@ mkdir -p "$APPDIR/usr/bin" "$APPDIR/usr/lib" \
 	"$APPDIR/usr/share/icons/hicolor/scalable/actions"
 
 install -Dm755 "$BIN" "$APPDIR/usr/bin/scribe"
-install -Dm644 "$ROOT/data/app.scribe.Scribe.desktop" "$APPDIR/usr/share/applications/"
-install -Dm644 "$ROOT/data/app.scribe.Scribe.metainfo.xml" "$APPDIR/usr/share/metainfo/"
-install -Dm644 "$ROOT/data/app.scribe.Scribe.gschema.xml" "$APPDIR/usr/share/glib-2.0/schemas/"
-install -Dm644 "$ROOT/data/icons/hicolor/scalable/apps/app.scribe.Scribe.svg" "$APPDIR/usr/share/icons/hicolor/scalable/apps/"
+install -Dm644 "$ROOT/data/io.github.gnacho.Scribe.desktop" "$APPDIR/usr/share/applications/"
+install -Dm644 "$ROOT/data/io.github.gnacho.Scribe.metainfo.xml" "$APPDIR/usr/share/metainfo/"
+install -Dm644 "$ROOT/data/io.github.gnacho.Scribe.gschema.xml" "$APPDIR/usr/share/glib-2.0/schemas/"
+install -Dm644 "$ROOT/data/icons/hicolor/scalable/apps/io.github.gnacho.Scribe.svg" "$APPDIR/usr/share/icons/hicolor/scalable/apps/"
 install -Dm644 "$ROOT/data/icons/hicolor/scalable/actions/"*.svg "$APPDIR/usr/share/icons/hicolor/scalable/actions/"
 install -Dm644 "$ROOT/LICENSE" "$APPDIR/usr/share/licenses/scribe/LICENSE"
 msgfmt "$ROOT/po/es.po" -o "$APPDIR/usr/share/locale/es/LC_MESSAGES/scribe.mo"
 
 # appimagetool wants the desktop entry and the icon at the AppDir root as well.
-install -Dm644 "$ROOT/data/app.scribe.Scribe.desktop" "$APPDIR/app.scribe.Scribe.desktop"
-install -Dm644 "$ROOT/data/icons/hicolor/scalable/apps/app.scribe.Scribe.svg" "$APPDIR/app.scribe.Scribe.svg"
-ln -sf app.scribe.Scribe.svg "$APPDIR/.DirIcon"
+install -Dm644 "$ROOT/data/io.github.gnacho.Scribe.desktop" "$APPDIR/io.github.gnacho.Scribe.desktop"
+install -Dm644 "$ROOT/data/icons/hicolor/scalable/apps/io.github.gnacho.Scribe.svg" "$APPDIR/io.github.gnacho.Scribe.svg"
+ln -sf io.github.gnacho.Scribe.svg "$APPDIR/.DirIcon"
 
 glib-compile-schemas --strict "$APPDIR/usr/share/glib-2.0/schemas"
 

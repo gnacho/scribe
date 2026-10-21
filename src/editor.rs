@@ -387,7 +387,7 @@ fn rgba(hex: u32, alpha: f32) -> gtk4::gdk::RGBA {
 /// Tema semántico activo: el integrado elegido en la preferencia `theme`
 /// (`auto` sigue el esquema de color del sistema).
 fn tema_activo(dark: bool) -> crate::tema::Tema {
-    let ajustes = gio::Settings::new("app.scribe.Scribe");
+    let ajustes = gio::Settings::new("io.github.gnacho.Scribe");
     let id = ajustes.string("theme").to_string();
     let base = if dark {
         crate::tema::Tema::oscuro()

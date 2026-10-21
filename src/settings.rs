@@ -352,11 +352,11 @@ macro_rules! prop {
 impl AppSettings {
     pub fn new() -> Self {
         let settings = gio::SettingsSchemaSource::default()
-            .and_then(|source| source.lookup("app.scribe.Scribe", true))
-            .map(|_| gio::Settings::new("app.scribe.Scribe"));
+            .and_then(|source| source.lookup("io.github.gnacho.Scribe", true))
+            .map(|_| gio::Settings::new("io.github.gnacho.Scribe"));
         if settings.is_none() {
             eprintln!(
-                "scribe: no se encontró el esquema GSettings 'app.scribe.Scribe'. \
+                "scribe: no se encontró el esquema GSettings 'io.github.gnacho.Scribe'. \
                  Se usan los valores por defecto y no se guardarán las preferencias. \
                  En desarrollo: glib-compile-schemas data/ && \
                  GSETTINGS_SCHEMA_DIR=$PWD/data cargo run"

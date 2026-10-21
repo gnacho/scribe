@@ -751,7 +751,7 @@ impl ScribeWindow {
         // Botón de vista dividida (issue #35), como el de Typesetter: el icono
         // dice qué se va a ver y comparte estado con la acción (Ctrl+Shift+P).
         let preview_button = gtk4::ToggleButton::builder()
-            .icon_name("scribe-preview-off-symbolic")
+            .icon_name("io.github.gnacho.Scribe-preview-off-symbolic")
             .tooltip_text(gettext("Split View"))
             .action_name("win.toggle-preview")
             .build();
@@ -1902,9 +1902,9 @@ impl ScribeWindow {
             let preview_button = preview_button.clone();
             let sync_icon = move |on: bool| {
                 preview_button.set_icon_name(if on {
-                    "scribe-preview-on-symbolic"
+                    "io.github.gnacho.Scribe-preview-on-symbolic"
                 } else {
-                    "scribe-preview-off-symbolic"
+                    "io.github.gnacho.Scribe-preview-off-symbolic"
                 });
             };
             sync_icon(preview_visible.get());
@@ -2127,7 +2127,7 @@ impl ScribeWindow {
                     .transient_for(&window)
                     .modal(true)
                     .application_name("Scribe")
-                    .application_icon("app.scribe.Scribe")
+                    .application_icon("io.github.gnacho.Scribe")
                     .developer_name("gnacho")
                     .version(env!("CARGO_PKG_VERSION"))
                     .website("https://github.com/gnacho/scribe")
