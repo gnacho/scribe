@@ -68,6 +68,18 @@ copy_deps() {
 	done < <(ldd "$file" 2>/dev/null | awk '/=> \// {print $3}')
 }
 
+# gdk-pixbuf-query-loaders is not always in PATH: Debian and Ubuntu ship it
+# under /usr/lib/<arch>/gdk-pixbuf-2.0/ for the dpkg trigger.
+query_loaders() {
+	command -v gdk-pixbuf-query-loaders 2>/dev/null && return 0
+	local candidate
+	for candidate in /usr/lib/*/gdk-pixbuf-2.0/gdk-pixbuf-query-loaders \
+		/usr/lib/gdk-pixbuf-2.0/gdk-pixbuf-query-loaders; do
+		[ -x "$candidate" ] && { echo "$candidate"; return 0; }
+	done
+	return 1
+}
+
 # App icon and the two symbolic icons are SVG, so the SVG loader is needed at
 # runtime; every other loader in the host (PNG/JPEG are built into gdk-pixbuf)
 # is bundled as well to keep images working.
@@ -80,7 +92,11 @@ if [ -n "$LOADERS_SRC" ]; then
 		cp -L "$loader" "$APPDIR/usr/lib/gdk-pixbuf-2.0/loaders/"
 		copy_deps "$APPDIR/usr/lib/gdk-pixbuf-2.0/loaders/$(basename "$loader")"
 	done
-	gdk-pixbuf-query-loaders "$APPDIR/usr/lib/gdk-pixbuf-2.0/loaders/"*.so \
+	QUERY_LOADERS="$(query_loaders)" || {
+		echo "gdk-pixbuf-query-loaders not found" >&2
+		exit 1
+	}
+	"$QUERY_LOADERS" "$APPDIR/usr/lib/gdk-pixbuf-2.0/loaders/"*.so \
 		| sed "s|$APPDIR|@APPDIR@|g" > "$APPDIR/usr/lib/gdk-pixbuf-2.0/loaders/loaders.cache.in"
 fi
 
