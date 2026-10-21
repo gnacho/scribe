@@ -2062,6 +2062,13 @@ impl Editor {
             .to_string()
     }
 
+    /// Buffer subyacente (smoke tests; la app opera vía los métodos del
+    /// editor).
+    #[allow(dead_code)]
+    pub fn buffer(&self) -> gtksourceview5::Buffer {
+        self.buffer.clone()
+    }
+
     // --- búsqueda ---------------------------------------------------------
 
     /// Contexto de búsqueda del documento. La ventana se engancha a
