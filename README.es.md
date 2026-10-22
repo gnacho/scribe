@@ -179,8 +179,10 @@ inalcanzable por construcción.
   partir del id del vídeo y de una miniatura que se pide a `i.ytimg.com`, y al
   pulsarla se abre el navegador. Un enlace cuyo id no sea un id válido de 11
   caracteres se queda como texto.
-- En el modo «ocultar / revelar en la línea del cursor» las marcas se encogen,
-  no se quitan (ver arriba).
+- En el modo «ocultar» las marcas se ocultan por elemento, al estilo Obsidian:
+  se revelan las del elemento donde esta el cursor (o tocando sus bordes) y el
+  resto sigue encogido. Las marcas de cabecera, lista y cita se revelan por
+  linea. Las marcas se encogen, no se quitan (ver arriba).
 
 ## Privacidad
 

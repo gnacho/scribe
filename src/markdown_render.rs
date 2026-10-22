@@ -61,6 +61,11 @@ pub struct Span {
     pub end: usize,
     pub tag: &'static str,
     pub kind: SpanKind,
+    /// Rango del elemento inline que la marca delimita (`**` de una negrita:
+    /// de la apertura al cierre, bytes). Lo rellena `mark_delims`; en el resto
+    /// de spans vale (0, 0). La visibilidad por elemento (#117) compara el
+    /// cursor contra este rango, no contra la línea.
+    pub elemento: (usize, usize),
 }
 
 impl Span {
@@ -437,6 +442,7 @@ fn style(start: usize, end: usize, tag: &'static str) -> Span {
         end,
         tag,
         kind: SpanKind::Style,
+        elemento: (0, 0),
     }
 }
 
@@ -446,6 +452,7 @@ fn marker(start: usize, end: usize) -> Span {
         end,
         tag: "syntax",
         kind: SpanKind::Marker,
+        elemento: (0, 0),
     }
 }
 
@@ -455,6 +462,7 @@ fn replaced(start: usize, end: usize) -> Span {
         end,
         tag: "syntax",
         kind: SpanKind::Replaced,
+        elemento: (0, 0),
     }
 }
 
@@ -527,8 +535,14 @@ fn mark_delims(out: &mut Vec<Span>, start: usize, end: usize, len: usize, inside
     // cursor, así que fuera de ella aparecerían los asteriscos literalmente
     // encima del texto en negrita. Su visibilidad no depende del cursor.
     let mk = if inside_table { replaced } else { marker };
-    out.push(mk(start, start + len));
-    out.push(mk(end - len, end));
+    let mut abre = mk(start, start + len);
+    let mut cierra = mk(end - len, end);
+    // Ambas marcas delimitan el mismo elemento: el rango completo es el que la
+    // visibilidad por elemento (#117) compara con el cursor.
+    abre.elemento = (start, end);
+    cierra.elemento = (start, end);
+    out.push(abre);
+    out.push(cierra);
 }
 
 fn line_ranges(text: &str, start: usize, end: usize) -> Vec<(usize, usize)> {
@@ -2268,6 +2282,63 @@ mod tests {
                 (20, 21, SpanKind::Marker),
             ]
         );
+    }
+
+    #[test]
+    fn los_marcadores_llevan_el_rango_de_su_elemento() {
+        // Visibilidad por elemento (#117): cada marca conoce el rango completo
+        // del elemento que delimita, y las dos marcas de un mismo elemento
+        // comparten rango. Las de estilo (no marcas) no llevan rango.
+        let spans = spans("un **texto** y *otro*\n");
+        let elementos: Vec<(usize, usize, (usize, usize))> = spans
+            .iter()
+            .filter(|s| s.kind == SpanKind::Marker)
+            .map(|s| (s.start, s.end, s.elemento))
+            .collect();
+        assert_eq!(
+            elementos,
+            vec![
+                (3, 5, (3, 12)),
+                (10, 12, (3, 12)),
+                (15, 16, (15, 21)),
+                (20, 21, (15, 21)),
+            ]
+        );
+        let bold = find(&spans, "bold")[0];
+        assert_eq!(bold.elemento, (0, 0), "los spans de estilo no llevan rango");
+    }
+
+    #[test]
+    fn elemento_anidado_lleva_su_propio_rango_y_el_del_padre() {
+        // `**a *b* c**`: las marcas de la cursiva anidada apuntan a la
+        // cursiva; las de la negrita, a la negrita entera. Con el cursor dentro
+        // de la cursiva se revelan ambas (sus rangos contienen al cursor).
+        let spans = spans("**a *b* c**\n");
+        let elementos: Vec<(usize, usize, (usize, usize))> = spans
+            .iter()
+            .filter(|s| s.kind == SpanKind::Marker)
+            .map(|s| (s.start, s.end, s.elemento))
+            .collect();
+        assert_eq!(
+            elementos,
+            vec![
+                (0, 2, (0, 11)),
+                (9, 11, (0, 11)),
+                (4, 5, (4, 7)),
+                (6, 7, (4, 7)),
+            ]
+        );
+    }
+
+    #[test]
+    fn el_codigo_inline_lleva_el_rango_con_los_backticks() {
+        let spans = spans("esto es ``a ` b`` fin");
+        let elementos: Vec<(usize, usize, (usize, usize))> = spans
+            .iter()
+            .filter(|s| s.kind == SpanKind::Marker)
+            .map(|s| (s.start, s.end, s.elemento))
+            .collect();
+        assert_eq!(elementos, vec![(8, 10, (8, 17)), (15, 17, (8, 17))]);
     }
 
     #[test]

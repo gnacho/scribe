@@ -775,6 +775,9 @@ fn decorate(
     let analysis = analyze(&text);
     *unclosed_fences.borrow_mut() = analysis.unclosed_fences.clone();
     let cursor_line = buffer.iter_at_offset(buffer.cursor_position()).line();
+    // Offset del cursor en caracteres: la visibilidad por elemento (#117)
+    // lo compara contra el rango de cada elemento inline.
+    let cursor_offset = buffer.cursor_position();
     // Árbol de decisión de visibilidad. La preferencia persistida
     // (`config.markup`) decide el look; la puerta
     // `gtk_hides_invisible_safely()` (GNOME/gtk#8346) solo decide si las
@@ -854,39 +857,33 @@ fn decorate(
         }
         let start_iter = buffer.iter_at_offset(from);
         let end_iter = buffer.iter_at_offset(to);
+        // Visibilidad por elemento (#117): la marca se revela si el cursor
+        // esta dentro del elemento que delimita o tocando cualquiera de sus
+        // bordes (`**bo|ld**`, `|**bold**`, `**bold**|`), no si comparten
+        // linea. Los rangos vienen en bytes; el cursor, en caracteres.
+        let en_elemento = span.elemento.1 > span.elemento.0
+            && match (
+                byte_to_char.get(span.elemento.0),
+                byte_to_char.get(span.elemento.1),
+            ) {
+                (Some(&e0), Some(&e1)) => cursor_offset >= e0 && cursor_offset <= e1,
+                _ => false,
+            };
         let name = match span.kind {
             SpanKind::Style => span.tag,
             SpanKind::Marker => {
-                // Las marcas se muestran en la línea del cursor (para poder
-                // editarlas) y se encogen en el resto: la escala minima es el
-                // ocultado seguro sin depender de la puerta GTK.
-                if revealed(span) {
+                // Las marcas se muestran dentro del elemento que delimitan (o
+                // tocando sus bordes) y se encogen en el resto: la escala
+                // minima es el ocultado seguro sin depender de la puerta GTK.
+                // El revelado es por ELEMENTO en los tres modos (#117); el
+                // revelado por linea queda solo para `Replaced` (cabeceras,
+                // listas, citas), la excepcion que pide el live preview.
+                if revealed(span) || en_elemento {
                     "syn_shown"
+                } else if gate {
+                    "syn_hidden"
                 } else {
-                    let en_cursor = span.start >= linea_desde && span.end <= linea_hasta;
-                    match config.markup {
-                        MarkupVisibility::Dim => {
-                            if en_cursor {
-                                "syn_shown"
-                            } else {
-                                "syn_shrink"
-                            }
-                        }
-                        MarkupVisibility::Focus => {
-                            if en_cursor {
-                                "syn_shown"
-                            } else {
-                                "syn_shrink"
-                            }
-                        }
-                        MarkupVisibility::Hidden => {
-                            if gate {
-                                "syn_hidden"
-                            } else {
-                                "syn_shrink"
-                            }
-                        }
-                    }
+                    "syn_shrink"
                 }
             }
             SpanKind::Replaced => {

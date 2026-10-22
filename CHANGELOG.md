@@ -7,41 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Fixed
+### Changed
 
-- **Remote image downloads no longer register GIO async callbacks** (#99): the
-  download runs synchronously on a dedicated thread and only the decoded
-  texture crosses back, so no GLib closure is ever consumed from a thread other
-  than the one that registered it. The ignored UI tests now serialize around
-  the process-wide default `MainContext`, which GLib forbids two threads from
-  owning at once; `--ignored` runs are deterministic in parallel.
-
-- **Heading, list and blockquote markers reveal on the cursor line** (#117): in
-  "Hide" mode the `# `, `- ` and `> ` now show when the cursor is on their line,
-  matching the live-preview convention where the exception is the line, not the
-  whole element. They stay concealed everywhere else.
-
-### Added
-
-- **Pointer cursor over task checkboxes** (#117): hovering a `- [ ]` box turns
-  the cursor into a hand, so it is clearly clickable. The sensitive area matches
-  the click hit-test, including its margin.
-- **Larger task checkboxes** (#117): from 14 to 20 px, with the border and the
-  check stroke scaled accordingly. The click hit-test follows, so the box is as
-  easy to hit as it looks.
-
-### Fixed
-
-- **A heading no longer jumps in size when the document opens** (#115): the
-  decoration was always deferred to the main loop, so the first layout painted
-  the heading at body size and the tag enlarged it one cycle later. Loading a
-  document is not inside a buffer signal, so it is now decorated on the spot and
-  the first paint already has the right sizes.
-
-### Removed
-
-- **The rule under H1 and H2 headings** (#115, #117): it was a stylistic choice
-  that the first users did not want, and it is gone.
+- **Markdown syntax conceals per element, Obsidian-style** (#117, requested by
+  @JustSimpleUser52): the markers around the element the cursor is in - or
+  touching either edge of - reveal; everything else stays concealed, even on
+  the same line. Heading, list and quote markers keep the line-wide reveal.
+  Every inline marker now carries its element's range, and the three visibility
+  modes share the same rule. Thanks to @JustSimpleUser52 for the precise
+  examples (`**bo|ld**`, `|**bold**`, `**bold**|`) - they became the spec.
 
 ## [0.3.19] - 2026-10-22
 
