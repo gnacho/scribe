@@ -329,3 +329,64 @@ fn cierre_borrador_vacio_sin_dialogo() {
 
     std::fs::remove_dir_all(&dir).ok();
 }
+
+/// Busca el primer AdwSplitButton del árbol de widgets (el «Abrir» de la
+/// cabecera) sin asumir la estructura interna de la ToolbarView.
+fn busca_split_button(w: &gtk4::Widget) -> Option<libadwaita::SplitButton> {
+    if let Ok(split) = w.clone().downcast::<libadwaita::SplitButton>() {
+        return Some(split);
+    }
+    let mut child = w.first_child();
+    while let Some(c) = child {
+        if let Some(found) = busca_split_button(&c) {
+            return Some(found);
+        }
+        child = c.next_sibling();
+    }
+    None
+}
+
+#[test]
+#[ignore = "requiere display: xvfb-run -a cargo test --test tabs_smoke recientes -- --ignored --nocapture"]
+fn menu_recientes_nunca_vacio() {
+    gtk4::init().expect("GTK necesita un display; ejecuta bajo xvfb-run");
+    libadwaita::init().expect("libadwaita init");
+
+    let app = libadwaita::Application::builder()
+        .application_id("io.github.gnacho.Scribe.RecentSmoke")
+        .build();
+    app.register(gtk4::gio::Cancellable::NONE)
+        .expect("registrar la app de test");
+
+    let settings = Rc::new(AppSettings::new());
+    let win = ScribeWindow::new(&app, &settings);
+    win.present();
+    let ctx = gtk4::glib::MainContext::default();
+    pump(&ctx, 300);
+
+    let split = busca_split_button(&win.window.clone().upcast())
+        .expect("el SplitButton «Abrir» existe en la cabecera");
+    let menu = split.menu_model().expect("el SplitButton tiene menu_model");
+    assert!(
+        menu.n_items() >= 1,
+        "el menú de recientes nunca debe quedar vacío (issue #110)"
+    );
+    if menu.n_items() == 1 {
+        // Recientes vacíos: el único ítem es el placeholder deshabilitado.
+        let it = menu.iterate_item_attributes(0);
+        let mut sensitive = None;
+        while let Some((name, value)) = it.next() {
+            if name.as_str() == "sensitive" {
+                sensitive = value.get::<bool>();
+            }
+        }
+        assert_eq!(
+            sensitive,
+            Some(false),
+            "el placeholder sin recientes debe estar deshabilitado"
+        );
+    }
+
+    win.window.close();
+    pump(&ctx, 100);
+}
