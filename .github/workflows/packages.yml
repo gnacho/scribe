@@ -153,7 +153,10 @@ jobs:
           path: dist
           merge-multiple: true
 
+      # Sin checkout en este job, gh no tiene un repositorio al que apuntar y
+      # falla con "fatal: not a git repository". Se lo decimos explícitamente.
       - name: upload packages
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
         run: gh release upload "$GITHUB_REF_NAME" dist/*.deb dist/*.rpm dist/*.AppImage --clobber
