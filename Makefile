@@ -60,6 +60,13 @@ install: build
 	for icon in data/icons/hicolor/scalable/actions/*.svg; do \
 		install -Dm644 "$$icon" "$(ICONDIR)/scalable/actions/$$(basename "$$icon")"; \
 	done
+	# Un ~/.local/share/icons/hicolor sin index.theme deja a GTK con la caché
+	# que encontró (posiblemente obsoleta), y gtk-update-icon-cache se niega a
+	# reconstruirla ("No theme index file"), así que el icono no se resuelve y
+	# el escritorio muestra el placeholder. Instalar el índice y refrescar la
+	# caché hace el resultado independiente de lo que hubiera antes (#114).
+	install -Dm644 data/icons/hicolor/index.theme "$(ICONDIR)/index.theme"
+	-gtk-update-icon-cache -f -t "$(ICONDIR)" >/dev/null 2>&1 || true
 
 # AppImage para uso fuera de la distro de compilación. Necesita appimagetool
 # en el PATH o en APPIMAGETOOL (ver packaging/appimage/build-appimage.sh).
