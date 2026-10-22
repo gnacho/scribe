@@ -1073,6 +1073,14 @@ impl ScribeWindow {
                     row.set_sensitive(false);
                     recents_list.append(&row);
                 }
+                // El menú de la cabecera nunca debe quedar vacío: con cero
+                // recientes (o con rutas que ya no existen) el popover del
+                // SplitButton salía con un cuerpo vacío (issue #110).
+                if recents_menu.n_items() == 0 {
+                    let item = gio::MenuItem::new(Some(&gettext("No recent documents")), None);
+                    item.set_attribute_value("sensitive", Some(&false.to_variant()));
+                    recents_menu.append_item(&item);
+                }
             })
         };
         refresh_recents("");
