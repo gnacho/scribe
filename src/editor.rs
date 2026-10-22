@@ -2053,7 +2053,24 @@ impl Editor {
         let start = self.buffer.start_iter();
         self.buffer.place_cursor(&start);
         self.last_line.set(0);
-        self.refresh();
+        // Cargar un documento no está dentro de ninguna señal del buffer (a
+        // diferencia de una edición), así que se puede decorar aquí mismo: el
+        // tag de cabecera se aplica antes del primer layout y no se ve el
+        // salto de tamaño al abrir un fichero con texto encima (#115).
+        self.decorar_ahora();
+    }
+
+    /// Aplica la decoración en el acto. Solo es seguro cuando no se está
+    /// procesando una señal del buffer; para ediciones, `refresh` (diferido).
+    fn decorar_ahora(&self) {
+        let (Some(view), Some(buffer)) = (
+            self.decoracion_ctx.view.upgrade(),
+            self.decoracion_ctx.buffer.upgrade(),
+        ) else {
+            return;
+        };
+        let config = self.decoracion_ctx.decoration.get();
+        decorate(&view, &buffer, &self.decoracion_ctx, config);
     }
 
     pub fn text(&self) -> String {
