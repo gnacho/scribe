@@ -653,26 +653,11 @@ mod imp {
                         );
                         snapshot.append_color(&palette.muted, &rect);
                     }
-                    // Filete fino bajo un título H1/H2 (estilo GitHub), con
-                    // el ancho del propio texto del título.
-                    Ornament::HeadingRule { .. } => {
-                        let view = self.obj();
-                        let Some(mut end_iter) = view.buffer().iter_at_line(line) else {
-                            continue;
-                        };
-                        if !end_iter.ends_line() {
-                            end_iter.forward_to_line_end();
-                        }
-                        let end_rect = view.iter_location(&end_iter);
-                        let y = (end_rect.y() + end_rect.height()) as f32 - RULE_THICKNESS;
-                        let rect = graphene::Rect::new(
-                            x,
-                            y.round(),
-                            (end_rect.x() as f32 - x).max(0.0),
-                            RULE_THICKNESS,
-                        );
-                        snapshot.append_color(&palette.muted, &rect);
-                    }
+                    // Filete bajo un título H1/H2: retirado a petición de los
+                    // primeros usuarios (#115, #117). El ornamento se sigue
+                    // calculando porque la maquetación reserva su hueco; aquí
+                    // simplemente no se pinta nada.
+                    Ornament::HeadingRule { .. } => {}
                     // La cabecera de la tabla: ocupa el hueco que deja la fila
                     // de guiones y abarca justo las columnas de la rejilla, no
                     // toda la columna de texto (a ancho completo parecía que

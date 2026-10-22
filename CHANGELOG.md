@@ -5,6 +5,21 @@ All notable changes to Scribe will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- **A heading no longer jumps in size when the document opens** (#115): the
+  decoration was always deferred to the main loop, so the first layout painted
+  the heading at body size and the tag enlarged it one cycle later. Loading a
+  document is not inside a buffer signal, so it is now decorated on the spot and
+  the first paint already has the right sizes.
+
+### Removed
+
+- **The rule under H1 and H2 headings** (#115, #117): it was a stylistic choice
+  that the first users did not want, and it is gone.
+
 ## [0.3.18] - 2026-10-22
 
 ### Fixed
