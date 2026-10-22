@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Remote image downloads no longer register GIO async callbacks** (#99): the
+  download runs synchronously on a dedicated thread and only the decoded
+  texture crosses back, so no GLib closure is ever consumed from a thread other
+  than the one that registered it. The ignored UI tests now serialize around
+  the process-wide default `MainContext`, which GLib forbids two threads from
+  owning at once; `--ignored` runs are deterministic in parallel.
+
 - **Heading, list and blockquote markers reveal on the cursor line** (#117): in
   "Hide" mode the `# `, `- ` and `> ` now show when the cursor is on their line,
   matching the live-preview convention where the exception is the line, not the

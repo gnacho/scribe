@@ -121,7 +121,6 @@ mod imp {
     use super::*;
     use std::cell::{Cell, RefCell};
     use std::collections::HashMap;
-    use std::rc::Rc;
 
     #[derive(Default)]
     pub struct MarkdownView {
@@ -1188,37 +1187,79 @@ mod imp {
     /// recibe la textura, ya guardada en la caché de disco, o `None` si algo
     /// falló. La red la pone GIO (el backend https de gvfs).
     pub(super) fn fetch_remote_image(url: &str, listo: impl Fn(Option<gdk::Texture>) + 'static) {
+        // Los callbacks de GIO se consumen en el MainContext del proceso, que no
+        // tiene por qué ser el del hilo que pidió la imagen: cuando hay más de
+        // uno (varios hilos de test, otra ventana) el ThreadGuard que registra
+        // glib-rs revienta al cruzar de hilo (#99). Aquí la red se atiende en un
+        // hilo propio, con GIO síncrono; lo único que vuelve es la textura ya
+        // decodificada, que es segura entre hilos. El cierre no cruza de hilo:
+        // vive en este hilo y lo ejecuta un `idle` local que este hilo registra.
         let uri = url.to_string();
-        let listo = Rc::new(listo);
-        let tras_tamano = listo.clone();
-        gio::File::for_uri(url).query_info_async(
-            "standard::size",
-            gio::FileQueryInfoFlags::NONE,
-            glib::Priority::DEFAULT_IDLE,
-            gio::Cancellable::NONE,
-            move |resultado| {
-                if let Ok(info) = resultado {
-                    if info.size() > MAX_IMAGE_BYTES as i64 {
-                        tras_tamano(None);
-                        return;
+        let (tx, rx) = std::sync::mpsc::channel::<Option<gdk::Texture>>();
+        // `idle_add_local` registra la fuente en el MainContext del hilo actual
+        // (este), así que GTK la ejecuta aquí. El cierre solo sale cuando hay
+        // una textura en el canal.
+        glib::idle_add_local(move || match rx.try_recv() {
+            Ok(textura) => {
+                listo(textura);
+                glib::ControlFlow::Break
+            }
+            Err(std::sync::mpsc::TryRecvError::Empty) => glib::ControlFlow::Continue,
+            Err(_) => glib::ControlFlow::Break,
+        });
+        let _ = cola_descargas()
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .send(Box::new(move || {
+                let textura = descargar_imagen(&uri);
+                // El canal es `Send`: la textura ya decodificada viaja sin
+                // tocar ningún estado de GTK del hilo de descargas.
+                let _ = tx.send(textura);
+            }));
+    }
+
+    /// Descarga y decodifica una imagen remota. Corre en el hilo de descargas.
+    pub(super) fn descargar_imagen(url: &str) -> Option<gdk::Texture> {
+        let tamano = gio::File::for_uri(url)
+            .query_info(
+                "standard::size",
+                gio::FileQueryInfoFlags::NONE,
+                gio::Cancellable::NONE,
+            )
+            .ok()
+            .map(|info| info.size());
+        if tamano.map(|t| t > MAX_IMAGE_BYTES as i64).unwrap_or(false) {
+            return None;
+        }
+        let (bytes, _etag) = gio::File::for_uri(url)
+            .load_bytes(gio::Cancellable::NONE)
+            .ok()?;
+        if bytes.len() as u64 > MAX_IMAGE_BYTES {
+            return None;
+        }
+        save_remote(url, &bytes)
+    }
+
+    /// Cola hacia el hilo que atiende las descargas. Se crea la primera vez y
+    /// vive mientras dure el proceso.
+    /// Emisor protegido por un `Mutex`, para serializar los envíos al hilo de
+    /// descargas entre varios hilos que piden imágenes a la vez.
+    type EmisorDescargas = std::sync::Mutex<std::sync::mpsc::Sender<Box<dyn FnOnce() + Send>>>;
+
+    fn cola_descargas() -> &'static EmisorDescargas {
+        static COLA: std::sync::OnceLock<EmisorDescargas> = std::sync::OnceLock::new();
+        COLA.get_or_init(|| {
+            let (emisor, receptor) = std::sync::mpsc::channel::<Box<dyn FnOnce() + Send>>();
+            std::thread::Builder::new()
+                .name("scribe-remote-images".into())
+                .spawn(move || {
+                    for tarea in receptor {
+                        tarea();
                     }
-                }
-                let uri_descarga = uri.clone();
-                let tras_carga = tras_tamano.clone();
-                gio::File::for_uri(&uri).load_bytes_async(
-                    gio::Cancellable::NONE,
-                    move |resultado| {
-                        let textura = match resultado {
-                            Ok((bytes, _etag)) if bytes.len() as u64 <= MAX_IMAGE_BYTES => {
-                                save_remote(&uri_descarga, &bytes)
-                            }
-                            _ => None,
-                        };
-                        tras_carga(textura);
-                    },
-                );
-            },
-        );
+                })
+                .expect("no se pudo arrancar el hilo de descargas");
+            std::sync::Mutex::new(emisor)
+        })
     }
 
     /// Carga una textura con límites de seguridad: ficheros locales (o de la
@@ -1558,9 +1599,41 @@ impl Default for MarkdownView {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
-    use std::cell::RefCell;
+
+    /// Candado para los tests que tocan GTK o el MainContext por defecto del
+    /// proceso. Cada binario de integración corre sus tests en hilos distintos
+    /// pero TODOS comparten ese contexto, y GLib prohíbe que dos hilos lo
+    /// posean a la vez: en paralelo, el `gtk4::init` de uno falla mientras el
+    /// otro lo tiene adquirido, y bombearlo desde dos hilos acaba en SIGSEGV
+    /// (#99). Con el candado, `--ignored` en paralelo es determinista.
+    pub(crate) fn serial() -> std::sync::MutexGuard<'static, ()> {
+        static LOCK: std::sync::OnceLock<std::sync::Mutex<()>> = std::sync::OnceLock::new();
+        LOCK.get_or_init(|| std::sync::Mutex::new(()))
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+    }
+
+    /// Inicializa GTK/libadwaita una sola vez por proceso y devuelve el candado
+    /// serial. `gtk4::init` es de proceso: el primer hilo que la hace deja GTK
+    /// anclado a ese hilo, y cualquier `gtk4::init` posterior desde otro hilo
+    /// entra en panico ("Attempted to initialize GTK from two different
+    /// threads"). Con esto, los tests de UI de un mismo binario comparten la
+    /// inicializacion y el candado evita que dos hilos toquen el MainContext
+    /// por defecto a la vez (#99).
+    // #[allow(dead_code)]: en el binario de la app no hay tests de UI que la
+    // usen; la usan los binarios de integracion que incluyen este modulo.
+    #[allow(dead_code)]
+    pub(crate) fn gtk_compartido() -> std::sync::MutexGuard<'static, ()> {
+        let guardia = serial();
+        static INICIO: std::sync::Once = std::sync::Once::new();
+        INICIO.call_once(|| {
+            gtk4::init().expect("GTK necesita un display; ejecuta bajo xvfb-run");
+            libadwaita::init().expect("libadwaita init");
+        });
+        guardia
+    }
 
     #[test]
     fn la_tarjeta_de_video_es_16_9_y_cabe_en_su_hueco() {
@@ -1583,14 +1656,19 @@ mod tests {
         assert!(!imp::is_remote("ftp://example.com/a.png"));
     }
 
-    /// E2E de la descarga remota: pide una imagen real, espera a que llegue y
-    /// comprueba que queda en la caché de disco y que se recarga de ahí (sin
-    /// volver a pedirla). Se marca como ignorada porque necesita red; se
-    /// ejecuta a mano con `--ignored`. No inicializa GTK: las texturas y GIO no
-    /// necesitan display, así que puede correr junto a otros tests del proceso.
+    /// E2E de la cadena de descarga remota: pide una imagen real, comprueba
+    /// que queda en la caché de disco y que se recarga de ahí. Se marca como
+    /// ignorada porque necesita red; se ejecuta a mano con `--ignored`.
+    ///
+    /// No pasa por `fetch_remote_image` a propósito: su entrega depende del
+    /// MainContext por defecto del proceso, que en los tests es un recurso
+    /// compartido entre hilos y no se puede poseer con seguridad mientras
+    /// otros tests viven (#99). Lo que se valida aquí es la cadena síncrona
+    /// que ese camino usa por dentro: descarga, guardado en caché y carga.
     #[test]
     #[ignore = "requiere red"]
     fn una_imagen_remota_se_descarga_y_queda_en_la_cache() {
+        let _guardia = serial();
         let url = "https://commonmark.org/help/images/favicon.png";
         let cache =
             imp::remote_cache_dir().join(crate::markdown_render::remote_image_cache_name(url));
@@ -1600,20 +1678,8 @@ mod tests {
             "la caché debería estar vacía"
         );
 
-        let resultado: std::rc::Rc<RefCell<Option<bool>>> = Default::default();
-        let guardado = resultado.clone();
-        imp::fetch_remote_image(url, move |textura| {
-            *guardado.borrow_mut() = Some(textura.is_some());
-        });
-
-        let contexto = glib::MainContext::default();
-        let limite = std::time::Instant::now() + std::time::Duration::from_secs(30);
-        while resultado.borrow().is_none() && std::time::Instant::now() < limite {
-            while contexto.iteration(false) {}
-            std::thread::sleep(std::time::Duration::from_millis(10));
-        }
-
-        assert_eq!(*resultado.borrow(), Some(true), "no llegó la textura");
+        let textura = imp::descargar_imagen(url);
+        assert!(textura.is_some(), "no llegó la textura");
         assert!(cache.is_file(), "la descarga no se guardó en la caché");
         let textura = imp::load_texture(url).expect("la caché debería cargarse del disco");
         assert!(textura.width() > 0 && textura.height() > 0);
