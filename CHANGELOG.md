@@ -43,6 +43,51 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **The rule under H1 and H2 headings** (#115, #117): it was a stylistic choice
   that the first users did not want, and it is gone.
 
+## [0.3.19] - 2026-10-22
+
+The first release shaped by external bug reports. Thank you,
+[@JustSimpleUser52](https://github.com/JustSimpleUser52): you are the first
+user this project ever had, three of your reports landed in this changelog, and
+the editor is better for every one of them.
+
+### Fixed
+
+- **Tables with long cells no longer break** (#124, reported by
+  @JustSimpleUser52 as "Markdown tables are borked" - and they were): a row
+  longer than its column rendered wider than the table and, once it passed the
+  visible width, wrapped with its continuation landing outside the table. Any
+  table with an overflowing row now renders as the painted canvas, which wraps
+  cell text inside its own column (#125).
+- **A heading no longer jumps in size when the document opens** (#115, reported
+  by @JustSimpleUser52, with a video): the decoration was deferred past the
+  first layout, so headings painted at body size and grew one cycle later.
+  Loading a document is now decorated before the first paint (#120).
+- **The rule under H1 and H2 headings is gone** (#115, #117 - "It doesn't look
+  good"; fair, it is gone) (#120).
+- **Heading, list and blockquote markers reveal on the cursor line** in "Hide"
+  mode (#117, reported by @JustSimpleUser52): the `#`, `- ` and `> ` now show on
+  the line being edited, so those markers can be edited at all in that mode. The
+  task checkbox also aligns with its text baseline now (#122).
+- **Remote image downloads no longer register GIO async callbacks** (#99): the
+  download runs on a dedicated thread and only the decoded texture crosses
+  back, so no GLib closure is ever consumed from the wrong thread. The ignored
+  UI tests now serialize around the shared `MainContext` and run
+  deterministically in parallel (#123).
+
+### Added
+
+- **Pointer cursor over task checkboxes** (#117, requested by
+  @JustSimpleUser52): hovering a `- [ ]` box turns the cursor into a hand, so
+  the box is clearly clickable (#121).
+- **Larger task checkboxes** (#117, same report): from 14 to 20 px, with the
+  border and check stroke scaled up and the click hit-test following (#121).
+
+### Internal
+
+- **CI: the package-attach job points `gh` at the repository** (#119): without
+  a checkout, `gh release upload` failed with "not a git repository" and the
+  v0.3.18 packages had to be attached by hand.
+
 ## [0.3.18] - 2026-10-22
 
 ### Fixed
