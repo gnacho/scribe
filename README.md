@@ -216,13 +216,13 @@ sudo pacman -S rust gtk4 libadwaita gtksourceview5 glib2
 Debian / Ubuntu:
 
 ```sh
-sudo apt install libgtk-4-dev libadwaita-1-dev libgtksourceview-5-dev libglib2.0-dev
+sudo apt install libgtk-4-dev libadwaita-1-dev libgtksourceview-5-dev libenchant-2-dev libglib2.0-dev
 ```
 
 Fedora:
 
 ```sh
-sudo dnf install gtk4-devel libadwaita-devel gtksourceview5-devel glib2-devel
+sudo dnf install gtk4-devel libadwaita-devel gtksourceview5-devel enchant2-devel glib2-devel
 ```
 
 ## Install
