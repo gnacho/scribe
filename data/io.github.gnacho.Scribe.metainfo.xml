@@ -53,6 +53,14 @@
   </screenshots>
   <content_rating type="oars-1.1" />
   <releases>
+    <release version="0.3.18" date="2026-10-22">
+      <description>
+        <p>The About window shows the Scribe icon again, even when the icon theme is missing or its cache is stale.</p>
+        <p>make install now refreshes the icon cache, so the desktop entry resolves on every machine.</p>
+        <p xml:lang="es">La ventana Acerca de vuelve a mostrar el icono de Scribe, incluso si falta el tema de iconos o su cache esta obsoleta.</p>
+        <p xml:lang="es">make install refresca la cache de iconos, asi que la entrada del escritorio se resuelve en cualquier maquina.</p>
+      </description>
+    </release>
     <release version="0.3.17" date="2026-10-21">
       <description>
         <p>Search and replace is fully wired: Ctrl+H shows the replace row, Ctrl+G and Ctrl+Shift+G jump between matches, and the toggle shows a proper icon.</p>

@@ -145,8 +145,10 @@ invisible-text abort path of GNOME/gtk#8346 is unreachable by construction.
   not interpreted: it stays as dimmed text in the editor and is dropped in the
   split preview. The result is an approximation of the Markdown, not a copy of
   a browser rendering.
-- **No replace, no export to HTML, and no spell checking.** The find bar
-  (Ctrl+F) searches the active document; replacing is not implemented.
+- **No export to HTML, and no spell checking.** The find bar (Ctrl+F)
+  searches the active document, with case sensitivity and regular expressions as
+  options. Ctrl+H reveals a second row with Replace and Replace All, so the
+  replacement is done in place, not in a dialog.
 - **PDF export has no outline/bookmarks.** `GtkPrintOperation` does not expose
   PDF bookmarks, so the exported PDF carries no table of contents or outline.
 - **Images**: local files up to 20 MB are painted, at most 144 px tall, and

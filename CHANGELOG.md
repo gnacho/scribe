@@ -5,6 +5,26 @@ All notable changes to Scribe will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.18] - 2026-10-22
+
+### Fixed
+
+- **The About window shows the Scribe icon again** (#114): the app icon and the
+  symbolic ones are embedded as a GResource and registered on the display icon
+  theme, so `AdwAboutWindow` no longer depends on the installed theme. Builds
+  without an icon theme, or with a stale `icon-theme.cache`, already get the
+  right icon from `d7a81a5`; this release is the first one that ships it.
+- **`make install` no longer depends on a cached icon directory** (#114): it
+  installs a `hicolor/index.theme` and refreshes the icon cache, so the desktop
+  entry resolves even on machines where `gtk-update-icon-cache` had refused to
+  rebuild a stale cache ("No theme index file").
+
+### Changed
+
+- **README limitations match the current feature set** (#97): both README files
+  no longer claim that replacing is not implemented. Ctrl+H reveals the replace
+  row, with case sensitivity and regular expressions as options.
+
 ## [0.3.17] - 2026-10-21
 
 ### Added

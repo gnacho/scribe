@@ -160,9 +160,11 @@ inalcanzable por construcción.
   El HTML del fuente no se interpreta: queda como texto atenuado en el editor y
   se descarta en la vista dividida. El resultado es una aproximación del
   Markdown, no una copia del render de un navegador.
-- **Sin reemplazar, sin exportar a HTML y sin corrección ortográfica.** La
-  barra de buscar (Ctrl+F) busca en el documento activo; el reemplazo no está
-  implementado.
+- **Sin exportar a HTML y sin corrección ortográfica.** La barra de buscar
+  (Ctrl+F) busca en el documento activo, con sensibilidad a mayúsculas y
+  expresiones regulares como opciones. Ctrl+H despliega una segunda fila con
+  Reemplazar y Reemplazar todo, así que el reemplazo se hace en el sitio, no en
+  un diálogo aparte.
 - **La exportación a PDF no lleva índice ni marcadores.** `GtkPrintOperation`
   no expone marcadores de PDF, así que el PDF exportado no tiene tabla de
   contenidos ni outline.
