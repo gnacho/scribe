@@ -79,10 +79,16 @@ const BULLET_RADIUS: f32 = 3.0;
 /// Lado de la casilla de tarea. Más grande desde #117: a 14 px era difícil de
 /// pulsar y de apreciar.
 const CHECKBOX_SIZE: f32 = 20.0;
+/// Radio de la esquina de la casilla.
+const CHECKBOX_RADIUS: f32 = 5.0;
 /// Distancia del borde izquierdo de la casilla al borde del texto. Para que el
 /// centro de la casilla quede donde estaba el de la de 14 px, el offset crece
 /// con la mitad del aumento de tamaño.
 const CHECKBOX_OFFSET: f32 = 25.0;
+/// Recorte de la parte superior del rectángulo de la casilla, para alinear el
+/// interior (la marca) con la primera línea del texto en lugar de con su centro
+/// geométrico (#117). A ojo: la caja sube lo que el glifo empinado baja.
+const CHECKBOX_TOP_CROP: f32 = 2.0;
 /// Sangrado de la caja de código respecto al margen de la columna.
 pub(crate) const BLOCK_PADDING: f32 = 8.0;
 const BLOCK_RADIUS: f32 = 8.0;
@@ -1286,8 +1292,11 @@ mod imp {
         checked: bool,
         palette: &OrnamentPalette,
     ) {
-        let rect = graphene::Rect::new(x, y, CHECKBOX_SIZE, CHECKBOX_SIZE);
-        let rounded = gsk::RoundedRect::from_rect(rect, 4.0);
+        // Se recorta un poco por arriba: la marca queda alineada con la línea
+        // de base del texto, no con el centro geométrico de la caja.
+        let alto = CHECKBOX_SIZE - CHECKBOX_TOP_CROP;
+        let rect = graphene::Rect::new(x, y + CHECKBOX_TOP_CROP, CHECKBOX_SIZE, alto);
+        let rounded = gsk::RoundedRect::from_rect(rect, CHECKBOX_RADIUS);
 
         if checked {
             snapshot.push_rounded_clip(&rounded);
@@ -1296,9 +1305,18 @@ mod imp {
 
             // La marca se traza a mano: tres puntos y un trazo redondeado.
             let builder = gsk::PathBuilder::new();
-            builder.move_to(x + CHECKBOX_SIZE * 0.26, y + CHECKBOX_SIZE * 0.52);
-            builder.line_to(x + CHECKBOX_SIZE * 0.44, y + CHECKBOX_SIZE * 0.70);
-            builder.line_to(x + CHECKBOX_SIZE * 0.76, y + CHECKBOX_SIZE * 0.32);
+            builder.move_to(
+                x + CHECKBOX_SIZE * 0.26,
+                y + CHECKBOX_TOP_CROP + alto * 0.52,
+            );
+            builder.line_to(
+                x + CHECKBOX_SIZE * 0.44,
+                y + CHECKBOX_TOP_CROP + alto * 0.70,
+            );
+            builder.line_to(
+                x + CHECKBOX_SIZE * 0.76,
+                y + CHECKBOX_TOP_CROP + alto * 0.32,
+            );
             let stroke = gsk::Stroke::new(2.4);
             stroke.set_line_cap(gsk::LineCap::Round);
             stroke.set_line_join(gsk::LineJoin::Round);
