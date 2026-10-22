@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Pointer cursor over task checkboxes** (#117): hovering a `- [ ]` box turns
+  the cursor into a hand, so it is clearly clickable. The sensitive area matches
+  the click hit-test, including its margin.
+- **Larger task checkboxes** (#117): from 14 to 20 px, with the border and the
+  check stroke scaled accordingly. The click hit-test follows, so the box is as
+  easy to hit as it looks.
+
 ### Fixed
 
 - **A heading no longer jumps in size when the document opens** (#115): the

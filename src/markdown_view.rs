@@ -76,10 +76,13 @@ impl Default for OrnamentPalette {
 /// Distancia del centro de la viñeta al borde izquierdo del texto.
 const BULLET_OFFSET: f32 = 15.0;
 const BULLET_RADIUS: f32 = 3.0;
-/// Lado de la casilla de tarea.
-const CHECKBOX_SIZE: f32 = 14.0;
-/// Distancia del borde izquierdo de la casilla al borde del texto.
-const CHECKBOX_OFFSET: f32 = 22.0;
+/// Lado de la casilla de tarea. Más grande desde #117: a 14 px era difícil de
+/// pulsar y de apreciar.
+const CHECKBOX_SIZE: f32 = 20.0;
+/// Distancia del borde izquierdo de la casilla al borde del texto. Para que el
+/// centro de la casilla quede donde estaba el de la de 14 px, el offset crece
+/// con la mitad del aumento de tamaño.
+const CHECKBOX_OFFSET: f32 = 25.0;
 /// Sangrado de la caja de código respecto al margen de la columna.
 pub(crate) const BLOCK_PADDING: f32 = 8.0;
 const BLOCK_RADIUS: f32 = 8.0;
@@ -1296,12 +1299,12 @@ mod imp {
             builder.move_to(x + CHECKBOX_SIZE * 0.26, y + CHECKBOX_SIZE * 0.52);
             builder.line_to(x + CHECKBOX_SIZE * 0.44, y + CHECKBOX_SIZE * 0.70);
             builder.line_to(x + CHECKBOX_SIZE * 0.76, y + CHECKBOX_SIZE * 0.32);
-            let stroke = gsk::Stroke::new(1.8);
+            let stroke = gsk::Stroke::new(2.4);
             stroke.set_line_cap(gsk::LineCap::Round);
             stroke.set_line_join(gsk::LineJoin::Round);
             snapshot.append_stroke(&builder.to_path(), &stroke, &palette.on_accent);
         } else {
-            snapshot.append_border(&rounded, &[1.5, 1.5, 1.5, 1.5], &[palette.muted; 4]);
+            snapshot.append_border(&rounded, &[2.0, 2.0, 2.0, 2.0], &[palette.muted; 4]);
         }
     }
 

@@ -555,6 +555,18 @@ fn schedule_decoration(ctx: &DecoracionCtx, delay: Duration) {
 /// el cliente de correo...). El `UriLauncher` de GTK respeta el portal de
 /// escritorio; si no hay nadie que atienda el esquema, se avisa por la salida
 /// de error y no se rompe nada.
+/// Puntero sobre una casilla de tarea: mano; en cualquier otro sitio: texto.
+/// Reusa el mismo hit-test que el gesto de clic, así que el área sensible es
+/// la misma (la caja con su margen).
+fn actualizar_cursor(view: &MarkdownView, x: f64, y: f64) {
+    let nombre = if view.checkbox_at_position(x, y).is_some() {
+        "pointer"
+    } else {
+        "text"
+    };
+    view.set_cursor_from_name(Some(nombre));
+}
+
 fn abrir_en_navegador(widget: &impl IsA<gtk4::Widget>, url: &str) {
     let ventana = widget
         .root()
@@ -1891,7 +1903,9 @@ impl Editor {
         click.set_button(gdk4::BUTTON_PRIMARY);
         click.set_propagation_phase(gtk4::PropagationPhase::Capture);
         let click_view = self.view.clone();
+        let click_view_released = click_view.clone();
         click.connect_pressed(move |gesture, _, x, y| {
+            actualizar_cursor(&click_view, x, y);
             // El clic sobre la casilla de una tarea la alterna, sin mover el
             // cursor (el gesto se queda el evento).
             if let Some(line) = click_view.checkbox_at_position(x, y) {
@@ -1912,6 +1926,12 @@ impl Editor {
                 None => {
                     gesture.set_state(gtk4::EventSequenceState::Denied);
                 }
+            }
+        });
+        click.connect_released(move |gesture, _, _x, _y| {
+            // Al soltar fuera de una casilla se restaura el cursor de texto.
+            if gesture.current_event_state().is_empty() {
+                click_view_released.set_cursor_from_name(Some("text"));
             }
         });
         self.view.add_controller(click);
@@ -2034,9 +2054,12 @@ impl Editor {
         self.view.add_controller(teclas_ctrl);
 
         let motion = gtk4::EventControllerMotion::new();
+        let motion_view = self.view.clone();
         motion.connect_motion(move |_, x, y| {
             posicion.set(Some((x, y)));
             aplicar_globo(x, y);
+            // Puntero sobre una casilla: cursor de mano (#117).
+            actualizar_cursor(&motion_view, x, y);
         });
         self.view.add_controller(motion);
     }
