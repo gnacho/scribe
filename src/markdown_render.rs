@@ -1087,15 +1087,16 @@ impl TablePlan {
     /// las columnas siguientes en vez de encoger nada. Las filas sin `|`
     /// inicial no tienen ancla y se dejan como están.
     ///
-    /// La rejilla es inviable cuando ninguna fila de contenido cabe entera en
-    /// la geometría de la fila de guiones (tabla con delimitadores triviales
-    /// como `|---|` y celdas de prosa larga): recolocar nada es imposible y
-    /// pintarla dejaría un abanico de líneas sobre el texto. El adorno no se
-    /// emite entonces y la tabla se dibuja como bloque fluido; el remedio del
-    /// desborde parcial sigue siendo la acción «Format tables».
+    /// La rejilla es inviable cuando ALGUNA fila de contenido no cabe en la
+    /// geometría de la fila de guiones: esa fila se renderiza más ancha que la
+    /// tabla y, si además supera el ancho visible de la vista, envuelve y su
+    /// continuación cae fuera de su columna, destrozando la rejilla (#124,
+    /// «tables are borked»). El lienzo pintado (celdas con texto envuelto por
+    /// columna) es el render pensado para tablas de prosa, así que cualquier
+    /// desborde manda la tabla entera al lienzo.
     fn pads(&self, text: &str, shrunk: &[(usize, usize)]) -> (Vec<TablePad>, bool) {
         let mut out = Vec::new();
-        let mut alguna_fila_cabe = false;
+        let mut alguna_fila_no_cabe = false;
         for (row_start, row_end, cells) in &self.rows {
             let metrics = RowMetrics::new(text, *row_start, *row_end, shrunk);
             // Las celdas vienen con offsets relativos a su fila; `RowMetrics`
@@ -1117,10 +1118,6 @@ impl TablePlan {
                 };
                 let width = pos(cell.end) - pos(cell.start);
                 let slack = column.width as f32 - width;
-                eprintln!(
-                    "PADS fila anchura={width} col={} slack={slack}",
-                    column.width
-                );
                 if slack < -0.5 {
                     fila_cabe = false;
                 }
@@ -1139,9 +1136,11 @@ impl TablePlan {
                     });
                 }
             }
-            alguna_fila_cabe |= fila_cabe;
+            if !fila_cabe {
+                alguna_fila_no_cabe = true;
+            }
         }
-        (out, !alguna_fila_cabe)
+        (out, alguna_fila_no_cabe)
     }
 
     /// Lienzo pintado de esta tabla: columnas (alineación y peso) y filas con
@@ -2711,17 +2710,6 @@ mod tests {
     }
 
     #[test]
-    fn una_celda_mas_ancha_que_su_columna_no_encoge_nada() {
-        // Sin relleno negativo (GTK no lo admite): la celda se deja desbordar
-        // y las siguientes no se recolocan hacia atrás.
-        let text = "| a | b |\n|---|---|\n| desbordaaaaa | 2 |\n";
-        let (_, _, _, _, pads) = grid(text);
-        assert_eq!(pads.len(), 1, "{pads:?}");
-        assert_eq!(pads[0].offset, 4);
-        assert!((pads[0].cells - 0.9).abs() < 0.01, "{pads:?}");
-    }
-
-    #[test]
     fn tabla_con_todo_el_contenido_mas_ancha_que_la_geometria_no_genera_rejilla() {
         // Delimitadores triviales (`|---|`) con celdas de prosa larga: ninguna
         // fila cabe en la geometría, así que no hay rejilla que pintar (sería
@@ -2879,13 +2867,23 @@ mod tests {
     }
 
     #[test]
-    fn tabla_con_una_sola_fila_que_desborda_mantiene_la_rejilla() {
-        // El desborde de una fila suelta (con el resto cabiendo) es la
-        // limitación aceptada: la rejilla se mantiene y el remedio es
-        // «Format tables». Solo cuando NINGUNA fila cabe se suprime.
+    fn tabla_con_una_fila_que_desborda_pasa_a_lienzo() {
+        // Una sola fila desbordada rompe la rejilla igual que una tabla entera
+        // inviable: la fila se renderiza más ancha que la tabla y, si supera el
+        // ancho visible, envuelve y su continuación cae fuera de su columna
+        // (#124, «tables are borked»). El desborde de una fila manda la tabla
+        // al lienzo pintado, que envuelve el texto dentro de su columna.
         let text = "| a | b |\n|---|---|\n| 1 | 2 |\n| desbordaaaaa | 2 |\n";
-        let (_, _, _, bounds, _) = grid(text);
-        assert_eq!(bounds, vec![0, 4, 8]);
+        let ornaments = analyze(text).ornaments;
+        assert!(
+            ornaments
+                .iter()
+                .all(|o| !matches!(o, Ornament::TableGrid { .. })),
+            "la rejilla con filas desbordadas no se emite: {ornaments:?}"
+        );
+        assert!(ornaments
+            .iter()
+            .any(|o| matches!(o, Ornament::TableCanvas { .. })));
     }
 
     #[test]

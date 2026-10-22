@@ -920,11 +920,6 @@ mod imp {
                 let Some(layout) = canvas_layout(columns, rows, column_cells) else {
                     continue;
                 };
-                eprintln!(
-                    "CANVAS row_lines={:?} primeras={:?}",
-                    layout.row_lines,
-                    layout.cells.first().map(|c| c.first().map(|l| l.len()))
-                );
                 // X de cada frontera de columna, en píxeles.
                 let mut xs = Vec::with_capacity(layout.col_widths.len() + 1);
                 let mut x = left + BLOCK_PADDING;
