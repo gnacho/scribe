@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Heading, list and blockquote markers reveal on the cursor line** (#117): in
+  "Hide" mode the `# `, `- ` and `> ` now show when the cursor is on their line,
+  matching the live-preview convention where the exception is the line, not the
+  whole element. They stay concealed everywhere else.
+
 ### Added
 
 - **Pointer cursor over task checkboxes** (#117): hovering a `- [ ]` box turns

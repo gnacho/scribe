@@ -914,7 +914,13 @@ fn decorate(
                             }
                         }
                         MarkupVisibility::Hidden => {
-                            if gate {
+                            if en_cursor {
+                                // La excepción del live preview (#117): los
+                                // marcadores que un adorno sustituye (el `# `,
+                                // el `- `, el `> `) se dejan ver en la línea
+                                // del cursor para poder editarlos.
+                                "syn_shown"
+                            } else if gate {
                                 "syn_hidden"
                             } else {
                                 "syn_shrink"
