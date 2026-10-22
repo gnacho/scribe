@@ -53,6 +53,12 @@
   </screenshots>
   <content_rating type="oars-1.1" />
   <releases>
+    <release version="0.3.19" date="2026-10-22">
+      <description>
+        <p>First release shaped by external bug reports - thank you, our first user. Tables with long cells now render as a painted canvas that wraps text inside each column instead of breaking the layout; headings no longer jump in size when a document opens, and their underline is gone; task checkboxes gained a pointer cursor and a bigger click area; and Markdown markers reveal on the line being edited in Hide mode.</p>
+        <p xml:lang="es">Primera release moldeada por informes de error externos - gracias a nuestro primer usuario. Las tablas con celdas largas se pintan ahora como lienzo, envolviendo el texto dentro de su columna en vez de romper la maquetacion; las cabeceras ya no saltan de tamano al abrir un documento y han perdido el subrayado; las casillas de tareas tienen cursor de mano y area de pulsacion mayor; y las marcas de Markdown se revelan en la linea que se edita en el modo Ocultar.</p>
+      </description>
+    </release>
     <release version="0.3.18" date="2026-10-22">
       <description>
         <p>The About window shows the Scribe icon again, even when the icon theme is missing or its cache is stale.</p>
