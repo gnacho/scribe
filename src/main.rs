@@ -29,6 +29,11 @@ use window::ScribeWindow;
 const APP_ID: &str = "io.github.gnacho.Scribe";
 const GETTEXT_DOMAIN: &str = "scribe";
 
+/// Iconos de la app empaquetados como recurso (issue #111); se registran al
+/// arrancar para que los simbolicos propios se resuelvan aunque el binario
+/// se ejecute sin datos instalados en ningun tema de iconos.
+const ICONOS_GRESOURCE: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/icons.gresource"));
+
 /// Locale dir relative to the binary: <prefix>/bin/scribe -> <prefix>/share/locale.
 /// Works for /usr, /usr/local, ~/.local and Flatpak (/app) installs alike.
 fn init_gettext() {
@@ -63,6 +68,10 @@ static RECUPERACION_OFRECIDA: AtomicBool = AtomicBool::new(false);
 
 fn main() -> glib::ExitCode {
     init_gettext();
+    gio::resources_register(
+        &gio::Resource::from_data(&glib::Bytes::from_static(ICONOS_GRESOURCE))
+            .expect("el recurso de iconos empaquetado es valido"),
+    );
     let app = adw::Application::builder()
         .application_id(APP_ID)
         // HANDLES_OPEN para `scribe fichero.md` y «Abrir con»; HANDLES_COMMAND_LINE
@@ -201,6 +210,15 @@ fn main() -> glib::ExitCode {
 }
 
 fn build_window(app: &adw::Application) -> Rc<ScribeWindow> {
+    // Los iconos propios viven tambien en un GResource (issue #111): se añade
+    // su prefijo al tema del display una sola vez por proceso.
+    static ICONOS_EN_TEMA: AtomicBool = AtomicBool::new(false);
+    if !ICONOS_EN_TEMA.swap(true, Ordering::SeqCst) {
+        if let Some(display) = gdk4::Display::default() {
+            gtk4::IconTheme::for_display(&display)
+                .add_resource_path("/io/github/gnacho/Scribe/icons");
+        }
+    }
     let settings = Rc::new(AppSettings::new());
     let win = Rc::new(ScribeWindow::new(app, &settings));
     WINDOWS.with(|list| list.borrow_mut().push(win.clone()));
