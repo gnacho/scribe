@@ -55,8 +55,6 @@ fn pump(ctx: &gtk4::glib::MainContext, ms: u64) {
     }
 }
 
-
-
 /// Fuerza el repintado de la ventana y espera, con iteracion bloqueante pero
 /// acotada por un timeout, a que el frame llegue a procesarse. Sin el
 /// `queue_draw` + espera bloqueante, el snapshot captura el arbol antes de que
