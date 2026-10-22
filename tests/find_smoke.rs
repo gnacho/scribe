@@ -52,8 +52,12 @@ fn seleccion(editor: &Editor) -> Option<String> {
 #[test]
 #[ignore = "requiere display: xvfb-run -a cargo test --test find_smoke -- --ignored --nocapture"]
 fn recuento_saltos_y_vuelta_al_final() {
-    gtk4::init().expect("GTK necesita un display; ejecuta bajo xvfb-run");
-    libadwaita::init().expect("libadwaita init");
+    // Los tests con GTK comparten el MainContext por defecto del proceso y GLib
+    // no permite que dos hilos lo posean a la vez: con `--test-threads>1` el
+    // `gtk4::init` de uno falla mientras otro lo tiene adquirido (#99). El
+    // candado está en el módulo de tests de markdown_view, que este fichero
+    // incluye via #[path], así que es el mismo en todo el binario.
+    let _guardia = markdown_view::tests::gtk_compartido();
     let ctx = gtk4::glib::MainContext::default();
 
     let editor = Editor::new();
