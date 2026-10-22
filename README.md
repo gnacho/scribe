@@ -160,8 +160,10 @@ invisible-text abort path of GNOME/gtk#8346 is unreachable by construction.
 - **Videos are not played inside the editor.** The card is drawn from the video
   id and a thumbnail fetched from `i.ytimg.com`, and clicking it opens the
   browser. A link whose id is not a valid 11-character id is left as text.
-- In "hide/reveal on cursor line" mode the marks are shrunk, not removed (see
-  above).
+- In "hide" mode the marks are concealed per element, Obsidian-style: the
+  markers around the element the cursor is in (or touching) reveal; the rest
+  stay shrunk. Heading, list and quote markers reveal on their line instead.
+  Marks are shrunk, not removed (see above).
 
 ## Privacy
 
