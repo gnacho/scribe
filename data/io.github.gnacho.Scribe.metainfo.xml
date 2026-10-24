@@ -53,6 +53,12 @@
   </screenshots>
   <content_rating type="oars-1.1" />
   <releases>
+    <release version="0.3.20" date="2026-10-24">
+      <description>
+        <p>Critical packaging fix: the installer no longer writes an index.theme into the hicolor directory, which since the previous release redefined the whole icon theme and left other apps without icons. The app icon is redesigned to Adwaita standards and gains a symbolic variant, opening a document now takes over the untouched untitled draft instead of adding a tab, and the interface gets its first polish pass: centered empty states in the recents dropdown, no toast when saving, and tab close buttons that follow the window button layout. Markdown syntax now conceals per element, Obsidian style.</p>
+        <p xml:lang="es">Arreglo critico de empaquetado: el instalador ya no escribe un index.theme dentro del directorio hicolor, que desde la release anterior redefinia el tema de iconos entero y dejaba sin iconos a otras apps. El icono de la app se redisena al estandar Adwaita y gana variante simbolica, abrir un documento toma el lugar del borrador sin titulo intocado en vez de anadir una pestana, y la interfaz recibe su primera ronda de pulido: estados vacios centrados en el desplegable de recientes, nada de toast al guardar y cierres de pestana que siguen el lado de los botones de ventana. La sintaxis Markdown ahora se oculta por elemento, al estilo Obsidian.</p>
+      </description>
+    </release>
     <release version="0.3.19" date="2026-10-22">
       <description>
         <p>First release shaped by external bug reports - thank you, our first user. Tables with long cells now render as a painted canvas that wraps text inside each column instead of breaking the layout; headings no longer jump in size when a document opens, and their underline is gone; task checkboxes gained a pointer cursor and a bigger click area; and Markdown markers reveal on the line being edited in Hide mode.</p>

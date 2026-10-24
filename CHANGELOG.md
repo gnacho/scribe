@@ -7,15 +7,53 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Changed
+## [0.3.20] - 2026-10-24
 
+The first release carrying external code. Thank you
+[@somepaulo](https://github.com/somepaulo): the redesigned icon, the symbolic
+variant and the catch of the `index.theme` regression are all yours - and
+[@mihierkansal](https://github.com/mihierkansal) reported the install bug that
+v0.3.18 shipped.
+
+### Fixed
+
+- **The installer no longer writes `index.theme` into hicolor** (#128,
+  reported by @mihierkansal): since v0.3.18 `make install` dropped its own
+  theme index into the user's hicolor directory, which redefined the whole
+  theme for that user and left other apps without icons. The file is gone from
+  the repo and the install target; the copy those two releases left behind is
+  removed when it matches ours (an unrelated one is left alone), the cache is
+  refreshed only when a theme index exists at the destination and a stale user
+  cache is removed otherwise (#130).
+- **Opening a document no longer adds a second tab next to the untouched
+  "Untitled" draft** (#135): a desktop launch leaves stdin at /dev/null, the
+  startup treated it as piped text and the empty draft was born marked as
+  modified, so the pristine-tab reuse never fired. Empty stdin now opens a
+  clean, unmodified window (#136).
+- **The recents empty state is no longer a dead button** (#131): the dropdown
+  swaps to a centered inert label and the sidebar shows the same centered
+  placeholder instead of an insensitive action row that looked clickable
+  (#134).
+- **Saving no longer pops a hardcoded Spanish toast** (#132): "Guardado"
+  showed up regardless of the interface language; the toast is gone, the tab
+  state already tells the story (#134).
+
+### Added
+
+- **Redesigned application icon to Adwaita standards plus a symbolic icon**
+  (@somepaulo, PR #130): size, position and corner radii fixed, unnecessary
+  layers removed, and the missing symbolic variant for GNOME Shell added.
+- **Tab close buttons follow the window button layout** (#133): with the
+  controls on the left the closes move left, exactly like GNOME TextEditor
+  does it - watch `gtk-decoration-layout` and invert the tab bar (#134).
 - **Markdown syntax conceals per element, Obsidian-style** (#117, requested by
   @JustSimpleUser52): the markers around the element the cursor is in - or
   touching either edge of - reveal; everything else stays concealed, even on
   the same line. Heading, list and quote markers keep the line-wide reveal.
   Every inline marker now carries its element's range, and the three visibility
   modes share the same rule. Thanks to @JustSimpleUser52 for the precise
-  examples (`**bo|ld**`, `|**bold**`, `**bold**|`) - they became the spec.
+  examples (`**bo|ld**`, `|**bold**`, `**bold**|`) - they became the spec
+  (#127).
 
 ## [0.3.19] - 2026-10-22
 
