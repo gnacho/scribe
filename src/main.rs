@@ -183,10 +183,16 @@ fn main() -> glib::ExitCode {
             arranque::AccionArranque::LeerStdin => {
                 // stdin redirigido (p. ej. `git diff | scribe`): abrir el
                 // texto como documento sin título, marcado sin guardar.
+                // Con stdin VACÍO (los lanzamientos de escritorio dejan stdin
+                // en /dev/null) la ventana es blanca: abrir un borrador vacío
+                // lo marcaba modificado de nacimiento y rompía la
+                // reutilización de la pestaña «Sin título» (issue #135).
                 let mut texto = String::new();
                 let _ = std::io::stdin().read_to_string(&mut texto);
                 let win = active_or_new_window(app);
-                win.open_untitled(texto);
+                if !texto.is_empty() {
+                    win.open_untitled(texto);
+                }
                 win.present();
             }
             arranque::AccionArranque::AbrirFicheros => {
