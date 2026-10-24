@@ -26,6 +26,10 @@ ICONDIR := $(DATADIR)/icons/hicolor
 
 CARGO ?= cargo
 
+# El index.theme que instalaban la v0.3.18 y la v0.3.19 (ya no se distribuye):
+# sirve para retirarlo de instalaciones viejas sin tocar uno ajeno (#128).
+OUR_INDEX_SHA256 := d97f966a462665dd8d22f175f5846441fb151590ac81a5539941bc16371edd0d
+
 # Respeta la config global de cargo (target-dir) en lugar de asumir ./target.
 TARGET_DIR := $(shell $(CARGO) metadata --format-version=1 --no-deps --offline 2>/dev/null | sed -n 's/.*"target_directory":"\([^"]*\)".*/\1/p')
 ifeq ($(strip $(TARGET_DIR)),)
@@ -54,19 +58,33 @@ install: build
 	glib-compile-schemas "$(SCHEMADIR)"
 	install -Dm644 data/io.github.gnacho.Scribe.desktop "$(APPDIR)/io.github.gnacho.Scribe.desktop"
 	install -Dm644 data/icons/hicolor/scalable/apps/io.github.gnacho.Scribe.svg "$(ICONDIR)/scalable/apps/io.github.gnacho.Scribe.svg"
-	# Los simbólicos van a scalable/actions: el index.theme de hicolor declara
-	# scalable/* pero no symbolic/*, así que una carpeta symbolic propia aquí
-	# nunca se escanea.
+	# El simbólico va a symbolic/apps: la declara el index.theme de hicolor
+	# del sistema y GTK también la escanea en instalaciones de usuario.
+	install -Dm644 data/icons/hicolor/symbolic/apps/io.github.gnacho.Scribe-symbolic.svg "$(ICONDIR)/symbolic/apps/io.github.gnacho.Scribe-symbolic.svg"
 	for icon in data/icons/hicolor/scalable/actions/*.svg; do \
 		install -Dm644 "$$icon" "$(ICONDIR)/scalable/actions/$$(basename "$$icon")"; \
 	done
-	# Un ~/.local/share/icons/hicolor sin index.theme deja a GTK con la caché
-	# que encontró (posiblemente obsoleta), y gtk-update-icon-cache se niega a
-	# reconstruirla ("No theme index file"), así que el icono no se resuelve y
-	# el escritorio muestra el placeholder. Instalar el índice y refrescar la
-	# caché hace el resultado independiente de lo que hubiera antes (#114).
-	install -Dm644 data/icons/hicolor/index.theme "$(ICONDIR)/index.theme"
-	-gtk-update-icon-cache -f -t "$(ICONDIR)" >/dev/null 2>&1 || true
+	# NUNCA instalamos un index.theme propio dentro de hicolor (#128): en una
+	# instalación de usuario redefine el tema hicolor entero (GTK solo vería
+	# nuestras carpetas y el resto de apps pierde sus iconos) y con
+	# PREFIX=/usr pisaría el index.theme del sistema.
+	# La v0.3.18 y la v0.3.19 sí lo instalaban: si el que hay en el destino es
+	# exactamente el nuestro (mismo sha256), se retira; uno ajeno no se toca.
+	if [ -f "$(ICONDIR)/index.theme" ]; then \
+		if [ "$$(sha256sum "$(ICONDIR)/index.theme" | cut -d' ' -f1)" = "$(OUR_INDEX_SHA256)" ]; then \
+			rm -f "$(ICONDIR)/index.theme"; \
+		else \
+			echo "index.theme en $(ICONDIR) no es el de Scribe: no se toca" >&2; \
+		fi; \
+	fi
+	# Refresco de caché (#114): si el destino tiene index.theme (instalación
+	# de sistema) se regenera; si no, basta con retirar una caché obsoleta
+	# porque sin caché GTK escanea el directorio directamente.
+	if [ -f "$(ICONDIR)/index.theme" ]; then \
+		gtk-update-icon-cache -f -t "$(ICONDIR)" >/dev/null 2>&1 || true; \
+	else \
+		rm -f "$(ICONDIR)/icon-theme.cache"; \
+	fi
 
 # AppImage para uso fuera de la distro de compilación. Necesita appimagetool
 # en el PATH o en APPIMAGETOOL (ver packaging/appimage/build-appimage.sh).

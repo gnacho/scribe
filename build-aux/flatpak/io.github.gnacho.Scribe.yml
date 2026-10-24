@@ -27,6 +27,7 @@ modules:
       - install -Dm644 data/io.github.gnacho.Scribe.metainfo.xml /app/share/metainfo/io.github.gnacho.Scribe.metainfo.xml
       - install -Dm644 data/io.github.gnacho.Scribe.gschema.xml /app/share/glib-2.0/schemas/io.github.gnacho.Scribe.gschema.xml
       - install -Dm644 data/icons/hicolor/scalable/apps/io.github.gnacho.Scribe.svg /app/share/icons/hicolor/scalable/apps/io.github.gnacho.Scribe.svg
+      - install -Dm644 data/icons/hicolor/symbolic/apps/io.github.gnacho.Scribe-symbolic.svg /app/share/icons/hicolor/symbolic/apps/io.github.gnacho.Scribe-symbolic.svg
       - install -Dm644 data/icons/hicolor/scalable/actions/io.github.gnacho.Scribe-preview-on-symbolic.svg /app/share/icons/hicolor/scalable/actions/io.github.gnacho.Scribe-preview-on-symbolic.svg
       - install -Dm644 data/icons/hicolor/scalable/actions/io.github.gnacho.Scribe-preview-off-symbolic.svg /app/share/icons/hicolor/scalable/actions/io.github.gnacho.Scribe-preview-off-symbolic.svg
       - install -d /app/share/locale/es/LC_MESSAGES
