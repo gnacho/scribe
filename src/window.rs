@@ -1898,7 +1898,9 @@ impl ScribeWindow {
                             refresh_recents("");
                             // Actualiza título y tooltip (ruta) de la pestaña.
                             refresh_tabs();
-                            toast("Guardado");
+                            // Issue #132: sin toast tras guardar; el feedback
+                            // ya está en la pestaña y el texto era literal
+                            // en español.
                         }
                         Outcome::Error(e) => toast(&e),
                         Outcome::Cancelled => {}
