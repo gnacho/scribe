@@ -706,11 +706,29 @@ impl ScribeWindow {
         let header = adw::HeaderBar::new();
 
         let recents_menu = gio::Menu::new();
+        // Issue #131: con cero recientes el popover muestra una etiqueta
+        // centrada (no una fila de menú muerta que parece un botón sin
+        // función), así que refresh_recents intercambia los dos popovers.
+        let recents_vacias = gtk4::Label::builder()
+            .label(gettext("No recent documents"))
+            .css_classes(vec!["dim-label".to_string()])
+            .wrap(true)
+            .wrap_mode(gtk4::pango::WrapMode::Word)
+            .justify(gtk4::Justification::Center)
+            .halign(gtk4::Align::Center)
+            .valign(gtk4::Align::Center)
+            .margin_top(18)
+            .margin_bottom(18)
+            .margin_start(24)
+            .margin_end(24)
+            .build();
+        let popover_vacias = gtk4::Popover::builder().child(&recents_vacias).build();
+        let popover_menu = gtk4::PopoverMenu::from_model(Some(&recents_menu));
         let open_button = adw::SplitButton::builder()
             .label(gettext("_Open"))
             .use_underline(true)
             .tooltip_text(gettext("Open a document (Ctrl+O)"))
-            .menu_model(&recents_menu)
+            .popover(&popover_menu)
             .build();
         open_button.set_action_name(Some("win.open"));
         header.pack_start(&open_button);
@@ -1021,6 +1039,9 @@ impl ScribeWindow {
             let settings = settings.clone();
             let recents_list = recents_list.clone();
             let recents_menu = recents_menu.clone();
+            let open_button = open_button.clone();
+            let popover_menu = popover_menu.clone();
+            let popover_vacias = popover_vacias.clone();
             Rc::new(move |filter: &str| {
                 while let Some(child) = recents_list.first_child() {
                     recents_list.remove(&child);
@@ -1063,23 +1084,40 @@ impl ScribeWindow {
                     shown += 1;
                 }
                 if shown == 0 {
-                    let row = adw::ActionRow::builder()
-                        .title(if needle.is_empty() {
-                            gettext("No recent documents")
-                        } else {
-                            gettext("No results")
-                        })
+                    // Issue #131: etiqueta centrada y no interactiva en vez
+                    // de una fila insensible que parecía un botón sin uso.
+                    let vacio = if needle.is_empty() {
+                        gettext("No recent documents")
+                    } else {
+                        gettext("No results")
+                    };
+                    let placeholder = gtk4::Label::builder()
+                        .label(vacio)
+                        .css_classes(vec!["dim-label".to_string()])
+                        .wrap(true)
+                        .wrap_mode(gtk4::pango::WrapMode::Word)
+                        .justify(gtk4::Justification::Center)
+                        .halign(gtk4::Align::Center)
+                        .margin_top(18)
+                        .margin_bottom(18)
+                        .margin_start(12)
+                        .margin_end(12)
                         .build();
-                    row.set_sensitive(false);
-                    recents_list.append(&row);
+                    let fila = gtk4::ListBoxRow::builder()
+                        .activatable(false)
+                        .selectable(false)
+                        .child(&placeholder)
+                        .build();
+                    recents_list.append(&fila);
                 }
-                // El menú de la cabecera nunca debe quedar vacío: con cero
-                // recientes (o con rutas que ya no existen) el popover del
-                // SplitButton salía con un cuerpo vacío (issue #110).
+                // El popover del SplitButton alterna entre el menú con los
+                // recientes y la etiqueta de vacío. Con el modelo vacío el
+                // popover quedaba en blanco (issue #110) y la fila de menú
+                // sin acción parecía un botón muerto (issue #131).
                 if recents_menu.n_items() == 0 {
-                    let item = gio::MenuItem::new(Some(&gettext("No recent documents")), None);
-                    item.set_attribute_value("sensitive", Some(&false.to_variant()));
-                    recents_menu.append_item(&item);
+                    open_button.set_popover(Some(&popover_vacias));
+                } else {
+                    open_button.set_popover(Some(&popover_menu));
                 }
             })
         };
