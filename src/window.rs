@@ -101,6 +101,26 @@ fn barra_visible(n_paginas: usize) -> bool {
     n_paginas > 1
 }
 
+// Issue #133: ¿el layout de botones de ventana deja el cierre a la izquierda?
+// «close,minimize,maximize:menu» invierte la barra de pestañas;
+// «menu:minimize,maximize,close» no.
+fn layout_invierte_pestanas(layout: &str) -> bool {
+    match (layout.find(':'), layout.find("close")) {
+        (Some(colon), Some(cierre)) => cierre < colon,
+        _ => false,
+    }
+}
+
+fn pestanas_invertidas() -> bool {
+    let Some(settings) = gtk4::Settings::default() else {
+        return false;
+    };
+    let Some(layout) = settings.gtk_decoration_layout() else {
+        return false;
+    };
+    layout_invierte_pestanas(&layout)
+}
+
 impl Document {
     /// Cancela el monitor del fichero al cerrar la pestaña.
     fn cancelar_monitor(&self) {
@@ -596,6 +616,21 @@ impl ScribeWindow {
             tab_view.connect_n_pages_notify(move |view| {
                 tab_bar.set_visible(barra_visible(view.n_pages() as usize));
             });
+        }
+        // Issue #133: con los botones de ventana a la izquierda («close» antes
+        // del colon en gtk-decoration-layout) los cierres de pestaña van a la
+        // izquierda. Patrón de org.gnome.TextEditor: GtkSettings más
+        // AdwTabBar:inverted, reaplicado cuando el ajuste cambia.
+        tab_bar.set_inverted(pestanas_invertidas());
+        {
+            let tab_bar = tab_bar.downgrade();
+            if let Some(settings) = gtk4::Settings::default() {
+                settings.connect_gtk_decoration_layout_notify(move |_| {
+                    if let Some(bar) = tab_bar.upgrade() {
+                        bar.set_inverted(pestanas_invertidas());
+                    }
+                });
+            }
         }
 
         // ============================== BÚSQUEDA ==============================
@@ -2611,6 +2646,18 @@ mod tests {
         assert!(!barra_visible(1));
         assert!(barra_visible(2));
         assert!(barra_visible(3));
+    }
+
+    #[test]
+    fn layout_con_cierre_a_la_izquierda_invierte_las_pestanas() {
+        // Issue #133: «close» antes del colon = botones de ventana a la
+        // izquierda = barra invertida; a la derecha del colon o sin «close»,
+        // no se invierte.
+        assert!(layout_invierte_pestanas("close,minimize,maximize:menu"));
+        assert!(layout_invierte_pestanas("close:menu"));
+        assert!(!layout_invierte_pestanas("menu:minimize,maximize,close"));
+        assert!(!layout_invierte_pestanas("menu:maximize"));
+        assert!(!layout_invierte_pestanas(""));
     }
 
     #[test]
