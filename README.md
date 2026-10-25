@@ -23,6 +23,9 @@ It renders Markdown live on the editing buffer so headings look like headings
 and bold text looks bold, without switching to a separate preview or a browser
 engine.
 
+Every feature is shown in action at the project website,
+[scribe.cloudless.club](https://scribe.cloudless.club).
+
 ## Why does this exist?
 
 I wanted a Markdown editor that felt like part of GNOME, not a port of a web

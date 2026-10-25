@@ -23,7 +23,7 @@
     <p xml:lang="es">Incluye edicion Markdown con resaltado de sintaxis, render en vivo de titulos, tablas, citas, listas y bloques de codigo, varios documentos en pestanas con lista de ficheros recientes, temas claro y oscuro que siguen al sistema, corrector ortografico con sugerencias en el menu contextual, buscar y reemplazar con expresiones regulares, exportacion a PDF, recuperacion de borradores y recarga automatica si el fichero cambia en disco.</p>
   </description>
   <launchable type="desktop-id">io.github.gnacho.Scribe.desktop</launchable>
-  <url type="homepage">https://github.com/gnacho/scribe</url>
+  <url type="homepage">https://scribe.cloudless.club</url>
   <url type="bugtracker">https://github.com/gnacho/scribe/issues</url>
   <url type="vcs-browser">https://github.com/gnacho/scribe</url>
   <developer id="io.github.gnacho">
