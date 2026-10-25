@@ -1,13 +1,25 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!-- Iconos de la app empaquetados como recurso (issue #111): el binario
-     suelto (cargo build, copia manual) no instala datos en ningun tema de
-     iconos, y el tema de la app podria no tenerlos; con el recurso los
-     simbolicos propios se resuelven siempre. Los ficheros siguen
-     instalandose en hicolor para el icono de escritorio y la tienda. -->
+     suelto (cargo build, AppImage, Flatpak) no instala datos en ningun
+     tema de iconos, y el tema del usuario puede no traer algunos de los
+     estandar que usamos (issue #140: Fedora 44 sin tab-new,
+     document-edit ni preferences-desktop-appearance). Cada fichero va
+     con alias plano <nombre>.svg bajo el prefijo: GTK4 resuelve
+     <resource-path>/<nombre> como fallback directo del lookup cuando el
+     tema no tiene el icono, y el tema del sistema gana cuando si lo
+     tiene (verificado con probe en entorno sin hicolor de usuario).
+     Los ficheros siguen instalandose en hicolor por make install para
+     el icono de escritorio y la tienda.
+     preferences-desktop-appearance-symbolic es la version legacy que
+     distribuye adwaita-icon-theme (la unica publicada de ese nombre). -->
 <gresources>
   <gresource prefix="/io/github/gnacho/Scribe/icons">
     <file alias="io.github.gnacho.Scribe.svg">hicolor/scalable/apps/io.github.gnacho.Scribe.svg</file>
-    <file alias="io.github.gnacho.Scribe-preview-on-symbolic.svg">hicolor/scalable/actions/io.github.gnacho.Scribe-preview-on-symbolic.svg</file>
+    <file alias="io.github.gnacho.Scribe-symbolic.svg">hicolor/symbolic/apps/io.github.gnacho.Scribe-symbolic.svg</file>
     <file alias="io.github.gnacho.Scribe-preview-off-symbolic.svg">hicolor/scalable/actions/io.github.gnacho.Scribe-preview-off-symbolic.svg</file>
+    <file alias="io.github.gnacho.Scribe-preview-on-symbolic.svg">hicolor/scalable/actions/io.github.gnacho.Scribe-preview-on-symbolic.svg</file>
+    <file alias="document-edit-symbolic.svg">hicolor/scalable/actions/document-edit-symbolic.svg</file>
+    <file alias="tab-new-symbolic.svg">hicolor/scalable/actions/tab-new-symbolic.svg</file>
+    <file alias="preferences-desktop-appearance-symbolic.svg">hicolor/scalable/actions/preferences-desktop-appearance-symbolic.svg</file>
   </gresource>
 </gresources>
