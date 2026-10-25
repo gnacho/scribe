@@ -7,6 +7,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.21] - 2026-10-25
+
+Thank you [@HelloKolla2004](https://github.com/HelloKolla2004) for the PDF
+tables report and [@kem-a](https://github.com/kem-a) for two sharp reports:
+the quit crash came with a stack trace that pointed straight at the culprit,
+and the missing icons came with a screenshot that said the rest.
+
+### Fixed
+
+- **Tables export to PDF as real columns** (#138, reported by
+  @HelloKolla2004): the PDF painted tables as a monospaced box with the raw
+  source lines. The exporter now parses the table: column widths from their
+  natural content, `:--`/`:-:`/`--:` alignments, escaped pipes, inline
+  bold/code in cells, a bold header band with a strong rule, light grid
+  lines, and cells that wrap inside their own column (#139).
+- **Quitting no longer aborts the process** (#141, reported by @kem-a): at
+  exit, the window registry thread-local was consulted from its own
+  destructor, the panic could not unwind through C and every clean quit
+  ended in SIGABRT. The destroy handler now tolerates a registry that is
+  already going away and main releases the windows before returning, so
+  both destruction orders are covered (#142).
+- **Missing action icons on some systems** (#140, reported by @kem-a): the
+  preferences pages and two header buttons relied on theme icons absent
+  from recent Fedora images, and an AppImage or Flatpak installs nothing
+  into any icon theme. The action icons now ship with the app as resource
+  fallbacks; the system theme still wins when it has them (#143).
+
+### Docs
+
+- **The project has a website**: every feature is shown in action at
+  [scribe.cloudless.club](https://scribe.cloudless.club). The READMEs invite
+  the reader to it, and the AppStream homepage and the About dialog now use
+  it instead of the GitHub repository (#144).
+
 ## [0.3.20] - 2026-10-24
 
 The first release carrying external code. Thank you
