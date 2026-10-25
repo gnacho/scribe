@@ -212,7 +212,13 @@ fn main() -> glib::ExitCode {
         0
     });
 
-    app.run()
+    let code = app.run();
+    // Al terminar el bucle se sueltan las ventanas ANTES de que el proceso
+    // entre en los dtors del thread_local WINDOWS (issue #141): si el drop
+    // del registro disparara destroys de ventanas, el handler ya no podria
+    // consultar un TLS en destruccion.
+    WINDOWS.with(|list| list.borrow_mut().clear());
+    code
 }
 
 fn build_window(app: &adw::Application) -> Rc<ScribeWindow> {
@@ -233,7 +239,12 @@ fn build_window(app: &adw::Application) -> Rc<ScribeWindow> {
     // memoria de las ventanas cerradas se acumulaba toda la sesion. El
     // handler no captura nada: usar `dead` evita un autociclo.
     win.window.connect_destroy(|dead| {
-        WINDOWS.with(|list| {
+        // El proceso puede estar destruyendo ya el thread_local WINDOWS
+        // (issue #141: en exit, los dtors TLS sueltan el ultimo Rc, el
+        // destroy de la ventana dispara este handler y with() paniquearia
+        // con AccessError -> SIGABRT). try_with devuelve Err en ese caso y
+        // no hay nada que podar: la lista esta desapareciendo entera.
+        let _ = WINDOWS.try_with(|list| {
             list.borrow_mut().retain(|w| {
                 w.window.upcast_ref::<gtk4::Window>() != dead.upcast_ref::<gtk4::Window>()
             });
