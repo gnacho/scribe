@@ -36,9 +36,10 @@
 //!   complejos; para texto latino es suficiente.
 //! - Un bloque de código más alto que una página entera se dibuja recortado:
 //!   su continuación a la siguiente página se pierde (caso patológico).
-//! - Las listas conservan el marcador del fuente (`-`, `1.`, `- [ ]`); las
-//!   tablas se pintan en monoespaciada con la fila de cabecera en negrita y
-//!   sin rejilla de celdas (el ancho fijo conserva la alineación).
+//! - Las listas conservan el marcador del fuente (`-`, `1.`, `- [ ]`). Las
+//!   tablas se dibujan como tabla real (columnas con su ancho repartido por
+//!   contenido, cabecera en negrita y rejilla ligera); una celda cuyo texto
+//!   no cabe envuelve dentro de su columna.
 
 use std::cell::RefCell;
 use std::path::Path;
@@ -62,6 +63,10 @@ const INTERLINEA: f64 = 1.4;
 const ESPACIO_BLOQUE: f64 = 10.0;
 /// Padding interior de las cajas (bloques de código y tablas).
 const PADDING_CAJA: f64 = 6.0;
+/// Padding horizontal del texto dentro de una celda (a cada lado).
+const CELDA_PAD: f64 = 6.0;
+/// Padding vertical del texto dentro de una fila (arriba y abajo).
+const FILA_PAD_V: f64 = 3.0;
 /// Alto de un bloque de regla horizontal.
 const REGLA_ALTO: f64 = 14.0;
 /// Alto del placeholder de una imagen.
@@ -119,6 +124,7 @@ struct Paleta {
     enlace: (f64, f64, f64),
     regla: (f64, f64, f64),
     tabla_fondo: (f64, f64, f64),
+    tabla_cabecera: (f64, f64, f64),
     atenuado: (f64, f64, f64),
 }
 
@@ -152,6 +158,7 @@ fn resolver_paleta(esquema: ExportColorScheme, sistema_oscuro: bool) -> Paleta {
             enlace: negro,
             regla: negro,
             tabla_fondo: (0.95, 0.95, 0.95),
+            tabla_cabecera: (0.90, 0.90, 0.90),
             atenuado: (0.4, 0.4, 0.4),
         }
     } else if oscuro {
@@ -166,6 +173,7 @@ fn resolver_paleta(esquema: ExportColorScheme, sistema_oscuro: bool) -> Paleta {
             enlace: hex(0x82b8f0),
             regla: hex(0x4a4a4a),
             tabla_fondo: hex(0x282828),
+            tabla_cabecera: hex(0x323232),
             atenuado: hex(0x8f8f8f),
         }
     } else {
@@ -180,6 +188,7 @@ fn resolver_paleta(esquema: ExportColorScheme, sistema_oscuro: bool) -> Paleta {
             enlace: hex(0x1a6ed8),
             regla: hex(0xc0bfbc),
             tabla_fondo: hex(0xf8f8f8),
+            tabla_cabecera: hex(0xefefef),
             atenuado: hex(0x8b8a88),
         }
     }
@@ -250,6 +259,14 @@ pub struct Bloque {
     pub imagen: Option<(String, String)>,
     /// Líneas visuales ya envueltas y medidas (rellenado en `begin_print`).
     pub envuelto: Vec<Vec<Palabra>>,
+    /// Tabla: filas x columnas limpias (fila 0 = cabecera, `\|` resuelto).
+    pub celdas: Vec<Vec<String>>,
+    /// Tabla: alineación por columna (de la fila delimitadora).
+    pub alineacion: Vec<AlineacionCelda>,
+    /// Tabla: [fila][columna][línea visual] ya envuelta y medida.
+    pub tabla_envuelta: Vec<Vec<Vec<Vec<Palabra>>>>,
+    /// Tabla: ancho de contenido por columna (sin el padding de celda).
+    pub anchos_columna: Vec<f64>,
 }
 
 impl Bloque {
@@ -591,11 +608,31 @@ fn construir_bloques(texto: &str, analisis: &Analysis) -> Vec<Bloque> {
             let lineas_bloque: Vec<String> = lineas[a..=b.min(n - 1)]
                 .iter()
                 .map(|&(lsj, lej)| texto[lsj..lej].to_string())
-                .filter(|l| !es_fila_delimitadora(l))
                 .collect();
+            // La fila delimitadora (la línea de guiones bajo la cabecera) da
+            // las alineaciones y no es una fila de datos.
+            let mut alineacion: Vec<AlineacionCelda> = Vec::new();
+            let mut filas: Vec<Vec<String>> = Vec::new();
+            for linea in &lineas_bloque {
+                if es_fila_delimitadora(linea) {
+                    if let Some(al) = parsear_alineaciones(linea) {
+                        alineacion = al;
+                    }
+                    continue;
+                }
+                filas.push(partir_fila(linea));
+            }
+            let columnas = filas.first().map(Vec::len).unwrap_or(0);
+            for fila in &mut filas {
+                fila.resize(columnas, String::new());
+                fila.truncate(columnas);
+            }
+            alineacion.resize(columnas, AlineacionCelda::default());
+            alineacion.truncate(columnas);
             bloques.push(Bloque {
                 tipo: TipoBloque::Tabla,
-                lineas: lineas_bloque,
+                celdas: filas,
+                alineacion,
                 ..Default::default()
             });
             i = b + 1;
@@ -725,6 +762,123 @@ fn quitar_marca_cita(linea: &str) -> String {
 fn es_fila_delimitadora(linea: &str) -> bool {
     let t = linea.trim();
     !t.is_empty() && t.contains('-') && t.bytes().all(|b| matches!(b, b'|' | b'-' | b':' | b' '))
+}
+
+/// Alineación de una columna de tabla (fila 0 delimitadora).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum AlineacionCelda {
+    #[default]
+    Izquierda,
+    Centro,
+    Derecha,
+}
+
+/// Parte una fila de tabla en celdas: corta por `|` no escapado, resuelve
+/// `\|` a `|` literal y recorta espacios. Las celdas vacías de los extremos
+/// (fruto de los `|` de apertura y cierre del fuente) se descartan.
+fn partir_fila(linea: &str) -> Vec<String> {
+    let mut celdas: Vec<String> = vec![String::new()];
+    let mut escapado = false;
+    for ch in linea.chars() {
+        if escapado {
+            if ch == '|' {
+                celdas.last_mut().unwrap().push('|');
+            } else {
+                celdas.last_mut().unwrap().push('\\');
+                celdas.last_mut().unwrap().push(ch);
+            }
+            escapado = false;
+        } else if ch == '\\' {
+            escapado = true;
+        } else if ch == '|' {
+            celdas.push(String::new());
+        } else {
+            celdas.last_mut().unwrap().push(ch);
+        }
+    }
+    if escapado {
+        celdas.last_mut().unwrap().push('\\');
+    }
+    for celda in &mut celdas {
+        *celda = celda.trim().to_string();
+    }
+    if celdas.first().map(|c| c.is_empty()).unwrap_or(false) {
+        celdas.remove(0);
+    }
+    if celdas.last().map(|c| c.is_empty()).unwrap_or(false) {
+        celdas.pop();
+    }
+    celdas
+}
+
+/// Parsea la fila delimitadora de una tabla (`| --- | :-: | --: |`) y devuelve
+/// la alineación de cada columna. `None` si la línea no es delimitadora.
+fn parsear_alineaciones(linea: &str) -> Option<Vec<AlineacionCelda>> {
+    if !es_fila_delimitadora(linea) {
+        return None;
+    }
+    Some(
+        partir_fila(linea)
+            .into_iter()
+            .map(
+                |celda| match (celda.starts_with(':'), celda.ends_with(':')) {
+                    (true, true) => AlineacionCelda::Centro,
+                    (false, true) => AlineacionCelda::Derecha,
+                    _ => AlineacionCelda::Izquierda,
+                },
+            )
+            .collect(),
+    )
+}
+
+/// Reparte el ancho disponible entre columnas dadas sus anchuras naturales
+/// (palabra más ancha) y sus mínimos. Si todo cabe, el sobrante se reparte
+/// proporcional al ancho natural; si ni los mínimos caben, todo se escala al
+/// disponible; si no, se encoge cada columna según su margen (natural menos
+/// mínimo) sin bajar del mínimo.
+fn calcular_anchos(naturales: &[f64], minimos: &[f64], disponible: f64) -> Vec<f64> {
+    let suma: f64 = naturales.iter().sum();
+    let suma_min: f64 = minimos.iter().sum();
+    if disponible > 0.0 && suma <= disponible {
+        let sobrante = disponible - suma;
+        return naturales
+            .iter()
+            .map(|&n| {
+                if suma > 0.0 {
+                    n + sobrante * (n / suma)
+                } else {
+                    sobrante / naturales.len().max(1) as f64
+                }
+            })
+            .collect();
+    }
+    if suma_min >= disponible || suma <= 0.0 {
+        let factor = if suma_min > 0.0 {
+            disponible / suma_min
+        } else {
+            1.0
+        };
+        return minimos.iter().map(|&m| m * factor).collect();
+    }
+    let deficit = suma - disponible;
+    let margen: f64 = naturales
+        .iter()
+        .zip(minimos)
+        .map(|(&n, &m)| (n - m).max(0.0))
+        .sum();
+    naturales
+        .iter()
+        .zip(minimos)
+        .map(|(&n, &m)| {
+            let margen_col = (n - m).max(0.0);
+            let recorte = if margen > 0.0 {
+                deficit * (margen_col / margen)
+            } else {
+                0.0
+            };
+            (n - recorte).max(m)
+        })
+        .collect()
 }
 
 // ---------------------------------------------------------------------------
@@ -937,12 +1091,27 @@ fn espaciado_cabecera(nivel: u8, config: &ExportConfig) -> f64 {
     }
 }
 
+/// Alto de una fila de tabla: máximo de líneas visuales entre sus celdas.
+fn alto_fila_tabla(fila: &[Vec<Vec<Palabra>>], alto_linea: f64) -> f64 {
+    let lineas = fila.iter().map(Vec::len).max().unwrap_or(0).max(1);
+    lineas as f64 * alto_linea + 2.0 * FILA_PAD_V
+}
+
 /// Alto del contenido de un bloque (sin la separación inferior).
 fn alto_contenido(b: &Bloque, config: &ExportConfig) -> f64 {
     match b.tipo {
         TipoBloque::Regla => REGLA_ALTO,
         TipoBloque::Imagen => IMAGEN_ALTO,
         TipoBloque::Salto => 0.0,
+        TipoBloque::Tabla => {
+            let tamano = config.tamano_cuerpo * 0.9;
+            let alto_linea = tamano * INTERLINEA;
+            let mut alto = 2.0 * PADDING_CAJA;
+            for fila in &b.tabla_envuelta {
+                alto += alto_fila_tabla(fila, alto_linea);
+            }
+            alto
+        }
         _ => {
             let (tamano, _) = tamano_y_estilo(b.tipo, config);
             let alto_linea = tamano * INTERLINEA;
@@ -950,7 +1119,7 @@ fn alto_contenido(b: &Bloque, config: &ExportConfig) -> f64 {
             if let TipoBloque::Cabecera { nivel } = b.tipo {
                 alto += espaciado_cabecera(nivel, config);
             }
-            if matches!(b.tipo, TipoBloque::Codigo | TipoBloque::Tabla) {
+            if b.tipo == TipoBloque::Codigo {
                 alto += PADDING_CAJA * 2.0;
             }
             alto
@@ -968,7 +1137,7 @@ fn medir_bloque(b: &mut Bloque, config: &ExportConfig, cr: &cairo::Context, anch
         TipoBloque::Cabecera { .. } | TipoBloque::Parrafo => {
             envuelto = envolver_frases(&b.frases, tamano, config, cr, ancho_texto);
         }
-        TipoBloque::Codigo | TipoBloque::Tabla | TipoBloque::Cita => {
+        TipoBloque::Codigo | TipoBloque::Cita => {
             for line in &b.lineas {
                 let frases = vec![Frase {
                     texto: line.clone(),
@@ -977,9 +1146,12 @@ fn medir_bloque(b: &mut Bloque, config: &ExportConfig, cr: &cairo::Context, anch
                 envuelto.extend(envolver_frases(&frases, tamano, config, cr, ancho_texto));
             }
         }
+        TipoBloque::Tabla => medir_tabla(b, config, cr, ancho_util),
         _ => {}
     }
-    b.envuelto = envuelto;
+    if b.tipo != TipoBloque::Tabla {
+        b.envuelto = envuelto;
+    }
 
     let contenido = alto_contenido(b, config);
     b.alto = contenido
@@ -988,6 +1160,52 @@ fn medir_bloque(b: &mut Bloque, config: &ExportConfig, cr: &cairo::Context, anch
         } else {
             ESPACIO_BLOQUE
         };
+}
+
+/// Mide una tabla: reparte anchos de columna por contenido y envuelve cada
+/// celda dentro de su columna.
+fn medir_tabla(b: &mut Bloque, config: &ExportConfig, cr: &cairo::Context, ancho_util: f64) {
+    let columnas = b.celdas.first().map(Vec::len).unwrap_or(0);
+    if columnas == 0 {
+        b.tabla_envuelta = Vec::new();
+        b.anchos_columna = Vec::new();
+        return;
+    }
+    let tamano = config.tamano_cuerpo * 0.9;
+    let disponible = (ancho_util - 2.0 * CELDA_PAD * columnas as f64).max(1.0);
+
+    // Anchura natural de cada columna: su palabra más ancha.
+    let mut frases_celdas: Vec<Vec<Vec<Frase>>> = Vec::new();
+    let mut naturales = vec![0.0f64; columnas];
+    for fila in &b.celdas {
+        let mut fila_frases: Vec<Vec<Frase>> = Vec::new();
+        for (j, celda) in fila.iter().enumerate().take(columnas) {
+            let frases = segmentar_inline(celda);
+            for f in &frases {
+                for word in f.texto.split_whitespace() {
+                    let ancho = medir_ancho(cr, config, f.estilo, tamano, word);
+                    naturales[j] = naturales[j].max(ancho);
+                }
+            }
+            fila_frases.push(frases);
+        }
+        frases_celdas.push(fila_frases);
+    }
+
+    let anchos = calcular_anchos(&naturales, &naturales, disponible);
+    b.anchos_columna = anchos.clone();
+
+    // Envuelve cada celda dentro de su columna.
+    let mut tabla: Vec<Vec<Vec<Vec<Palabra>>>> = Vec::new();
+    for fila_frases in &frases_celdas {
+        let mut fila_env: Vec<Vec<Vec<Palabra>>> = Vec::new();
+        for (j, frases) in fila_frases.iter().enumerate() {
+            let ancho_col = anchos.get(j).copied().unwrap_or(1.0);
+            fila_env.push(envolver_frases(frases, tamano, config, cr, ancho_col));
+        }
+        tabla.push(fila_env);
+    }
+    b.tabla_envuelta = tabla;
 }
 
 /// Sangrado horizontal izquierdo de un bloque (puntos).
@@ -1047,8 +1265,10 @@ fn dibujar_bloque(
             let _ = cr.show_text(&etiqueta);
         }
         TipoBloque::Salto => {}
+        TipoBloque::Tabla => {
+            dibujar_tabla(cr, b, config, paleta, ancho_util, x, y_top);
+        }
         TipoBloque::Codigo
-        | TipoBloque::Tabla
         | TipoBloque::Cita
         | TipoBloque::Cabecera { .. }
         | TipoBloque::Parrafo => {
@@ -1060,14 +1280,13 @@ fn dibujar_bloque(
                 _ => paleta.texto,
             };
 
-            // Caja de fondo para código y tabla.
-            if matches!(b.tipo, TipoBloque::Codigo | TipoBloque::Tabla) {
-                let color = if b.tipo == TipoBloque::Codigo {
-                    paleta.codigo_fondo
-                } else {
-                    paleta.tabla_fondo
-                };
-                cr.set_source_rgb(color.0, color.1, color.2);
+            // Caja de fondo para código.
+            if b.tipo == TipoBloque::Codigo {
+                cr.set_source_rgb(
+                    paleta.codigo_fondo.0,
+                    paleta.codigo_fondo.1,
+                    paleta.codigo_fondo.2,
+                );
                 cr.rectangle(x, y_top, ancho_util, contenido);
                 let _ = cr.fill();
             }
@@ -1083,7 +1302,7 @@ fn dibujar_bloque(
             }
 
             let mut cursor_y = y_top;
-            if matches!(b.tipo, TipoBloque::Codigo | TipoBloque::Tabla) {
+            if b.tipo == TipoBloque::Codigo {
                 cursor_y += PADDING_CAJA;
             }
             if let TipoBloque::Cabecera { nivel } = b.tipo {
@@ -1096,29 +1315,19 @@ fn dibujar_bloque(
             };
             let ascent = font_ext.ascent();
 
-            for (idx_linea, linea_visual) in b.envuelto.iter().enumerate() {
+            for linea_visual in b.envuelto.iter() {
                 let mut x_actual = x + sangrado_x(b, ancho_util);
-                if matches!(b.tipo, TipoBloque::Codigo | TipoBloque::Tabla) {
+                if b.tipo == TipoBloque::Codigo {
                     x_actual += PADDING_CAJA;
                 }
-                // Cabecera de tabla: la primera fila va en negrita.
-                let es_cabecera_tabla = b.tipo == TipoBloque::Tabla && idx_linea == 0;
                 for palabra in linea_visual {
-                    let estilo = if es_cabecera_tabla {
-                        Estilo {
-                            negrita: true,
-                            ..palabra.estilo
-                        }
-                    } else {
-                        palabra.estilo
-                    };
                     dibujar_palabra(
                         cr,
                         config,
                         paleta,
                         color_texto,
                         palabra,
-                        estilo,
+                        palabra.estilo,
                         tamano,
                         x_actual,
                         cursor_y + ascent,
@@ -1145,6 +1354,130 @@ fn dibujar_bloque(
     }
 
     y_top + b.alto
+}
+
+/// Dibuja una tabla con columnas reales: caja de fondo, franja de cabecera en
+/// negrita con filete fuerte, rejilla ligera entre filas y columnas, y texto
+/// de celda alineado y envuelto dentro de su columna.
+fn dibujar_tabla(
+    cr: &cairo::Context,
+    b: &Bloque,
+    config: &ExportConfig,
+    paleta: &Paleta,
+    ancho_util: f64,
+    x: f64,
+    y_top: f64,
+) {
+    let tamano = config.tamano_cuerpo * 0.9;
+    let alto_linea = tamano * INTERLINEA;
+    let contenido = alto_contenido(b, config);
+
+    // Caja de fondo completa.
+    cr.set_source_rgb(
+        paleta.tabla_fondo.0,
+        paleta.tabla_fondo.1,
+        paleta.tabla_fondo.2,
+    );
+    cr.rectangle(x, y_top, ancho_util, contenido);
+    let _ = cr.fill();
+
+    let font_ext = {
+        seleccionar_fuente(cr, config, Estilo::default(), tamano);
+        cr.font_extents().unwrap()
+    };
+    let ascent = font_ext.ascent();
+    let espacio = {
+        seleccionar_fuente(cr, config, Estilo::default(), tamano);
+        cr.text_extents(" ").unwrap().x_advance()
+    };
+
+    // Franja de cabecera (fila 0).
+    let alto_cabecera = b
+        .tabla_envuelta
+        .first()
+        .map(|fila| alto_fila_tabla(fila, alto_linea))
+        .unwrap_or(0.0);
+    if alto_cabecera > 0.0 {
+        cr.set_source_rgb(
+            paleta.tabla_cabecera.0,
+            paleta.tabla_cabecera.1,
+            paleta.tabla_cabecera.2,
+        );
+        cr.rectangle(x, y_top, ancho_util, alto_cabecera);
+        let _ = cr.fill();
+    }
+
+    let mut y_fila = y_top + PADDING_CAJA;
+    for (i, fila) in b.tabla_envuelta.iter().enumerate() {
+        let mut x_celda = x + CELDA_PAD;
+        for (j, celda) in fila.iter().enumerate() {
+            let ancho_col = b.anchos_columna.get(j).copied().unwrap_or(0.0);
+            for (k, linea_visual) in celda.iter().enumerate() {
+                let ancho_linea: f64 = linea_visual.iter().map(|p| p.ancho).sum::<f64>()
+                    + espacio * linea_visual.len().saturating_sub(1) as f64;
+                let mut x_texto = match b.alineacion.get(j) {
+                    Some(AlineacionCelda::Centro) => x_celda + (ancho_col - ancho_linea) / 2.0,
+                    Some(AlineacionCelda::Derecha) => x_celda + (ancho_col - ancho_linea).max(0.0),
+                    _ => x_celda,
+                };
+                let baseline = y_fila + FILA_PAD_V + k as f64 * alto_linea + ascent;
+                for palabra in linea_visual {
+                    // La fila de cabecera va en negrita.
+                    let estilo = if i == 0 {
+                        Estilo {
+                            negrita: true,
+                            ..palabra.estilo
+                        }
+                    } else {
+                        palabra.estilo
+                    };
+                    dibujar_palabra(
+                        cr,
+                        config,
+                        paleta,
+                        paleta.texto,
+                        palabra,
+                        estilo,
+                        tamano,
+                        x_texto,
+                        baseline,
+                    );
+                    x_texto += palabra.ancho + espacio;
+                }
+            }
+            x_celda += ancho_col + 2.0 * CELDA_PAD;
+        }
+        y_fila += alto_fila_tabla(fila, alto_linea);
+
+        // Filete fuerte bajo la cabecera; línea clara entre el resto de filas.
+        if i == 0 {
+            cr.set_source_rgb(paleta.regla.0, paleta.regla.1, paleta.regla.2);
+            cr.set_line_width(1.2);
+        } else {
+            cr.set_source_rgb(paleta.atenuado.0, paleta.atenuado.1, paleta.atenuado.2);
+            cr.set_line_width(0.7);
+        }
+        cr.move_to(x, y_fila);
+        cr.line_to(x + ancho_util, y_fila);
+        let _ = cr.stroke();
+    }
+
+    // Separadores verticales entre columnas, dentro del área de contenido.
+    if b.anchos_columna.len() < 2 {
+        return;
+    }
+    cr.set_source_rgb(paleta.atenuado.0, paleta.atenuado.1, paleta.atenuado.2);
+    cr.set_line_width(0.7);
+    let mut acumulado = 0.0;
+    for (j, &ancho_col) in b.anchos_columna.iter().enumerate() {
+        acumulado += ancho_col + 2.0 * CELDA_PAD;
+        if j + 1 < b.anchos_columna.len() {
+            let x_v = x + acumulado - CELDA_PAD;
+            cr.move_to(x_v, y_top + PADDING_CAJA);
+            cr.line_to(x_v, y_top + contenido - PADDING_CAJA);
+        }
+    }
+    let _ = cr.stroke();
 }
 
 /// Dibuja una palabra con su estilo (incluidos tachado y subrayado manuales).
@@ -1432,5 +1765,106 @@ mod tests {
             Some(("- [x] ", "tarea"))
         );
         assert_eq!(separar_marcador_lista("no es lista"), None);
+    }
+
+    #[test]
+    fn pdf_partir_fila_basica() {
+        assert_eq!(
+            partir_fila("| a | b |"),
+            vec!["a".to_string(), "b".to_string()]
+        );
+    }
+
+    #[test]
+    fn pdf_partir_fila_sin_pipes_exteriores() {
+        assert_eq!(partir_fila("a | b"), vec!["a".to_string(), "b".to_string()]);
+    }
+
+    #[test]
+    fn pdf_partir_fila_pipe_escapado() {
+        assert_eq!(
+            partir_fila("| a \\| b | c |"),
+            vec!["a | b".to_string(), "c".to_string()]
+        );
+    }
+
+    #[test]
+    fn pdf_partir_fila_recorta_espacios() {
+        assert_eq!(
+            partir_fila("|   x   |  y  |"),
+            vec!["x".to_string(), "y".to_string()]
+        );
+    }
+
+    #[test]
+    fn pdf_partir_fila_celda_vacia() {
+        assert_eq!(partir_fila("| |"), vec![String::new()]);
+    }
+
+    #[test]
+    fn pdf_parsear_alineaciones_de_delimitadora() {
+        let al = parsear_alineaciones("| --- | :-: | --: | :- |").unwrap();
+        assert_eq!(
+            al,
+            vec![
+                AlineacionCelda::Izquierda,
+                AlineacionCelda::Centro,
+                AlineacionCelda::Derecha,
+                AlineacionCelda::Izquierda,
+            ]
+        );
+    }
+
+    #[test]
+    fn pdf_parsear_alineaciones_rechaza_fila_normal() {
+        assert!(parsear_alineaciones("| a | b |").is_none());
+        assert!(parsear_alineaciones("texto").is_none());
+    }
+
+    #[test]
+    fn pdf_calcular_anchos_reparte_sobrante_proporcional() {
+        let anchos = calcular_anchos(&[10.0, 20.0], &[10.0, 20.0], 60.0);
+        assert!((anchos[0] - 20.0).abs() < 1e-6);
+        assert!((anchos[1] - 40.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn pdf_calcular_anchos_escala_si_no_caben_los_minimos() {
+        let anchos = calcular_anchos(&[100.0, 100.0], &[100.0, 100.0], 50.0);
+        assert!((anchos[0] - 25.0).abs() < 1e-6);
+        assert!((anchos[1] - 25.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn pdf_calcular_anchos_encoge_por_margen_respetando_minimos() {
+        // Naturales 60/40, mínimos 10/40 y disponible 60: el déficit (40) se
+        // reparte por margen (solo la columna 0 tiene margen 50), así que la
+        // columna 0 queda en 20 y la 1 no baja de su mínimo.
+        let anchos = calcular_anchos(&[60.0, 40.0], &[10.0, 40.0], 60.0);
+        assert!((anchos[0] - 20.0).abs() < 1e-6);
+        assert!((anchos[1] - 40.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn pdf_construir_bloques_estructura_de_tabla() {
+        let doc = "| Nombre | Edad |\n| --- | --: |\n| Ana | 34 |\n| Berto | 41 |\n";
+        let analisis = analyze(doc);
+        let bloques = construir_bloques(doc, &analisis);
+        let tabla = bloques
+            .iter()
+            .find(|b| b.tipo == TipoBloque::Tabla)
+            .expect("el documento debe producir un bloque de tabla");
+        assert_eq!(
+            tabla.celdas,
+            vec![
+                vec!["Nombre".to_string(), "Edad".to_string()],
+                vec!["Ana".to_string(), "34".to_string()],
+                vec!["Berto".to_string(), "41".to_string()],
+            ]
+        );
+        assert_eq!(
+            tabla.alineacion,
+            vec![AlineacionCelda::Izquierda, AlineacionCelda::Derecha]
+        );
     }
 }
