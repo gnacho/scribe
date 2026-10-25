@@ -48,6 +48,12 @@ fn main() {
 | git init | Create a repo |
 | git add | Stage changes |
 
+| Feature | Status | Notes |
+| :------ | :----: | ----: |
+| **Real columns** | done | widths grow with content |
+| Escaped pipe \\| in cell | done | the pipe must not split the cell |
+| A very long cell whose text does not fit its column and therefore wraps onto several lines inside the cell | done | wrapped text stays inside its own column |
+
 \\newpage
 
 ## Page Break Section
@@ -79,4 +85,40 @@ fn exporta_un_pdf_real_de_prueba() {
         "el PDF está vacío"
     );
     eprintln!("PDF escrito en {}", ruta.display());
+
+    // La tabla debe salir como tabla real: las filas del fuente no pueden
+    // aparecer como texto plano con sus pipes de separación. Un `|` suelto
+    // proveniente de `\|` escapado sí es válido. Best-effort: poppler-utils.
+    if let Ok(salida) = std::process::Command::new("pdftotext")
+        .arg(&ruta)
+        .arg("-")
+        .output()
+    {
+        if salida.status.success() {
+            let texto = String::from_utf8_lossy(&salida.stdout);
+            assert!(
+                !texto.contains("Command |") && !texto.contains("| git"),
+                "el PDF conserva las filas de la tabla como texto con pipes"
+            );
+            assert!(texto.contains("Status"), "falta la cabecera de la tabla");
+            assert!(
+                texto.contains("in cell"),
+                "falta la celda con pipe escapado"
+            );
+        }
+    }
+    // Volcado de páginas a PNG para inspección visual manual (best-effort).
+    let prefijo = std::env::temp_dir().join("export-prueba");
+    let _ = std::process::Command::new("pdftoppm")
+        .arg("-png")
+        .arg("-r")
+        .arg("110")
+        .arg("-f")
+        .arg("1")
+        .arg("-l")
+        .arg("3")
+        .arg(&ruta)
+        .arg(&prefijo)
+        .output();
+    eprintln!("PNGs de inspección: {}-N.png", prefijo.display());
 }
