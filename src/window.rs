@@ -2213,7 +2213,7 @@ impl ScribeWindow {
                     .application_icon("io.github.gnacho.Scribe")
                     .developer_name("gnacho")
                     .version(env!("CARGO_PKG_VERSION"))
-                    .website("https://github.com/gnacho/scribe")
+                    .website("https://scribe.cloudless.club")
                     .issue_url("https://github.com/gnacho/scribe/issues")
                     .license_type(gtk4::License::Agpl30)
                     .build()

@@ -24,6 +24,9 @@ las cabeceras se ven con su tamaño, la negrita en negrita y las marcas de
 sintaxis se atenúan o encogen, sin cambiar a una previsualización aparte ni
 usar un motor de navegador.
 
+Cada función se muestra en acción en la web del proyecto,
+[scribe.cloudless.club](https://scribe.cloudless.club).
+
 ## Por qué existe esto
 
 Quería un editor Markdown que se sintiera parte de GNOME, no un porte de una
