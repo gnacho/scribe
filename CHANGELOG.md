@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.3.21] - 2026-10-25
+## [0.3.25] - 2026-10-25
 
 Thank you [@HelloKolla2004](https://github.com/HelloKolla2004) for the PDF
 tables report and [@kem-a](https://github.com/kem-a) for two sharp reports:
