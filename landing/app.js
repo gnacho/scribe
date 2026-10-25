@@ -283,13 +283,10 @@
   function wireVideo() {
     var video = document.getElementById("demo-video");
     if (!video) { return; }
-    if (reducedMotion.matches) {
-      video.pause();
-      video.removeAttribute("autoplay");
-      video.controls = true;
-    }
+    /* With reduced motion the stylesheet swaps the clip for its poster frame,
+       so the only thing left to handle here is coming back from it. */
     reducedMotion.addEventListener("change", function (ev) {
-      if (ev.matches) { video.pause(); video.controls = true; } else { video.controls = false; video.play().catch(function () {}); }
+      if (!ev.matches) { video.play().catch(function () {}); }
     });
   }
 

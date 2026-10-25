@@ -36,7 +36,7 @@
     })();
   </script>
   <link rel="preload" href="assets/fonts/Cantarell-VF.woff2" as="font" type="font/woff2" crossorigin>
-  <link rel="stylesheet" href="styles.css?v=7">
+  <link rel="stylesheet" href="styles.css?v=8">
   <script type="application/ld+json">
   {
     "@context": "https://schema.org",
@@ -98,7 +98,7 @@
         <span class="chip ghost" data-i18n="hero.flathub"></span>
       </p>
       <figure class="hero-video">
-        <video id="demo-video" autoplay muted loop playsinline preload="metadata" poster="assets/demo-poster.jpg?v=2" aria-label="Scribe demo: Markdown typing itself, already rendered">
+        <video id="demo-video" autoplay muted loop playsinline preload="metadata" poster="assets/demo-poster.jpg?v=4" aria-label="Scribe demo: Markdown typing itself, already rendered">
           <source src="assets/scribe-demo-v4.mp4?v=3" type="video/mp4">
         </video>
       </figure>
@@ -161,11 +161,11 @@
       <h2 class="statement" data-i18n="install.title"></h2>
       <p class="lead" data-i18n="install.lead"></p>
       <div class="tabs" role="tablist" data-i18n-aria="install.tabsLabel">
-        <button type="button" role="tab" id="tab-deb" data-tab="deb" aria-controls="panel-deb" aria-selected="true">.deb</button>
-        <button type="button" role="tab" id="tab-rpm" data-tab="rpm" aria-controls="panel-rpm" aria-selected="false" tabindex="-1">.rpm</button>
-        <button type="button" role="tab" id="tab-appimage" data-tab="appimage" aria-controls="panel-appimage" aria-selected="false" tabindex="-1">AppImage</button>
-        <button type="button" role="tab" id="tab-flathub" data-tab="flathub" aria-controls="panel-flathub" aria-selected="false" tabindex="-1">Flathub</button>
-        <button type="button" role="tab" id="tab-aur" data-tab="aur" aria-controls="panel-aur" aria-selected="false" tabindex="-1">AUR</button>
+        <button type="button" class="tab" role="tab" id="tab-deb" data-tab="deb" aria-controls="panel-deb" aria-selected="true">.deb</button>
+        <button type="button" class="tab" role="tab" id="tab-rpm" data-tab="rpm" aria-controls="panel-rpm" aria-selected="false" tabindex="-1">.rpm</button>
+        <button type="button" class="tab" role="tab" id="tab-appimage" data-tab="appimage" aria-controls="panel-appimage" aria-selected="false" tabindex="-1">AppImage</button>
+        <button type="button" class="tab" role="tab" id="tab-flathub" data-tab="flathub" aria-controls="panel-flathub" aria-selected="false" tabindex="-1">Flathub</button>
+        <button type="button" class="tab" role="tab" id="tab-aur" data-tab="aur" aria-controls="panel-aur" aria-selected="false" tabindex="-1">AUR</button>
         <span class="tabs-indicator" aria-hidden="true"></span>
       </div>
       <div class="tab-panels">
@@ -265,6 +265,6 @@ chmod +x Scribe-&lt;version&gt;-x86_64.AppImage
   </footer>
 
   <script src="i18n.js?v=8"></script>
-  <script src="app.js?v=5"></script>
+  <script src="app.js?v=6"></script>
 </body>
 </html>

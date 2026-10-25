@@ -252,7 +252,6 @@ td.scribe-col { background: rgba(0, 113, 227, 0.07); }
 html[data-theme="dark"] td.scribe-col { background: rgba(41, 151, 255, 0.1); }
 .sym { font-weight: 700; margin-right: 6px; font-variant-numeric: tabular-nums; }
 
-.not-title { font-size: 26px; font-weight: 700; letter-spacing: -0.02em; margin: 56px auto 14px; max-width: 62ch; }
 /* ---------- Honest block: what Scribe does not do ---------- */
 .honest-block {
   margin-top: 52px;
@@ -301,17 +300,8 @@ html[data-theme="dark"] td.scribe-col { background: rgba(41, 151, 255, 0.1); }
 }
 
 /* ---------- Install: numbered steps, copy inside the box ---------- */
-.step-num {
-  display: inline-block;
-  font-family: "Adwaita Mono", "Fira Mono", "DejaVu Sans Mono", monospace;
-  font-size: 13px;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  color: var(--accent);
-  margin-bottom: 10px;
-}
 .code-wrap { position: relative; }
-.code-wrap .codebox { padding-right: 136px; }
+.code-wrap .codebox { padding-right: 18px; padding-top: 46px; }
 .code-wrap .copy-btn { position: absolute; top: 10px; right: 10px; }
 .soon-badge {
   display: inline-block;
@@ -365,15 +355,12 @@ html[data-theme="dark"] td.scribe-col { background: rgba(41, 151, 255, 0.1); }
 .sources { font-size: 13px; color: var(--muted); margin: 26px auto 0; max-width: 62ch; }
 
 /* ---------- Install ---------- */
-.install-grid { display: grid; grid-template-columns: 1.35fr 1fr 1fr; gap: 22px; margin-top: 44px; align-items: start; }
-.install-card h3 { font-size: 18px; font-weight: 700; letter-spacing: -0.01em; margin-bottom: 10px; }
-.install-card p { font-size: 14.5px; color: var(--muted); margin-bottom: 14px; }
-.flathub-card { border: 1.5px dashed var(--hairline); border-radius: var(--radius); padding: 22px; }
 .codebox {
   background: var(--video-bg); color: #f0efee;
   border-radius: 12px; padding: 16px 18px;
   font-family: "Adwaita Mono", "Fira Mono", "DejaVu Sans Mono", monospace;
   font-size: 12.5px; line-height: 1.75; overflow-x: auto; margin-bottom: 10px;
+  white-space: pre-wrap; overflow-wrap: anywhere;
 }
 .copy-btn {
   border: 1px solid var(--hairline); border-radius: 999px;
@@ -384,7 +371,8 @@ html[data-theme="dark"] td.scribe-col { background: rgba(41, 151, 255, 0.1); }
 }
 .copy-btn:hover { background: var(--surface); }
 .copy-btn:active { transform: scale(0.96); }
-.reqs { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; margin-top: 40px; }
+html[data-theme="dark"] .codebox { background: #1c1c21; }
+.reqs { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; max-width: 800px; margin: 40px auto 0; }
 .reqs h3 { font-size: 17px; font-weight: 700; margin-bottom: 8px; }
 .reqs p { font-size: 15px; color: var(--muted); }
 
@@ -413,9 +401,10 @@ section#about { text-align: center; padding-bottom: 40px; }
 /* ---------- Install tabs ---------- */
 .tabs {
   position: relative;
-  display: inline-flex;
+  display: flex;
+  width: fit-content;
   gap: 2px;
-  margin-top: 36px;
+  margin: 36px auto 0;
   padding: 4px;
   background: var(--surface);
   border-radius: 999px;
@@ -425,6 +414,8 @@ section#about { text-align: center; padding-bottom: 40px; }
 }
 .tabs::-webkit-scrollbar { display: none; }
 .tab {
+  position: relative;
+  z-index: 1;
   border: 0;
   background: transparent;
   color: var(--muted);
@@ -442,6 +433,7 @@ section#about { text-align: center; padding-bottom: 40px; }
 .tab[aria-selected="true"] { color: var(--text); }
 .tabs-indicator {
   position: absolute;
+  z-index: 0;
   top: 4px;
   left: 0;
   height: calc(100% - 8px);
@@ -452,7 +444,7 @@ section#about { text-align: center; padding-bottom: 40px; }
   transition: transform 260ms cubic-bezier(0.22, 1, 0.36, 1), width 260ms cubic-bezier(0.22, 1, 0.36, 1);
   pointer-events: none;
 }
-.tab-panels { margin-top: 26px; max-width: 800px; }
+.tab-panels { margin: 26px auto 0; max-width: 800px; }
 .tab-panel { animation: panel-in 340ms cubic-bezier(0.22, 1, 0.36, 1) both; }
 .tab-panel[hidden] { display: none; }
 @keyframes panel-in { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
@@ -501,14 +493,12 @@ section#about { text-align: center; padding-bottom: 40px; }
   .statement { font-size: clamp(30px, 7vw, 42px); }
   .slider { flex-direction: column; }
   .slider-arrow { display: none; }
-  .install-grid { grid-template-columns: 1fr; }
   .reqs { grid-template-columns: 1fr; }
   .nav-cta { padding: 6px 12px; }
   .honest-block { padding: 30px 22px; margin-top: 40px; }
   .honest-list { grid-template-columns: 1fr; gap: 0; }
   .cta-final { padding: 84px 0 64px; }
-  .code-wrap .codebox { padding-right: 16px; padding-bottom: 48px; }
-  .code-wrap .copy-btn { top: auto; bottom: 10px; right: 10px; }
+  .code-wrap .codebox { padding-right: 18px; }
 }
 
 /* ---------- Reduced motion ---------- */
@@ -517,4 +507,8 @@ section#about { text-align: center; padding-bottom: 40px; }
   * { transition: none !important; animation: none !important; }
   .hero-title, .hero-sub, .hero-ctas, .hero-chips, .hero-video, .nav { opacity: 1 !important; transform: none !important; filter: none !important; }
   .reveal { opacity: 1 !important; }
+  /* The clip opens on an empty buffer, so a frozen video shows nothing useful.
+     Show the poster frame (a full document) instead of the paused first frame. */
+  .hero-video video { visibility: hidden; }
+  .hero-video { background: var(--video-bg) url("assets/demo-poster.jpg") center / cover no-repeat; }
 }
