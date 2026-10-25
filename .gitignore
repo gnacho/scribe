@@ -9,3 +9,7 @@ packaging/arch/src/
 packaging/arch/pkg/
 packaging/arch/*.tar.gz
 packaging/arch/*.pkg.tar.*
+
+# Impeccable tooling artifacts (comps, build spec, review sessions)
+.impeccable/
+assets/plates/
