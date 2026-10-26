@@ -106,6 +106,8 @@ h1 em { color: var(--accent); }
 .proof-strip strong { font-size: 32px; letter-spacing: -.05em; line-height: 1.2; }
 .proof-strip span, .proof-strip p { font-size: 12px; color: var(--muted); }
 .proof-strip p { display: flex; align-items: center; line-height: 1.6; }
+.proof-gnome strong { font-size: clamp(34px, 3.2vw, 44px); letter-spacing: -.04em; line-height: 1; }
+.proof-gnome p { display: block; margin: 10px 0 0; line-height: 1.55; }
 
 .section { max-width: 1600px; margin: auto; padding: 128px clamp(24px, 5.8vw, 94px); }
 .section-heading h2, .final-cta h2 { margin: 0; font-size: clamp(44px, 5vw, 76px); font-weight: 600; letter-spacing: -.055em; line-height: 1; }
@@ -214,7 +216,7 @@ footer small { grid-column: 1 / -1; border-top: 1px solid var(--line); padding-t
   .hero-product { padding-left: 0; max-width: 850px; width: 100%; margin: auto; }
   .margin-note { display: none; }
   .proof-strip { grid-template-columns: repeat(3, 1fr); }
-  .proof-strip p { grid-column: 1 / -1; border-left: 0; border-top: 1px solid var(--line); padding-left: 0; }
+  .proof-strip > p, .proof-gnome { grid-column: 1 / -1; border-left: 0; border-top: 1px solid var(--line); padding-left: 0; }
   .install { grid-template-columns: 1fr; gap: 60px; }
   .story { grid-template-columns: 100px 1fr; }
   .story-aside { grid-column: 2; padding-top: 0; }

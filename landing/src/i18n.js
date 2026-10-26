@@ -6,7 +6,7 @@ export let currentLanguage = urlLanguage === 'en' || urlLanguage === 'es'
 export const en = {
   'Scribe — Escribe. Ya está maquetado.': 'Scribe — Write. It’s already typeset.',
   'Descargar': 'Download',
-  'Descargar para Linux': 'Download for Linux',
+  'Instalar para Linux': 'Install on Linux',
   'Cómo funciona': 'How it works',
   'Funciones': 'Features',
   'Instalar': 'Install',
