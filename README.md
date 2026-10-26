@@ -23,8 +23,9 @@ It renders Markdown live on the editing buffer so headings look like headings
 and bold text looks bold, without switching to a separate preview or a browser
 engine.
 
-Every feature is shown in action at the project website,
-[scribe.cloudless.club](https://scribe.cloudless.club).
+See it in action at [scribe.cloudless.club](https://scribe.cloudless.club): every
+feature working, screenshots in light and dark, a live typing demo and install
+instructions for .deb, .rpm, AppImage and AUR.
 
 ## Why does this exist?
 
