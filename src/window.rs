@@ -801,14 +801,15 @@ impl ScribeWindow {
             .build();
         header.pack_end(&search_button);
 
-        // Botón de vista dividida (issue #35), como el de Typesetter: el icono
-        // dice qué se va a ver y comparte estado con la acción (Ctrl+Shift+P).
-        let preview_button = gtk4::ToggleButton::builder()
-            .icon_name("io.github.gnacho.Scribe-preview-off-symbolic")
-            .tooltip_text(gettext("Split View"))
-            .action_name("win.toggle-preview")
+        // Modo máquina de escribir (issue #151): comparte estado con la acción
+        // y su atajo (Ctrl+Shift+T). La vista dividida sigue disponible desde
+        // el teclado (Ctrl+Shift+P).
+        let typewriter_button = gtk4::ToggleButton::builder()
+            .icon_name("io.github.gnacho.Scribe-typewriter-symbolic")
+            .tooltip_text(gettext("Typewriter Mode (Ctrl+Shift+T)"))
+            .action_name("win.typewriter-mode")
             .build();
-        header.pack_end(&preview_button);
+        header.pack_end(&typewriter_button);
 
         // ---- menú principal ----
         let menu = gio::Menu::new();
@@ -1977,27 +1978,6 @@ impl ScribeWindow {
                 }
                 action.set_state(&next.to_variant());
                 settings.set_show_preview(next);
-            });
-        }
-        // El icono del botón dice qué se va a ver: panel derecho atenuado
-        // (previsualización oculta) o relleno (visible).
-        {
-            let preview_button = preview_button.clone();
-            let sync_icon = move |on: bool| {
-                preview_button.set_icon_name(if on {
-                    "io.github.gnacho.Scribe-preview-on-symbolic"
-                } else {
-                    "io.github.gnacho.Scribe-preview-off-symbolic"
-                });
-            };
-            sync_icon(preview_visible.get());
-            action_preview.connect_state_notify(move |action| {
-                sync_icon(
-                    action
-                        .state()
-                        .and_then(|s| s.get::<bool>())
-                        .unwrap_or(false),
-                );
             });
         }
 
