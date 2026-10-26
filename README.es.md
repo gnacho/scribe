@@ -24,8 +24,9 @@ las cabeceras se ven con su tamaño, la negrita en negrita y las marcas de
 sintaxis se atenúan o encogen, sin cambiar a una previsualización aparte ni
 usar un motor de navegador.
 
-Cada función se muestra en acción en la web del proyecto,
-[scribe.cloudless.club](https://scribe.cloudless.club).
+Míralo en acción en [scribe.cloudless.club](https://scribe.cloudless.club): todas
+las funciones explicadas y funcionando, capturas en claro y oscuro, una demo de
+escritura y la instalación para .deb, .rpm, AppImage y AUR.
 
 ## Por qué existe esto
 

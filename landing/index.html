@@ -1,270 +1,210 @@
-<!DOCTYPE html>
-<html lang="en" data-theme="light">
+<!doctype html>
+<html lang="es">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Scribe: a native Markdown editor for GNOME and Linux</title>
-  <meta name="description" content="Scribe renders Markdown as you type, in one plain-text buffer. Native GTK4 and libadwaita, written in Rust, a 2.6 MB binary, no Electron. Free and open source under AGPL-3.0.">
-  <link rel="canonical" href="https://scribe.cloudless.club/">
-  <link rel="alternate" hreflang="es" href="https://scribe.cloudless.club/?lang=es">
-  <link rel="alternate" hreflang="en" href="https://scribe.cloudless.club/?lang=en">
-  <link rel="alternate" hreflang="x-default" href="https://scribe.cloudless.club/">
-  <link rel="icon" type="image/png" href="assets/favicon.png?v=1">
-  <meta property="og:type" content="website">
-  <meta property="og:site_name" content="Scribe">
-  <meta property="og:title" content="Scribe: a native Markdown editor for GNOME and Linux">
-  <meta property="og:description" content="Scribe renders Markdown as you type, in one plain-text buffer. Native GTK4 and libadwaita, written in Rust, a 2.6 MB binary, no Electron.">
-  <meta property="og:url" content="https://scribe.cloudless.club/">
-  <meta property="og:image" content="https://scribe.cloudless.club/assets/og.png?v=2">
-  <meta property="og:image:width" content="1200">
-  <meta property="og:image:height" content="630">
-  <meta property="og:image:alt" content="Scribe landing page preview">
-  <meta property="og:locale" content="en_US">
-  <meta property="og:locale:alternate" content="es_ES">
-  <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:title" content="Scribe: a native Markdown editor for GNOME and Linux">
-  <meta name="twitter:description" content="Scribe renders Markdown as you type, in one plain-text buffer. Native GTK4 and libadwaita, written in Rust, a 2.6 MB binary, no Electron.">
-  <meta name="twitter:image" content="https://scribe.cloudless.club/assets/og.png?v=2">
-  <meta name="theme-color" content="#ffffff">
-  <meta name="theme-color" content="#0a0a0c" media="(prefers-color-scheme: dark)">
-  <script>
-    (function () {
-      var p = new URLSearchParams(window.location.search).get("theme");
-      var t = p === "dark" || p === "light" ? p
-        : (localStorage.getItem("scribe-theme") || (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light"));
-      document.documentElement.setAttribute("data-theme", t);
-    })();
-  </script>
-  <link rel="preload" href="assets/fonts/Cantarell-VF.woff2" as="font" type="font/woff2" crossorigin>
-  <link rel="stylesheet" href="styles.css?v=8">
-  <script type="application/ld+json">
-  {
-    "@context": "https://schema.org",
-    "@graph": [
-      {
-        "@type": "WebSite",
-        "name": "Scribe",
-        "url": "https://scribe.cloudless.club/",
-        "inLanguage": ["en", "es"]
-      },
-      {
-        "@type": "SoftwareApplication",
-        "name": "Scribe",
-        "applicationCategory": "TextEditor",
-        "operatingSystem": "Linux",
-        "softwareVersion": "0.3.20",
-        "license": "https://www.gnu.org/licenses/agpl-3.0.html",
-        "url": "https://scribe.cloudless.club/",
-        "downloadUrl": "https://github.com/gnacho/scribe/releases",
-        "offers": { "@type": "Offer", "price": "0", "priceCurrency": "EUR" }
-      }
-    ]
-  }
-  </script>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Scribe es un editor Markdown nativo para Linux. Software libre AGPL-3, sin telemetría, cuentas ni nube obligatoria." />
+  <title>Scribe — Escribe. Ya está maquetado.</title>
+  <link rel="stylesheet" href="/src/fonts.css" />
+  <link rel="stylesheet" href="/src/style.css" />
+  <link rel="canonical" href="https://scribe.cloudless.club/" />
+  <link rel="icon" href="/assets/app-icon.svg" type="image/svg+xml" />
+  <link rel="icon" href="/assets/favicon.png" type="image/png" sizes="64x64" />
+  <meta name="theme-color" content="#f6f4f0" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#2b2926" media="(prefers-color-scheme: dark)" />
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="Scribe" />
+  <meta property="og:url" content="https://scribe.cloudless.club/" />
+  <meta property="og:title" content="Scribe - Escribe. Ya está maquetado." />
+  <meta property="og:description" content="Scribe es un editor Markdown nativo para Linux. Software libre AGPL-3, sin telemetría, cuentas ni nube obligatoria." />
+  <meta property="og:image" content="https://scribe.cloudless.club/assets/og.png" />
+  <meta property="og:locale" content="es_ES" />
+  <meta property="og:locale:alternate" content="en_US" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="Scribe - Escribe. Ya está maquetado." />
+  <meta name="twitter:description" content="Scribe es un editor Markdown nativo para Linux. Software libre AGPL-3, sin telemetría, cuentas ni nube obligatoria." />
+  <meta name="twitter:image" content="https://scribe.cloudless.club/assets/og.png" />
+  <script type="application/ld+json">{"@context":"https://schema.org","@type":"SoftwareApplication","name":"Scribe","applicationCategory":"TextEditor","operatingSystem":"Linux","url":"https://scribe.cloudless.club/","downloadUrl":"https://github.com/gnacho/scribe/releases/latest","license":"https://www.gnu.org/licenses/agpl-3.0.html","offers":{"@type":"Offer","price":"0","priceCurrency":"EUR"},"description":"Scribe es un editor Markdown nativo para Linux. Software libre AGPL-3, sin telemetría, cuentas ni nube obligatoria."}</script>
+  <script defer src="https://stat.domatix.com/script.js" data-website-id="0a831c45-c2e7-4801-b015-f1d050f589e8"></script>
+  <script data-goatcounter="https://stats.scribe.cloudless.club/count" async src="https://stats.scribe.cloudless.club/count.js"></script>
 </head>
 <body>
-  <nav class="nav" aria-label="Main">
-    <div class="nav-inner">
-      <a class="nav-logo" href="#top">Scribe</a>
-      <div class="nav-links">
-        <a href="#look" data-i18n="nav.look"></a>
-        <a href="#compare" data-i18n="nav.compare"></a>
-        <a href="#install" data-i18n="nav.install"></a>
-        <a href="#about" data-i18n="nav.about"></a>
-      </div>
-      <div class="nav-actions">
-        <button type="button" class="nav-icon" id="theme-switch" role="switch" aria-checked="false" data-i18n-aria="aria.theme"></button>
-        <button type="button" class="nav-icon nav-lang" id="lang-btn" data-i18n-aria="aria.lang">ES</button>
-        <a class="nav-cta" href="https://github.com/gnacho/scribe/releases/latest" data-i18n="hero.cta"></a>
-      </div>
+  <header class="site-header">
+    <a class="brand" href="#inicio" aria-label="Scribe, inicio">
+      <svg class="brand-mark" viewBox="0 0 28 32" aria-hidden="true"><path d="M22.5 5.5C19.8 2.4 10.4 2.5 6.4 7.2 1.7 12.8 20.8 11.4 21.4 19.2 22 27.2 8.6 30.5 4 24.8"/><path d="M16 1 9 31"/></svg>
+      <span>Scribe</span>
+    </a>
+    <button class="menu-toggle icon-button" aria-label="Abrir menú" aria-expanded="false" aria-controls="main-nav">
+      <span></span><span></span>
+    </button>
+    <nav class="main-nav" id="main-nav" aria-label="Navegación principal">
+      <a href="#experiencia">Cómo funciona</a>
+      <a href="#funcionalidades">Funciones</a>
+      <a href="#instalar">Instalar</a>
+      <a href="#historia">Historia</a>
+    </nav>
+    <div class="header-actions">
+      <button class="language-toggle icon-button" aria-label="Switch to English" title="Switch to English">EN</button>
+      <button class="theme-toggle icon-button" aria-label="Activar tema oscuro" title="Cambiar tema">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20.2 15.1A8.5 8.5 0 0 1 8.9 3.8 8.5 8.5 0 1 0 20.2 15.1Z"/></svg>
+      </button>
+      <a class="button button-small" href="https://github.com/gnacho/scribe/releases/latest">Descargar <span aria-hidden="true">↓</span></a>
     </div>
-  </nav>
+  </header>
 
-  <main id="top">
-    <header class="hero">
-      <h1 class="hero-title" data-i18n="hero.h1"></h1>
-      <p class="hero-sub" data-i18n="hero.sub"></p>
-      <div class="hero-ctas">
-        <a class="btn-primary" href="https://github.com/gnacho/scribe/releases/latest">
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M8 1v9m0 0L4.5 6.5M8 10l3.5-3.5M2 12.5V14a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1v-1.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
-          <span data-i18n="hero.cta"></span>
-        </a>
-        <a class="btn-link" href="https://github.com/gnacho/scribe" data-i18n="about.star"></a>
-      </div>
-      <p class="hero-chips">
-        <span class="chip">.deb</span>
-        <span class="chip">.rpm</span>
-        <span class="chip">AppImage</span>
-        <span class="chip ghost" data-i18n="hero.flathub"></span>
-      </p>
-      <figure class="hero-video">
-        <video id="demo-video" autoplay muted loop playsinline preload="metadata" poster="assets/demo-poster.jpg?v=4" aria-label="Scribe demo: Markdown typing itself, already rendered">
-          <source src="assets/scribe-demo-v4.mp4?v=3" type="video/mp4">
-        </video>
-      </figure>
-    </header>
-
-    <section class="specs reveal" aria-label="Highlights">
-      <div class="spec">
-        <h3 data-i18n="cards.inline.title"></h3>
-        <p data-i18n="cards.inline.text"></p>
-      </div>
-      <div class="spec">
-        <p class="spec-big">2.6 MB</p>
-        <p data-i18n="cards.tiny.text"></p>
-      </div>
-      <div class="spec">
-        <h3 data-i18n="cards.pdf.title"></h3>
-        <p><span data-i18n="cards.pdf.text"></span><code>\newpage</code><span data-i18n="cards.pdf.text2"></span><a href="https://github.com/gnacho/scribe/issues/138"><span data-i18n="cards.pdf.link"></span></a></p>
-      </div>
-    </section>
-
-    <section id="look" class="reveal">
-      <h2 class="statement" data-i18n="shots.title"></h2>
-      <div class="shots">
-        <div class="slider">
-          <button type="button" class="slider-arrow" id="shot-prev" data-i18n-aria="aria.prev">
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M10 3 5 8l5 5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
-          </button>
-          <figure class="slider-view">
-            <img id="shot-img" src="assets/shots/shot-editor-en-light.webp?v=3" alt="">
-            <figcaption id="shot-caption"></figcaption>
-          </figure>
-          <button type="button" class="slider-arrow" id="shot-next" data-i18n-aria="aria.next">
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="m6 3 5 5-5 5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
-          </button>
+  <main>
+    <section class="hero" id="inicio">
+      <div class="hero-copy">
+        <p class="kicker"><span></span> Editor Markdown nativo para Linux</p>
+        <h1>Escribe.<br><em>Ya está</em><br>maquetado.</h1>
+        <p class="hero-intro">Sin panel de vista previa. Sin cambiar de modo. Scribe convierte el Markdown en una página mientras escribes, justo donde estás escribiendo.</p>
+        <div class="hero-actions">
+          <a class="button" href="#instalar">Instalar para Linux <span aria-hidden="true">↓</span></a>
+          <a class="text-link" href="#experiencia">Ver cómo funciona <span aria-hidden="true">↘</span></a>
         </div>
-        <div class="slider-thumbs" id="shot-thumbs" aria-label="Screenshots"></div>
+        <div class="release-meta"><span>v0.3.20</span><span>AGPL-3.0</span><span>Gratis, siempre</span></div>
       </div>
-    </section>
 
-    <section id="compare" class="reveal">
-      <h2 class="statement" data-i18n="compare.title"></h2>
-      <p class="lead" data-i18n="compare.lead"></p>
-      <p class="lead" data-i18n="compare.intro"></p>
-      <div id="compare-tables"></div>
-      <div class="honest-block">
-        <h3 class="honest-title" data-i18n="compare.not.title"></h3>
-        <ul class="honest-list">
-          <li data-i18n="compare.not.items.0"></li>
-          <li data-i18n="compare.not.items.1"></li>
-          <li data-i18n="compare.not.items.2"></li>
-          <li data-i18n="compare.not.items.3"></li>
-          <li data-i18n="compare.not.items.4"></li>
-        </ul>
-        <p class="honest-close" data-i18n="compare.not.close"></p>
-      </div>
-      <p class="sources" data-i18n="compare.sources"></p>
-    </section>
-
-    <section id="install" class="reveal">
-      <h2 class="statement" data-i18n="install.title"></h2>
-      <p class="lead" data-i18n="install.lead"></p>
-      <div class="tabs" role="tablist" data-i18n-aria="install.tabsLabel">
-        <button type="button" class="tab" role="tab" id="tab-deb" data-tab="deb" aria-controls="panel-deb" aria-selected="true">.deb</button>
-        <button type="button" class="tab" role="tab" id="tab-rpm" data-tab="rpm" aria-controls="panel-rpm" aria-selected="false" tabindex="-1">.rpm</button>
-        <button type="button" class="tab" role="tab" id="tab-appimage" data-tab="appimage" aria-controls="panel-appimage" aria-selected="false" tabindex="-1">AppImage</button>
-        <button type="button" class="tab" role="tab" id="tab-flathub" data-tab="flathub" aria-controls="panel-flathub" aria-selected="false" tabindex="-1">Flathub</button>
-        <button type="button" class="tab" role="tab" id="tab-aur" data-tab="aur" aria-controls="panel-aur" aria-selected="false" tabindex="-1">AUR</button>
-        <span class="tabs-indicator" aria-hidden="true"></span>
-      </div>
-      <div class="tab-panels">
-        <div class="tab-panel" role="tabpanel" id="panel-deb" aria-labelledby="tab-deb" data-panel="deb">
-          <p class="tab-hint" data-i18n="install.panels.deb.hint"></p>
-          <div class="code-wrap">
-            <pre class="codebox" id="code-deb">wget https://github.com/gnacho/scribe/releases/download/v&lt;version&gt;/scribe_&lt;version&gt;-1_amd64.deb
-sudo apt install ./scribe_&lt;version&gt;-1_amd64.deb</pre>
-            <button type="button" class="copy-btn" data-copy="code-deb" data-i18n="install.copy"></button>
+      <div class="hero-product" aria-label="Demostración visual del editor Scribe">
+        <div class="margin-note" aria-hidden="true">MENOS EDITOR.<br>MÁS TEXTO.</div>
+        <div class="app-window">
+          <div class="window-bar">
+            <div class="window-left"><button class="window-button demo-open" aria-label="Abrir documento de demostración">Abrir <span>⌄</span></button><span class="window-divider"></span><span class="new-doc" aria-hidden="true">＋</span></div>
+            <div class="document-title"><strong>Cuaderno de campo</strong><span>Borrador</span></div>
+            <div class="window-controls" aria-hidden="true"><span>⌕</span><span>☰</span><span>×</span></div>
           </div>
-          <p class="tab-note" data-i18n="install.panels.deb.note"></p>
-        </div>
-        <div class="tab-panel" role="tabpanel" id="panel-rpm" aria-labelledby="tab-rpm" data-panel="rpm" hidden>
-          <p class="tab-hint" data-i18n="install.panels.rpm.hint"></p>
-          <div class="code-wrap">
-            <pre class="codebox" id="code-rpm">wget https://github.com/gnacho/scribe/releases/download/v&lt;version&gt;/scribe-&lt;version&gt;-1.x86_64.rpm
-sudo dnf install ./scribe-&lt;version&gt;-1.x86_64.rpm</pre>
-            <button type="button" class="copy-btn" data-copy="code-rpm" data-i18n="install.copy"></button>
+          <div class="document">
+            <div class="doc-meta">27 OCTUBRE 2026 &nbsp; / &nbsp; NOTAS</div>
+            <h2>Cuaderno de campo</h2>
+            <p class="doc-lead">La niebla todavía no se ha levantado. Escribo despacio, <strong>mientras el texto encuentra su forma</strong>.</p>
+            <h3>El sendero</h3>
+            <p>Dos cosas que merece la pena recordar:</p>
+            <ul><li>El camino vuelve a estar señalizado.</li><li>Traer guantes la próxima vez.</li></ul>
+            <blockquote>La claridad no es añadir más.<br>Es quitar todo lo que estorba.</blockquote>
+            <div class="typing-line"><span id="typed-text">Y seguir escribiendo.</span><span class="caret" aria-hidden="true"></span></div>
           </div>
-          <p class="tab-note" data-i18n="install.panels.rpm.note"></p>
+          <div class="window-status"><span>Markdown</span><span>142 palabras</span><span class="status-native"><i></i> Nativo</span></div>
         </div>
-        <div class="tab-panel" role="tabpanel" id="panel-appimage" aria-labelledby="tab-appimage" data-panel="appimage" hidden>
-          <p class="tab-hint" data-i18n="install.panels.appimage.hint"></p>
-          <div class="code-wrap">
-            <pre class="codebox" id="code-appimage">wget https://github.com/gnacho/scribe/releases/download/v&lt;version&gt;/Scribe-&lt;version&gt;-x86_64.AppImage
-chmod +x Scribe-&lt;version&gt;-x86_64.AppImage
-./Scribe-&lt;version&gt;-x86_64.AppImage</pre>
-            <button type="button" class="copy-btn" data-copy="code-appimage" data-i18n="install.copy"></button>
+        <div class="product-caption"><span>El código y la página son el mismo texto.</span><button class="replay-button" aria-label="Reproducir demostración de escritura">↻ &nbsp;Repetir escritura</button></div>
+      </div>
+    </section>
+
+    <section class="proof-strip" aria-label="Datos principales">
+      <div><strong>AGPL-3</strong><span>Software libre</span></div>
+      <div><strong>0</strong><span>Telemetría</span></div>
+      <div><strong>100%</strong><span>Gratis, ahora y siempre</span></div>
+      <div class="proof-gnome"><strong>GNOME</strong><p>Hecho con Rust, GTK4 y libadwaita.<br>Como debe sentirse una app de Linux.</p></div>
+    </section>
+
+    <section class="experience section" id="experiencia">
+      <div class="section-heading">
+        <p class="section-label">La idea</p>
+        <h2>Un solo texto.<br><em>Ninguna fricción.</em></h2>
+      </div>
+      <div class="experience-copy">
+        <p class="large-copy">La mayoría de editores te hacen elegir entre mirar el código o mirar el resultado. Scribe no.</p>
+        <p>Los títulos, la negrita, las citas y las tablas se renderizan sobre el propio buffer de Markdown. No hay dos paneles que sincronizar ni una vista previa que perseguir con los ojos.</p>
+        <p>Escribes en Markdown. Lees una página. Todo ocurre en el mismo lugar.</p>
+      </div>
+      <div class="format-demo" aria-label="Ejemplos de formato Markdown">
+        <div class="format-source"><code># Una idea clara</code><code>**Sin distracciones**</code><code>&gt; Menos interfaz</code></div>
+        <div class="format-arrow" aria-hidden="true">→</div>
+        <div class="format-output"><h3>Una idea clara</h3><strong>Sin distracciones</strong><blockquote>Menos interfaz</blockquote></div>
+      </div>
+    </section>
+
+    <section class="features section" id="funcionalidades">
+      <div class="features-heading">
+        <div class="section-heading">
+          <p class="section-label">Funcionalidades</p>
+          <h2>Mucho más que<br><em>Markdown bonito.</em></h2>
+        </div>
+        <p>Scribe está lleno de pequeñas decisiones que hacen más cómodo escribir a diario. Explóralas con capturas reales de la aplicación.</p>
+      </div>
+
+      <div class="feature-explorer">
+        <div class="feature-tabs" role="tablist" aria-label="Explorar funcionalidades">
+          <button role="tab" aria-selected="true" data-feature="focus"><span>01</span> Concentración</button>
+          <button role="tab" aria-selected="false" data-feature="markdown"><span>02</span> Markdown en vivo</button>
+          <button role="tab" aria-selected="false" data-feature="find"><span>03</span> Buscar y reemplazar</button>
+          <button role="tab" aria-selected="false" data-feature="split"><span>04</span> Vista dividida</button>
+        </div>
+        <div class="feature-stage">
+          <div class="feature-visual">
+            <img id="feature-image" src="/assets/modo-foco.png" alt="Modo foco de Scribe con el párrafo actual resaltado y el resto atenuado" />
+            <span class="real-capture">Captura real de Scribe</span>
           </div>
-          <p class="tab-note" data-i18n="install.panels.appimage.note"></p>
-        </div>
-        <div class="tab-panel" role="tabpanel" id="panel-flathub" aria-labelledby="tab-flathub" data-panel="flathub" hidden>
-          <p class="tab-hint" data-i18n="install.panels.flathub.hint"></p>
-          <p class="tab-note"><span class="soon-badge" data-i18n="install.soon"></span> <span data-i18n="install.panels.flathub.note"></span></p>
-        </div>
-        <div class="tab-panel" role="tabpanel" id="panel-aur" aria-labelledby="tab-aur" data-panel="aur" hidden>
-          <p class="tab-hint" data-i18n="install.panels.aur.hint"></p>
-          <div class="code-wrap">
-            <pre class="codebox" id="code-aur">yay -S scribe-bin</pre>
-            <button type="button" class="copy-btn" data-copy="code-aur" data-i18n="install.copy"></button>
+          <div class="feature-description" aria-live="polite" data-i18n-skip>
+            <p id="feature-kicker" class="section-label">Modo foco + máquina de escribir</p>
+            <h3 id="feature-title">La interfaz desaparece.<br>El texto se queda.</h3>
+            <p id="feature-copy">Atenúa todo salvo el párrafo actual y mantén el cursor centrado verticalmente. Ajusta la fuente, el interlineado y el ancho de columna hasta encontrar tu ritmo.</p>
+            <ul id="feature-list"><li>Modo foco con Ctrl+Shift+F</li><li>Cursor centrado con Ctrl+Shift+T</li><li>Cinco temas y corrector ortográfico</li></ul>
           </div>
-          <p class="tab-note" data-i18n="install.panels.aur.note"></p>
         </div>
       </div>
-      <div class="reqs">
-        <div>
-          <h3 data-i18n="install.reqs1.title"></h3>
-          <p data-i18n="install.reqs1.text"></p>
+
+      <div class="capability-grid">
+        <article><span class="capability-meta">TABLAS</span><h3>Tablas de verdad</h3><p>Columnas alineadas, celdas que ajustan su texto y una fila editable que vuelve al Markdown justo cuando la necesitas.</p></article>
+        <article><span class="capability-meta">IMÁGENES</span><h3>Arrastra y sigue</h3><p>Pega o suelta una imagen: Scribe la guarda junto al documento, crea el enlace relativo y la muestra en su sitio.</p></article>
+        <article><span class="capability-meta">DOCUMENTOS</span><h3>Tu trabajo, protegido</h3><p>Autoguardado configurable, escritura atómica y recuperación de borradores tras un cierre inesperado.</p></article>
+        <article><span class="capability-meta">ORGANIZACIÓN</span><h3>Todo a mano</h3><p>Pestañas multidocumento, archivos recientes e índice navegable en la barra lateral. Sin cambiar de aplicación.</p></article>
+        <article><span class="capability-meta">DETALLES</span><h3>Pequeñas ayudas</h3><p>Tareas marcables, listas que continúan solas, enlaces con Ctrl+clic, tarjetas de YouTube y atajos de formato.</p></article>
+        <article><span class="capability-meta">EXPORTACIÓN</span><h3>Un PDF a tu manera</h3><p>A4 o Letter, vertical u horizontal, fuentes y colores independientes. Incluso un modo monocromo para imprimir.</p></article>
+      </div>
+    </section>
+
+    <section class="details section-dark" id="detalles">
+      <div class="section-heading">
+        <p class="section-label">Pequeño por fuera. Serio por dentro.</p>
+        <h2>Todo lo necesario.<br><em>Nada que sobre.</em></h2>
+      </div>
+      <div class="detail-list">
+        <article><span class="detail-index">01</span><div><h3>Nativo de verdad</h3><p>Scribe está escrito en Rust y usa GTK4, libadwaita y GtkSourceView. Sin Electron, sin WebKit, sin un navegador disfrazado de editor.</p></div><span class="detail-tag">Rust + GTK4</span></article>
+        <article><span class="detail-index">02</span><div><h3>PDF que respeta tu trabajo</h3><p>Las tablas siguen siendo tablas, con sus anchos y alineaciones. Añade saltos de página con <code>\newpage</code> y exporta un documento listo para compartir.</p></div><span class="detail-tag">PDF</span></article>
+        <article><span class="detail-index">03</span><div><h3>Tus archivos siguen siendo tuyos</h3><p>Markdown plano, en tu disco. Sin cuenta, sin nube obligatoria, sin un formato propietario del que depender mañana.</p></div><span class="detail-tag">.md</span></article>
+      </div>
+      <div class="honesty-note"><strong>Y lo que no hace.</strong><p>No sincroniza con la nube. No tiene plugins. Scribe prefiere hacer una cosa bien antes que prometer hacerlo todo.</p></div>
+    </section>
+
+    <section class="install section" id="instalar">
+      <div class="section-heading">
+        <p class="section-label">Instalación</p>
+        <h2>De cero a escribir<br><em>en un minuto.</em></h2>
+        <p>Elige tu formato. Sin configuración inicial y sin cuenta.</p>
+      </div>
+      <div class="install-panel">
+        <div class="install-tabs" role="tablist" aria-label="Formatos de instalación">
+          <button role="tab" aria-selected="true" data-format="deb">.deb</button>
+          <button role="tab" aria-selected="false" data-format="rpm">.rpm</button>
+          <button role="tab" aria-selected="false" data-format="appimage">AppImage</button>
+          <button role="tab" aria-selected="false" data-format="aur">AUR</button>
         </div>
-        <div>
-          <h3 data-i18n="install.reqs2.title"></h3>
-          <p data-i18n="install.reqs2.text"></p>
+        <div class="install-content">
+          <p id="install-description" data-i18n-skip>Para Debian, Ubuntu y derivados. Descarga e instala con apt.</p>
+          <div class="code-block"><pre><code id="install-code">wget https://github.com/gnacho/scribe/releases/download/v&lt;version&gt;/scribe_&lt;version&gt;-1_amd64.deb
+sudo apt install ./scribe_&lt;version&gt;-1_amd64.deb</code></pre><button class="copy-button" aria-label="Copiar comandos de instalación">Copiar</button></div>
+          <a id="install-download" class="text-link" href="https://github.com/gnacho/scribe/releases/latest">Descargar última versión <span>↗</span></a>
         </div>
       </div>
     </section>
 
-    <section id="about" class="reveal">
-      <h2 class="statement" data-i18n="about.title"></h2>
-      <div class="about-text">
-        <p data-i18n="about.story"></p>
-        <p data-i18n="about.project"></p>
-        <p data-i18n="about.expect"></p>
-      </div>
-      <p class="signature">Nacho <span aria-hidden="true">·</span> <a href="https://github.com/gnacho/scribe">github.com/gnacho/scribe</a></p>
-      <a class="btn-secondary" href="https://github.com/gnacho/scribe">
-        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 1.5 9.9 5.4l4.3.6-3.1 3 .7 4.3L8 11.3l-3.8 2 .7-4.3-3.1-3 4.3-.6L8 1.5z"/></svg>
-        <span data-i18n="about.star"></span>
-      </a>
+    <section class="story section" id="historia">
+      <div class="story-mark" aria-hidden="true">“</div>
+      <div class="story-copy"><p class="section-label">Por qué existe</p><blockquote>Buscaba un editor que renderizara el texto mientras escribía. En Linux tenía todas las piezas para hacerlo mejor. Así que lo escribí.</blockquote><p>Scribe es un proyecto personal de Nacho, mantenido en su tiempo libre. El código, las versiones y los problemas pendientes están a la vista. Es software libre hoy y seguirá siéndolo mañana.</p><div class="signature">Nacho <span>·</span> <a href="https://github.com/gnacho/scribe">github.com/gnacho/scribe</a></div></div>
+      <div class="story-aside"><span>AGPL-3.0</span><span>v0.3.20 · camino a 1.0</span><a href="https://github.com/gnacho/scribe/issues">Ver issues abiertos ↗</a></div>
     </section>
 
-    <section class="cta-final reveal" aria-labelledby="cta-title">
-      <h2 class="cta-title" id="cta-title" data-i18n="cta.title"></h2>
-      <p class="cta-sub" data-i18n="cta.sub"></p>
-      <div class="hero-ctas">
-        <a class="btn-primary" href="https://github.com/gnacho/scribe/releases/latest">
-          <svg width="18" height="18" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M8 2v8m0 0 3.2-3.2M8 10 4.8 6.8M2.5 12.5h11" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
-          <span data-i18n="cta.action"></span>
-        </a>
-        <div class="hero-chips">
-          <span class="chip">.deb</span>
-          <span class="chip">.rpm</span>
-          <span class="chip">AppImage</span>
-          <span class="chip ghost">Flathub</span>
-        </div>
-      </div>
+    <section class="final-cta">
+      <p class="section-label">Código abierto, de verdad</p>
+      <h2>Prueba Scribe.<br><em>100% software libre.</em></h2>
+      <p class="final-copy">AGPL-3. Gratis, ahora y siempre.<br>Sin telemetría, sin cuentas y sin nube obligatoria.</p>
+      <a class="button button-light" href="https://github.com/gnacho/scribe"><svg class="button-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2-5.6-3-5.6 3 1.1-6.2L3 9.6l6.2-.9L12 3Z"/></svg>Danos una estrella</a>
+      <a class="final-github" href="https://github.com/gnacho/scribe"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 0 0-3.2 19.5c.5.1.7-.2.7-.5v-1.9c-2.8.6-3.4-1.2-3.4-1.2-.5-1.2-1.1-1.5-1.1-1.5-.9-.6.1-.6.1-.6 1 .1 1.5 1 1.5 1 .9 1.5 2.3 1.1 2.9.8.1-.7.4-1.1.6-1.3-2.2-.3-4.6-1.1-4.6-5 0-1.1.4-2 1-2.7-.1-.3-.4-1.3.1-2.7 0 0 .8-.3 2.8 1a9.4 9.4 0 0 1 5 0c1.9-1.3 2.8-1 2.8-1 .5 1.4.2 2.4.1 2.7.6.7 1 1.6 1 2.7 0 3.9-2.4 4.7-4.6 5 .4.3.7.9.7 1.9V21c0 .3.2.6.7.5A10 10 0 0 0 12 2Z"/></svg>Explora el código ↗</a>
     </section>
   </main>
 
-  <footer class="footer">
-    <nav class="footer-links" aria-label="Scribe">
-      <a href="https://github.com/gnacho/scribe"><svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>GitHub</a>
-      <a href="https://github.com/gnacho/scribe/issues"><svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 9.5a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3Z"/><path d="M8 0a8 8 0 1 1 0 16A8 8 0 0 1 8 0ZM1.5 8a6.5 6.5 0 1 0 13 0 6.5 6.5 0 0 0-13 0Z"/></svg>Issues</a>
-      <a href="https://github.com/gnacho/scribe/releases"><svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M1 7.775V2.75C1 1.784 1.784 1 2.75 1h5.025c.464 0 .91.184 1.238.513l6.25 6.25a1.75 1.75 0 0 1 0 2.474l-5.026 5.026a1.75 1.75 0 0 1-2.474 0l-6.25-6.25A1.75 1.75 0 0 1 1 7.775ZM2.75 2.5a.25.25 0 0 0-.25.25v5.025c0 .066.026.13.073.177l6.25 6.25a.25.25 0 0 0 .354 0l5.025-5.025a.25.25 0 0 0 0-.354l-6.25-6.25a.25.25 0 0 0-.177-.073H2.75ZM6 5a1 1 0 1 1 0 2 1 1 0 0 1 0-2Z"/></svg>Releases</a>
-      <a href="https://github.com/gnacho/scribe/blob/main/LICENSE"><svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M7.775.163a.5.5 0 0 1 .45 0l6.5 3A.5.5 0 0 1 15 3.65v4.6c0 4.15-2.94 6.9-6.9 7.7a.5.5 0 0 1-.2 0C3.94 15.15 1 12.4 1 8.25v-4.6a.5.5 0 0 1 .275-.487l6.5-3Z"/></svg>AGPL-3.0</a>
-    </nav>
-    <p class="muted" data-i18n="footer.built"></p>
-  </footer>
-
-  <script src="i18n.js?v=8"></script>
-  <script src="app.js?v=6"></script>
+  <footer><a class="brand footer-brand" href="#inicio">Scribe</a><p>Markdown nativo para GNOME y Linux.</p><div class="footer-links"><a href="https://github.com/gnacho/scribe"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 0 0-3.2 19.5c.5.1.7-.2.7-.5v-1.9c-2.8.6-3.4-1.2-3.4-1.2-.5-1.2-1.1-1.5-1.1-1.5-.9-.6.1-.6.1-.6 1 .1 1.5 1 1.5 1 .9 1.5 2.3 1.1 2.9.8.1-.7.4-1.1.6-1.3-2.2-.3-4.6-1.1-4.6-5 0-1.1.4-2 1-2.7-.1-.3-.4-1.3.1-2.7 0 0 .8-.3 2.8 1a9.4 9.4 0 0 1 5 0c1.9-1.3 2.8-1 2.8-1 .5 1.4.2 2.4.1 2.7.6.7 1 1.6 1 2.7 0 3.9-2.4 4.7-4.6 5 .4.3.7.9.7 1.9V21c0 .3.2.6.7.5A10 10 0 0 0 12 2Z"/></svg>GitHub</a><a href="https://github.com/gnacho/scribe/issues"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v6m0 4v.1"/></svg>Issues</a><a href="https://github.com/gnacho/scribe/releases"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m20 13-7 7-9-9V4h7l9 9Z"/><circle cx="8.5" cy="8.5" r="1"/></svg>Releases</a><a href="https://github.com/gnacho/scribe/blob/master/LICENSE"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v18M5 7h14M7 7l-4 7h8L7 7Zm10 0-4 7h8l-4-7ZM8 21h8"/></svg>AGPL-3.0</a></div><small>Analítica sin cookies, sin anuncios ni perfiles.</small></footer>
+  <div class="toast" role="status" aria-live="polite">Comandos copiados</div>
+  <script type="module" src="/src/main.js"></script>
 </body>
 </html>
