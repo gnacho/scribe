@@ -1,0 +1,41 @@
+/* Tema Sepia: papel crema, serif cálida y mucho aire, para leer largo rato. */
+
+body {
+  font-family: "Source Serif 4", Georgia, serif;
+  font-size: 12pt;
+  line-height: 1.75;
+  color: #43362a;
+  background-color: #f6efe0;
+  --muted-color: #85705a;
+  --block-spacing: 13pt;
+}
+
+h1,
+h2,
+h3,
+h4 {
+  color: #6b4f31;
+}
+
+h1 { font-size: 25pt; }
+h2 { font-size: 18.5pt; }
+h3 { font-size: 14.5pt; }
+h4 { font-size: 12.5pt; }
+
+pre,
+code {
+  color: #4a3b2c;
+  background-color: #ece1cb;
+}
+
+blockquote {
+  color: #6b5a45;
+  border-color: #c2ab84;
+}
+
+a { color: #8a5a2b; }
+
+table { background-color: #f1e8d6; }
+table th { background-color: #e4d7bc; }
+
+hr { color: #d3c19f; }

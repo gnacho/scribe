@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PACKAGE VERSION\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-27 06:01+0100\n"
+"POT-Creation-Date: 2026-10-27 16:20+0100\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -17,19 +17,19 @@ msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
 
-#: src/main.rs:277
+#: src/main.rs:278
 msgid "Recover unsaved documents?"
 msgstr ""
 
-#: src/main.rs:280
+#: src/main.rs:281
 msgid "_Recover All"
 msgstr ""
 
-#: src/main.rs:281
+#: src/main.rs:282
 msgid "_Discard All"
 msgstr ""
 
-#: src/main.rs:282
+#: src/main.rs:283
 msgid "Decide Later"
 msgstr ""
 
@@ -286,7 +286,7 @@ msgstr ""
 msgid "Theme"
 msgstr ""
 
-#: src/preferences.rs:59 src/preferences.rs:437
+#: src/preferences.rs:59 src/preferences.rs:439
 msgid "Color scheme"
 msgstr ""
 
@@ -294,15 +294,15 @@ msgstr ""
 msgid "Follows the system unless you force one"
 msgstr ""
 
-#: src/preferences.rs:61 src/preferences.rs:440
+#: src/preferences.rs:61 src/preferences.rs:442
 msgid "System"
 msgstr ""
 
-#: src/preferences.rs:61 src/preferences.rs:441
+#: src/preferences.rs:61 src/preferences.rs:443
 msgid "Light"
 msgstr ""
 
-#: src/preferences.rs:61 src/preferences.rs:442
+#: src/preferences.rs:61 src/preferences.rs:444
 msgid "Dark"
 msgstr ""
 
@@ -326,23 +326,23 @@ msgstr ""
 msgid "Code and tables always use a monospaced font"
 msgstr ""
 
-#: src/preferences.rs:114 src/preferences.rs:448
+#: src/preferences.rs:114 src/preferences.rs:450
 msgid "Font family"
 msgstr ""
 
-#: src/preferences.rs:115 src/preferences.rs:449
+#: src/preferences.rs:115 src/preferences.rs:451
 msgid "Document body"
 msgstr ""
 
-#: src/preferences.rs:117 src/preferences.rs:451
+#: src/preferences.rs:117 src/preferences.rs:453
 msgid "Sans (Cantarell)"
 msgstr ""
 
-#: src/preferences.rs:118 src/preferences.rs:452
+#: src/preferences.rs:118 src/preferences.rs:454
 msgid "Serif"
 msgstr ""
 
-#: src/preferences.rs:119 src/preferences.rs:453
+#: src/preferences.rs:119 src/preferences.rs:455
 msgid "Monospace"
 msgstr ""
 
@@ -494,115 +494,149 @@ msgstr ""
 msgid "Clears the list shown in the sidebar"
 msgstr ""
 
-#: src/preferences.rs:401
+#: src/preferences.rs:403 src/preferences.rs:492
 msgid "None"
 msgstr ""
 
-#: src/preferences.rs:413
+#: src/preferences.rs:415
 msgid "Export"
 msgstr ""
 
-#: src/preferences.rs:418
+#: src/preferences.rs:420
 msgid "PDF"
 msgstr ""
 
-#: src/preferences.rs:420
+#: src/preferences.rs:422
 msgid "These settings apply to PDF export only, not to the editor view"
 msgstr ""
 
-#: src/preferences.rs:425
+#: src/preferences.rs:427
 msgid "Template"
 msgstr ""
 
-#: src/preferences.rs:426
+#: src/preferences.rs:428
 msgid "Page layout preset; Custom uses the settings below"
 msgstr ""
 
-#: src/preferences.rs:428
+#: src/preferences.rs:430
 msgid "Custom"
 msgstr ""
 
-#: src/preferences.rs:429
+#: src/preferences.rs:431
 msgid "Article"
 msgstr ""
 
-#: src/preferences.rs:430
+#: src/preferences.rs:432
 msgid "Manuscript"
 msgstr ""
 
-#: src/preferences.rs:431
+#: src/preferences.rs:433
 msgid "Letter"
 msgstr ""
 
-#: src/preferences.rs:432
+#: src/preferences.rs:434
 msgid "Compact"
 msgstr ""
 
-#: src/preferences.rs:438
+#: src/preferences.rs:440
 msgid "Monochrome prints everything in black on white"
 msgstr ""
 
-#: src/preferences.rs:443
+#: src/preferences.rs:445
 msgid "Monochrome"
 msgstr ""
 
-#: src/preferences.rs:458
+#: src/preferences.rs:460
 msgid "Font size"
 msgstr ""
 
-#: src/preferences.rs:459
+#: src/preferences.rs:461
 msgid "Points"
 msgstr ""
 
-#: src/preferences.rs:464
+#: src/preferences.rs:466
 msgid "Monospace font"
 msgstr ""
 
-#: src/preferences.rs:465
+#: src/preferences.rs:467
 msgid "Used for code blocks and tables"
 msgstr ""
 
-#: src/preferences.rs:474
+#: src/preferences.rs:476
 msgid "Page size"
 msgstr ""
 
-#: src/preferences.rs:475
+#: src/preferences.rs:477
 msgid "Paper"
 msgstr ""
 
-#: src/preferences.rs:480
+#: src/preferences.rs:482
 msgid "Orientation"
 msgstr ""
 
-#: src/preferences.rs:481
+#: src/preferences.rs:483
 msgid "Paper orientation"
 msgstr ""
 
-#: src/preferences.rs:482
+#: src/preferences.rs:484
 msgid "Portrait"
 msgstr ""
 
-#: src/preferences.rs:482
+#: src/preferences.rs:484
 msgid "Landscape"
 msgstr ""
 
-#: src/preferences.rs:487
-msgid "Stylesheet"
+#: src/preferences.rs:489
+msgid "PDF theme"
 msgstr ""
 
-#: src/preferences.rs:491
-msgid "Load…"
+#: src/preferences.rs:490
+msgid "Typography and colours on top of the template"
+msgstr ""
+
+#: src/preferences.rs:493
+msgid "Sepia"
+msgstr ""
+
+#: src/preferences.rs:494
+msgid "High contrast"
+msgstr ""
+
+#: src/preferences.rs:495
+msgid "Technical"
 msgstr ""
 
 #: src/preferences.rs:496
+msgid "Academic"
+msgstr ""
+
+#: src/preferences.rs:501
+msgid "Stylesheet"
+msgstr ""
+
+#: src/preferences.rs:505
+msgid "Load…"
+msgstr ""
+
+#: src/preferences.rs:510
 msgid "Use the template as is"
 msgstr ""
 
-#: src/preferences.rs:591
+#: src/preferences.rs:542
+msgid "Typography and colour"
+msgstr ""
+
+#: src/preferences.rs:544
+msgid ""
+"A theme changes type and colours on top of the template. Your own stylesheet "
+"is applied last, so it wins over both"
+msgstr ""
+
+#: src/preferences.rs:628
 msgid "CSS stylesheets"
 msgstr ""
 
-#: src/preferences.rs:596
+#: src/preferences.rs:633
 msgid "Choose a stylesheet"
 msgstr ""
 

@@ -1,0 +1,41 @@
+/* Tema Alto contraste: negro sobre blanco y texto grande, para imprimir y para vista cansada. */
+
+body {
+  font-family: sans-serif;
+  font-size: 14pt;
+  line-height: 1.65;
+  color: #000000;
+  background-color: #ffffff;
+  --muted-color: #1f1f1f;
+  --block-spacing: 16pt;
+}
+
+h1,
+h2,
+h3,
+h4 {
+  color: #000000;
+}
+
+h1 { font-size: 28pt; }
+h2 { font-size: 21pt; }
+h3 { font-size: 17pt; }
+h4 { font-size: 14pt; }
+
+pre,
+code {
+  color: #000000;
+  background-color: #e8e8e8;
+}
+
+blockquote {
+  color: #000000;
+  border-color: #000000;
+}
+
+a { color: #0000ee; }
+
+table { background-color: #ffffff; }
+table th { background-color: #e0e0e0; }
+
+hr { color: #000000; }

@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: scribe\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-27 06:01+0100\n"
+"POT-Creation-Date: 2026-10-27 16:20+0100\n"
 "PO-Revision-Date: 2026-09-19 19:58+0200\n"
 "Last-Translator: Automatically generated\n"
 "Language-Team: none\n"
@@ -17,19 +17,19 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=2; plural=(n != 1);\n"
 
-#: src/main.rs:277
+#: src/main.rs:278
 msgid "Recover unsaved documents?"
 msgstr "¿Recuperar los documentos sin guardar?"
 
-#: src/main.rs:280
+#: src/main.rs:281
 msgid "_Recover All"
 msgstr "_Recuperar todo"
 
-#: src/main.rs:281
+#: src/main.rs:282
 msgid "_Discard All"
 msgstr "_Descartar todo"
 
-#: src/main.rs:282
+#: src/main.rs:283
 msgid "Decide Later"
 msgstr "Decidir más tarde"
 
@@ -286,7 +286,7 @@ msgstr "Apariencia"
 msgid "Theme"
 msgstr "Tema"
 
-#: src/preferences.rs:59 src/preferences.rs:437
+#: src/preferences.rs:59 src/preferences.rs:439
 msgid "Color scheme"
 msgstr "Esquema de color"
 
@@ -294,15 +294,15 @@ msgstr "Esquema de color"
 msgid "Follows the system unless you force one"
 msgstr "Sigue al sistema salvo que fuerces uno"
 
-#: src/preferences.rs:61 src/preferences.rs:440
+#: src/preferences.rs:61 src/preferences.rs:442
 msgid "System"
 msgstr "Sistema"
 
-#: src/preferences.rs:61 src/preferences.rs:441
+#: src/preferences.rs:61 src/preferences.rs:443
 msgid "Light"
 msgstr "Claro"
 
-#: src/preferences.rs:61 src/preferences.rs:442
+#: src/preferences.rs:61 src/preferences.rs:444
 msgid "Dark"
 msgstr "Oscuro"
 
@@ -326,23 +326,23 @@ msgstr "Texto"
 msgid "Code and tables always use a monospaced font"
 msgstr "El código y las tablas usan siempre monoespaciada"
 
-#: src/preferences.rs:114 src/preferences.rs:448
+#: src/preferences.rs:114 src/preferences.rs:450
 msgid "Font family"
 msgstr "Familia tipográfica"
 
-#: src/preferences.rs:115 src/preferences.rs:449
+#: src/preferences.rs:115 src/preferences.rs:451
 msgid "Document body"
 msgstr "Cuerpo del documento"
 
-#: src/preferences.rs:117 src/preferences.rs:451
+#: src/preferences.rs:117 src/preferences.rs:453
 msgid "Sans (Cantarell)"
 msgstr "Sans (Cantarell)"
 
-#: src/preferences.rs:118 src/preferences.rs:452
+#: src/preferences.rs:118 src/preferences.rs:454
 msgid "Serif"
 msgstr "Serif"
 
-#: src/preferences.rs:119 src/preferences.rs:453
+#: src/preferences.rs:119 src/preferences.rs:455
 msgid "Monospace"
 msgstr "Monoespaciada"
 
@@ -404,7 +404,8 @@ msgstr "Atenuar siempre"
 
 #: src/preferences.rs:229
 msgid "Hiding text still crashes this GTK: the marks shrink instead"
-msgstr "Ocultar texto aún aborta con este GTK: las marcas se encogen en su lugar"
+msgstr ""
+"Ocultar texto aún aborta con este GTK: las marcas se encogen en su lugar"
 
 #: src/preferences.rs:231
 msgid "Always hide (shrinks the marks; GTK cannot hide them yet)"
@@ -495,117 +496,153 @@ msgstr "Documentos recientes"
 msgid "Clears the list shown in the sidebar"
 msgstr "Borra la lista que aparece en la barra lateral"
 
-#: src/preferences.rs:401
+#: src/preferences.rs:403 src/preferences.rs:492
 msgid "None"
 msgstr "Ninguna"
 
-#: src/preferences.rs:413
+#: src/preferences.rs:415
 msgid "Export"
 msgstr "Exportar"
 
-#: src/preferences.rs:418
+#: src/preferences.rs:420
 msgid "PDF"
 msgstr "PDF"
 
-#: src/preferences.rs:420
+#: src/preferences.rs:422
 msgid "These settings apply to PDF export only, not to the editor view"
 msgstr ""
 "Estos ajustes se aplican solo a la exportación a PDF, no a la vista del "
 "editor"
 
-#: src/preferences.rs:425
+#: src/preferences.rs:427
 msgid "Template"
 msgstr "Plantilla"
 
-#: src/preferences.rs:426
+#: src/preferences.rs:428
 msgid "Page layout preset; Custom uses the settings below"
 msgstr "Ajuste de página predefinido; Personalizada usa los ajustes de abajo"
 
-#: src/preferences.rs:428
+#: src/preferences.rs:430
 msgid "Custom"
 msgstr "Personalizada"
 
-#: src/preferences.rs:429
+#: src/preferences.rs:431
 msgid "Article"
 msgstr "Artículo"
 
-#: src/preferences.rs:430
+#: src/preferences.rs:432
 msgid "Manuscript"
 msgstr "Manuscrito"
 
-#: src/preferences.rs:431
+#: src/preferences.rs:433
 msgid "Letter"
 msgstr "Carta"
 
-#: src/preferences.rs:432
+#: src/preferences.rs:434
 msgid "Compact"
 msgstr "Compacta"
 
-#: src/preferences.rs:438
+#: src/preferences.rs:440
 msgid "Monochrome prints everything in black on white"
 msgstr "Monocromo imprime todo en negro sobre blanco"
 
-#: src/preferences.rs:443
+#: src/preferences.rs:445
 msgid "Monochrome"
 msgstr "Monocromo"
 
-#: src/preferences.rs:458
+#: src/preferences.rs:460
 msgid "Font size"
 msgstr "Tamaño de fuente"
 
-#: src/preferences.rs:459
+#: src/preferences.rs:461
 msgid "Points"
 msgstr "Puntos"
 
-#: src/preferences.rs:464
+#: src/preferences.rs:466
 msgid "Monospace font"
 msgstr "Fuente monoespaciada"
 
-#: src/preferences.rs:465
+#: src/preferences.rs:467
 msgid "Used for code blocks and tables"
 msgstr "Se usa en bloques de código y tablas"
 
-#: src/preferences.rs:474
+#: src/preferences.rs:476
 msgid "Page size"
 msgstr "Tamaño de página"
 
-#: src/preferences.rs:475
+#: src/preferences.rs:477
 msgid "Paper"
 msgstr "Papel"
 
-#: src/preferences.rs:480
+#: src/preferences.rs:482
 msgid "Orientation"
 msgstr "Orientación"
 
-#: src/preferences.rs:481
+#: src/preferences.rs:483
 msgid "Paper orientation"
 msgstr "Orientación del papel"
 
-#: src/preferences.rs:482
+#: src/preferences.rs:484
 msgid "Portrait"
 msgstr "Vertical"
 
-#: src/preferences.rs:482
+#: src/preferences.rs:484
 msgid "Landscape"
 msgstr "Horizontal"
 
-#: src/preferences.rs:487
+#: src/preferences.rs:489
+msgid "PDF theme"
+msgstr "Tema del PDF"
+
+#: src/preferences.rs:490
+msgid "Typography and colours on top of the template"
+msgstr "Tipografía y colores encima de la plantilla"
+
+#: src/preferences.rs:493
+msgid "Sepia"
+msgstr "Sepia"
+
+#: src/preferences.rs:494
+msgid "High contrast"
+msgstr "Alto contraste"
+
+#: src/preferences.rs:495
+msgid "Technical"
+msgstr "Técnico"
+
+#: src/preferences.rs:496
+msgid "Academic"
+msgstr "Académico"
+
+#: src/preferences.rs:501
 msgid "Stylesheet"
 msgstr "Hoja de estilo"
 
-#: src/preferences.rs:491
+#: src/preferences.rs:505
 msgid "Load…"
 msgstr "Cargar…"
 
-#: src/preferences.rs:496
+#: src/preferences.rs:510
 msgid "Use the template as is"
 msgstr "Usar la plantilla tal cual"
 
-#: src/preferences.rs:591
+#: src/preferences.rs:542
+msgid "Typography and colour"
+msgstr "Tipografía y color"
+
+#: src/preferences.rs:544
+msgid ""
+"A theme changes type and colours on top of the template. Your own stylesheet "
+"is applied last, so it wins over both"
+msgstr ""
+"El tema cambia la tipografía y los colores encima de la plantilla. Tu hoja "
+"de estilo se aplica al final y manda sobre los dos"
+
+#: src/preferences.rs:628
 msgid "CSS stylesheets"
 msgstr "Hojas de estilo CSS"
 
-#: src/preferences.rs:596
+#: src/preferences.rs:633
 msgid "Choose a stylesheet"
 msgstr "Elige una hoja de estilo"
 
@@ -724,6 +761,9 @@ msgstr "Ampliar o reducir"
 #: src/shortcuts.ui:190
 msgid "Preferences"
 msgstr "Preferencias"
+
+#~ msgid "Custom file…"
+#~ msgstr "Fichero propio…"
 
 #~ msgid "Solarized Dark"
 #~ msgstr "Solarized oscuro"

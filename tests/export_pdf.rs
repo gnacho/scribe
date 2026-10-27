@@ -12,6 +12,8 @@
 mod export_css;
 #[path = "../src/export_pdf.rs"]
 mod export_pdf;
+#[path = "../src/export_themes.rs"]
+mod export_themes;
 #[path = "../src/markdown_render.rs"]
 mod markdown_render;
 #[path = "../src/settings.rs"]
@@ -106,6 +108,7 @@ fn la_hoja_de_estilo_cambia_el_pdf_y_quitarla_lo_deja_igual() {
         papel: settings::ExportPageSize::A4,
         orientacion: settings::ExportOrientation::Portrait,
         template: settings::ExportTemplate::Custom,
+        theme: settings::ExportTheme::None,
         css_path: None,
     };
     let con_hoja = export_pdf::ExportConfig {
@@ -133,6 +136,50 @@ fn la_hoja_de_estilo_cambia_el_pdf_y_quitarla_lo_deja_igual() {
 }
 
 #[test]
+#[ignore = "requiere GTK y pdftoppm; ejecutar con xvfb-run y --ignored"]
+fn un_tema_cambia_el_pdf_y_quitarlo_lo_deja_igual() {
+    gtk4::init().expect("GTK necesita un display; ejecuta bajo xvfb-run");
+    libadwaita::init().expect("libadwaita init");
+
+    let dir = std::env::temp_dir().join("scribe-tema-prueba");
+    std::fs::create_dir_all(&dir).expect("crear directorio de prueba");
+
+    let base = export_pdf::ExportConfig {
+        esquema: settings::ExportColorScheme::Light,
+        familia_cuerpo: settings::FontFamily::Sans,
+        tamano_cuerpo: 11.0,
+        fuente_mono: settings::ExportMonoFont::AdwaitaMono,
+        papel: settings::ExportPageSize::A4,
+        orientacion: settings::ExportOrientation::Portrait,
+        template: settings::ExportTemplate::Article,
+        theme: settings::ExportTheme::None,
+        css_path: None,
+    };
+    let con_tema = export_pdf::ExportConfig {
+        theme: settings::ExportTheme::Sepia,
+        ..base.clone()
+    };
+
+    let sin = dir.join("sin-tema.pdf");
+    let con = dir.join("con-tema.pdf");
+    let otra_vez = dir.join("otra-vez.pdf");
+    export_pdf::exportar_a_fichero(&base, DOC, "Prueba", &sin, false).expect("exportar sin tema");
+    export_pdf::exportar_a_fichero(&con_tema, DOC, "Prueba", &con, false)
+        .expect("exportar con tema");
+    export_pdf::exportar_a_fichero(&base, DOC, "Prueba", &otra_vez, false).expect("reexportar");
+
+    let Some(a) = raster(&sin, &dir.join("a")) else {
+        eprintln!("pdftoppm no disponible: se omite la comparación visual");
+        return;
+    };
+    let b = raster(&con, &dir.join("b")).expect("rasterizar el PDF con tema");
+    let c = raster(&otra_vez, &dir.join("c")).expect("rasterizar el PDF sin tema");
+    assert_eq!(a, c, "quitar el tema debe dejar la página como estaba");
+    assert_ne!(a, b, "el tema debe cambiar la página");
+    eprintln!("PDFs de prueba en {}", dir.display());
+}
+
+#[test]
 #[ignore = "requiere display: xvfb-run -a cargo test --test export_pdf -- --ignored --nocapture"]
 fn exporta_un_pdf_real_de_prueba() {
     gtk4::init().expect("GTK necesita un display; ejecuta bajo xvfb-run");
@@ -148,6 +195,7 @@ fn exporta_un_pdf_real_de_prueba() {
         papel: settings::ExportPageSize::A4,
         orientacion: settings::ExportOrientation::Portrait,
         template: settings::ExportTemplate::Custom,
+        theme: settings::ExportTheme::None,
         css_path: None,
     };
     export_pdf::exportar_a_fichero(&config, DOC, "Prueba", &ruta, false).expect("exportar a PDF");

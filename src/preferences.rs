@@ -10,7 +10,7 @@ use std::rc::Rc;
 
 use crate::settings::{
     gtk_hides_invisible_safely, AppSettings, ExportColorScheme, ExportMonoFont, ExportOrientation,
-    ExportPageSize, ExportTemplate, FontFamily, MarkupVisibility,
+    ExportPageSize, ExportTemplate, ExportTheme, FontFamily, MarkupVisibility,
 };
 
 fn spin(title: &str, subtitle: &str, adj: &gtk4::Adjustment, digits: u32) -> adw::SpinRow {
@@ -395,6 +395,8 @@ fn editor_page(settings: &Rc<AppSettings>, apply: &Rc<dyn Fn()>) -> adw::Prefere
 }
 
 /// Descripción de la hoja de estilo elegida para la fila de preferencias.
+/// Texto de la fila de hoja de estilo: la ruta elegida o el aviso de que no
+/// hay ninguna.
 fn describir_hoja(settings: &AppSettings) -> String {
     match settings.export_css_path() {
         Some(ruta) => ruta.display().to_string(),
@@ -483,6 +485,18 @@ fn export_page(settings: &Rc<AppSettings>, apply: &Rc<dyn Fn()>) -> adw::Prefere
         settings.export_orientation().index(),
     );
 
+    let tema = combo_i18n(
+        &gettext("PDF theme"),
+        &gettext("Typography and colours on top of the template"),
+        &[
+            gettext("None"),
+            gettext("Sepia"),
+            gettext("High contrast"),
+            gettext("Technical"),
+            gettext("Academic"),
+        ],
+        settings.export_theme().index(),
+    );
     let estilos = adw::ActionRow::builder()
         .title(gettext("Stylesheet"))
         .subtitle(describir_hoja(settings))
@@ -512,12 +526,27 @@ fn export_page(settings: &Rc<AppSettings>, apply: &Rc<dyn Fn()>) -> adw::Prefere
     }
 
     group.add(&template);
-    for row in [&scheme, &family, &mono, &page_size, &orientation] {
+    for row in [
+        page_size.upcast_ref::<gtk4::Widget>(),
+        orientation.upcast_ref::<gtk4::Widget>(),
+        scheme.upcast_ref::<gtk4::Widget>(),
+        family.upcast_ref::<gtk4::Widget>(),
+        size.upcast_ref::<gtk4::Widget>(),
+        mono.upcast_ref::<gtk4::Widget>(),
+    ] {
         group.add(row);
     }
-    group.add(&size);
-    group.add(&estilos);
     page.add(&group);
+
+    let grupo_color = adw::PreferencesGroup::builder()
+        .title(gettext("Typography and colour"))
+        .description(gettext(
+            "A theme changes type and colours on top of the template. Your own stylesheet is applied last, so it wins over both",
+        ))
+        .build();
+    grupo_color.add(&tema);
+    grupo_color.add(&estilos);
+    page.add(&grupo_color);
 
     {
         let settings = settings.clone();
@@ -583,6 +612,14 @@ fn export_page(settings: &Rc<AppSettings>, apply: &Rc<dyn Fn()>) -> adw::Prefere
     {
         let settings = settings.clone();
         let apply = apply.clone();
+        tema.connect_selected_notify(move |row| {
+            settings.set_export_theme(ExportTheme::from_index(row.selected()));
+            apply();
+        });
+    }
+    {
+        let settings = settings.clone();
+        let apply = apply.clone();
         let estilos = estilos.clone();
         let quitar = quitar_estilos.clone();
         cargar_estilos.connect_clicked(move |boton| {
@@ -601,8 +638,12 @@ fn export_page(settings: &Rc<AppSettings>, apply: &Rc<dyn Fn()>) -> adw::Prefere
             let estilos = estilos.clone();
             let quitar = quitar.clone();
             dialog.open(ventana.as_ref(), gio::Cancellable::NONE, move |resultado| {
-                let Ok(fichero) = resultado else {
-                    return;
+                let fichero = match resultado {
+                    Ok(fichero) => fichero,
+                    Err(error) => {
+                        eprintln!("No se pudo elegir la hoja de estilo: {error}");
+                        return;
+                    }
                 };
                 let Some(ruta) = fichero.path() else {
                     return;
