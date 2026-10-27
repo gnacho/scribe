@@ -48,8 +48,13 @@ pub struct Colores {
     pub codigo: Option<Color>,
     pub codigo_fondo: Option<Color>,
     pub cita: Option<Color>,
+    pub cita_barra: Option<Color>,
     pub enlace: Option<Color>,
+    pub regla: Option<Color>,
     pub tabla_fondo: Option<Color>,
+    pub tabla_cabecera: Option<Color>,
+    /// Texto secundario: numeración de página, metadatos y adornos.
+    pub atenuado: Option<Color>,
 }
 
 /// Valores que una hoja de estilo impone a la maquetación.
@@ -123,7 +128,9 @@ enum Elemento {
     Codigo,
     Cita,
     Enlace,
+    Regla,
     Tabla,
+    CeldaCabecera,
 }
 
 /// Quita los comentarios `/* ... */` y devuelve el resto como caracteres.
@@ -239,7 +246,9 @@ fn elemento(selector: &str) -> Option<Elemento> {
         "pre" | "code" => Some(Elemento::Codigo),
         "blockquote" => Some(Elemento::Cita),
         "a" => Some(Elemento::Enlace),
+        "hr" => Some(Elemento::Regla),
         "table" => Some(Elemento::Tabla),
+        "th" => Some(Elemento::CeldaCabecera),
         _ => None,
     }
 }
@@ -250,6 +259,13 @@ fn aplicar_regla(ajustes: &mut Ajustes, el: Elemento, prop: &str, valor: &str) -
     if prop == "--block-spacing" {
         if let Some(v) = longitud(&valor) {
             ajustes.espacio_bloque = Some(v);
+            return true;
+        }
+        return false;
+    }
+    if prop == "--muted-color" {
+        if let Some(c) = color(&valor) {
+            ajustes.colores.atenuado = Some(c);
             return true;
         }
         return false;
@@ -300,6 +316,16 @@ fn aplicar_regla(ajustes: &mut Ajustes, el: Elemento, prop: &str, valor: &str) -
                 ajustes.colores.tabla_fondo = Some(c);
             }
         }
+        (Elemento::CeldaCabecera, "background-color") => {
+            if let Some(c) = color(&valor) {
+                ajustes.colores.tabla_cabecera = Some(c);
+            }
+        }
+        (Elemento::Cita, "border-color") => {
+            if let Some(c) = color(&valor) {
+                ajustes.colores.cita_barra = Some(c);
+            }
+        }
         (_, "color") => {
             if let Some(c) = color(&valor) {
                 *campo_color(&mut ajustes.colores, el) = Some(c);
@@ -313,11 +339,14 @@ fn aplicar_regla(ajustes: &mut Ajustes, el: Elemento, prop: &str, valor: &str) -
 /// Campo de la paleta que alimenta el `color` de cada elemento.
 fn campo_color(colores: &mut Colores, el: Elemento) -> &mut Option<Color> {
     match el {
-        Elemento::Raiz | Elemento::Parrafo | Elemento::Tabla => &mut colores.texto,
+        Elemento::Raiz | Elemento::Parrafo | Elemento::Tabla | Elemento::CeldaCabecera => {
+            &mut colores.texto
+        }
         Elemento::Cabecera(_) => &mut colores.cabecera,
         Elemento::Codigo => &mut colores.codigo,
         Elemento::Cita => &mut colores.cita,
         Elemento::Enlace => &mut colores.enlace,
+        Elemento::Regla => &mut colores.regla,
     }
 }
 
@@ -731,5 +760,92 @@ mod tests {
         assert_eq!(elemento("*"), Some(Elemento::Raiz));
         assert_eq!(elemento("table td"), None);
         assert_eq!(elemento(""), None);
+    }
+
+    #[test]
+    fn css_el_texto_atenuado_sale_de_la_variable() {
+        let a = analizar("body { --muted-color: #7a6a58 }");
+        assert_eq!(
+            a.colores.atenuado,
+            Some((
+                0x7a as f64 / 255.0,
+                0x6a as f64 / 255.0,
+                0x58 as f64 / 255.0
+            ))
+        );
+        assert!(a.ignoradas.is_empty());
+    }
+
+    #[test]
+    fn css_la_cabecera_de_tabla_y_los_filetes_tienen_su_color() {
+        let a = analizar("table th { background-color: #e7dcc6 } hr { color: #d8c9ae }");
+        assert_eq!(
+            a.colores.tabla_cabecera,
+            Some((
+                0xe7 as f64 / 255.0,
+                0xdc as f64 / 255.0,
+                0xc6 as f64 / 255.0
+            ))
+        );
+        assert_eq!(
+            a.colores.regla,
+            Some((
+                0xd8 as f64 / 255.0,
+                0xc9 as f64 / 255.0,
+                0xae as f64 / 255.0
+            ))
+        );
+        assert!(a.ignoradas.is_empty());
+    }
+
+    #[test]
+    fn css_la_barra_de_la_cita_sale_del_borde() {
+        let a = analizar("blockquote { color: #6b5a45; border-color: #c9b696 }");
+        assert_eq!(
+            a.colores.cita,
+            Some((
+                0x6b as f64 / 255.0,
+                0x5a as f64 / 255.0,
+                0x45 as f64 / 255.0
+            ))
+        );
+        assert_eq!(
+            a.colores.cita_barra,
+            Some((
+                0xc9 as f64 / 255.0,
+                0xb6 as f64 / 255.0,
+                0x96 as f64 / 255.0
+            ))
+        );
+        assert!(a.ignoradas.is_empty());
+    }
+
+    #[test]
+    fn css_una_hoja_con_varias_reglas_acumula_los_colores() {
+        let a = analizar(
+            "body { color: #111111; background-color: #ffffff }
+             h1, h2 { color: #222222 }
+             a { color: #1d4ed8 }
+             pre, code { background-color: #f3f4f6 }",
+        );
+        assert_eq!(
+            a.colores.texto,
+            Some((
+                0x11 as f64 / 255.0,
+                0x11 as f64 / 255.0,
+                0x11 as f64 / 255.0
+            ))
+        );
+        assert_eq!(
+            a.colores.cabecera,
+            Some((
+                0x22 as f64 / 255.0,
+                0x22 as f64 / 255.0,
+                0x22 as f64 / 255.0
+            ))
+        );
+        assert!(a.colores.enlace.is_some());
+        assert!(a.colores.codigo_fondo.is_some());
+        assert!(a.ignoradas.is_empty());
     }
 }

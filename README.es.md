@@ -130,9 +130,12 @@ con GTK4 y ha terminado siendo algo que uso de verdad para borradores y notas.
 - **Exportar a PDF** (Ctrl+P): imprime o exporta el documento a través del
   pipeline de impresión de GTK, reutilizando el mismo análisis de tramos y
   adornos del editor. Las cabeceras, los bloques de código, las citas y las
-  tablas se tematizan, con ajustes de exportación separados (esquema de color,
-  fuentes, tamaño de página y orientación) y una paginación cuidadosa (sin
+  tablas se tematizan, y la maquetación se elige con plantillas de página
+  (Artículo, Manuscrito, Carta, Compacta o Personalizada), temas de hoja de
+  estilo y, si hace falta, un CSS propio. La paginación es cuidadosa (sin
   cabeceras huérfanas, soporte de `\newpage`).
+- **Vista previa de impresión**: la misma maquetación del PDF, paginada, antes
+  de imprimir.
 - **Archivos**: abrir, guardar y guardar como con `GtkFileDialog`, escritura
   atómica, aviso de cambios sin guardar y autoguardado configurable.
 - **Barra lateral** (F9) con documentos recientes filtrables e índice del
@@ -161,6 +164,49 @@ Las marcas que sustituye un adorno (viñetas, `[x]`, `---`, `>`, vallas, pipes)
 se encogen en vez de ocultarse: el glifo diminuto sigue en la maquetación de
 GTK, así que el camino del aborto por texto invisible de GNOME/gtk#8346 queda
 inalcanzable por construcción.
+
+## Plantillas, temas y hojas de estilo
+
+El aspecto del PDF se decide en dos capas que se suman. La **plantilla** fija la
+geometría: márgenes, interlineado, escala de cabeceras, cabecera y pie con
+numeración, y bloque de título a partir del nombre del documento. El **tema**
+fija tipografía y color. Cualquier tema se combina con cualquier plantilla.
+
+| Plantilla | Para qué |
+| --- | --- |
+| Personalizada | Usa los ajustes granulares de Preferencias |
+| Artículo | La maquetación de siempre |
+| Manuscrito | Serif, interlineado doble, márgenes de una pulgada, cabecera con el título y pie con número de página |
+| Carta | Sin bloque de título, márgenes ajustados y pie con número de página |
+| Compacta | Notas técnicas, espaciado apretado |
+
+| Tema | Qué hace |
+| --- | --- |
+| Ninguno | Deja la plantilla tal cual |
+| Sepia | Papel crema, serif cálida y espaciado amplio para leer mucho rato |
+| Alto contraste | Negro sobre blanco y cuerpo más grande, para imprimir |
+| Técnico | Cuerpo monoespaciado y colores apagados, para notas y código |
+| Académico | Serif sin color y leading amplio, en la línea de un paper |
+
+Elegir `Fichero propio…` carga un CSS del disco que se aplica **encima** del
+tema, así que puede corregir un solo detalle. El analizador es un subconjunto
+mapeado, no un motor CSS: el export pinta y pagina con cairo, de modo que cada
+declaración se traduce a un valor que la maquetación ya entiende y lo que queda
+fuera se ignora con un aviso. Quitar el fichero o elegir Ninguno devuelve la
+salida anterior tal cual.
+
+| Selector | Propiedades |
+| --- | --- |
+| `@page` | `margin`, `margin-top`, `margin-right`, `margin-bottom`, `margin-left` (`pt`, `mm`, `cm`, `in`, `px`) |
+| `body`, `html`, `:root` | `font-family`, `font-size`, `line-height`, `color`, `background-color`, `margin-bottom`, `--block-spacing`, `--muted-color` |
+| `p` | `line-height`, `color`, `margin-bottom`, `--block-spacing` |
+| `h1` a `h4` | `font-size`, `color` |
+| `pre`, `code` | `font-family`, `color`, `background-color` |
+| `blockquote` | `color`, `border-color` (la barra de la cita) |
+| `a` | `color` |
+| `table` | `color`, `background-color` |
+| `th` | `color`, `background-color` |
+| `hr` | `color` |
 
 ## Limitaciones
 

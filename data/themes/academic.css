@@ -1,0 +1,41 @@
+/* Tema Académico: serif sin color y leading amplio, en la línea de un paper. */
+
+body {
+  font-family: "Source Serif 4", Georgia, serif;
+  font-size: 11pt;
+  line-height: 1.9;
+  color: #111111;
+  background-color: #ffffff;
+  --muted-color: #555555;
+  --block-spacing: 12pt;
+}
+
+h1,
+h2,
+h3,
+h4 {
+  color: #111111;
+}
+
+h1 { font-size: 16pt; }
+h2 { font-size: 13.5pt; }
+h3 { font-size: 12pt; }
+h4 { font-size: 11pt; }
+
+pre,
+code {
+  color: #222222;
+  background-color: #f4f4f4;
+}
+
+blockquote {
+  color: #333333;
+  border-color: #999999;
+}
+
+a { color: #111111; }
+
+table { background-color: #ffffff; }
+table th { background-color: #f0f0f0; }
+
+hr { color: #bbbbbb; }

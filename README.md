@@ -155,22 +155,41 @@ Markers replaced by an ornament (bullets, `[x]`, `---`, `>`, fences, pipes) are
 shrunk rather than hidden: the tiny glyph stays in GTK's layout, so the
 invisible-text abort path of GNOME/gtk#8346 is unreachable by construction.
 
-## Stylesheets
+## Themes and stylesheets
 
-`Preferences > Export > Stylesheet` loads a CSS file that is applied on top of
-the page template. It is a mapped subset, not a CSS engine: the export paints
-and paginates with cairo, so each declaration is translated into a value the
-layout already understands, and anything outside this table is ignored (the
-export warns once and keeps going).
+Export styles come in two layers that stack: a page template decides the
+geometry (margins, leading, heading sizes, running header and footer, title
+block), and a theme decides typography and colour. `Preferences > Export > Theme`
+offers four bundled themes, written with our own values and compiled into the
+binary so there is nothing extra to install:
+
+| Theme | What it does |
+| --- | --- |
+| None | Leave the template as it is |
+| Sepia | Cream paper, warm serif text, generous spacing for long reading |
+| High contrast | Pure black on white with a larger body, for printing |
+| Technical | Monospaced body and muted colours for notes and code |
+| Academic | Serif without colour and wide leading, in the spirit of a paper |
+
+Any theme combines with any template. Picking `Custom file…` instead loads a CSS
+file from disk, and that file is applied on top of the theme, so it can correct
+a single detail of it. The parser is a mapped subset, not a CSS engine: the
+export paints and paginates with cairo, so each declaration is translated into a
+value the layout already understands, and anything outside this table is ignored
+(the export warns once and keeps going).
 
 | Selector | Properties |
 | --- | --- |
 | `@page` | `margin`, `margin-top`, `margin-right`, `margin-bottom`, `margin-left` (`pt`, `mm`, `cm`, `in`, `px`) |
-| `body`, `html`, `:root` | `font-family`, `font-size`, `line-height`, `color`, `background-color`, `margin-bottom`, `--block-spacing` |
+| `body`, `html`, `:root` | `font-family`, `font-size`, `line-height`, `color`, `background-color`, `margin-bottom`, `--block-spacing`, `--muted-color` |
 | `p` | `line-height`, `color`, `margin-bottom`, `--block-spacing` |
 | `h1` to `h4` | `font-size`, `color` |
 | `pre`, `code` | `font-family`, `color`, `background-color` |
-| `blockquote`, `a`, `table` | `color`, plus `background-color` on `table` |
+| `blockquote` | `color`, `border-color` (the quote bar) |
+| `a` | `color` |
+| `table` | `color`, `background-color` |
+| `th` | `color`, `background-color` |
+| `hr` | `color` |
 
 When the sheet says nothing about a value, the template keeps its own, and
 removing the file restores the previous output exactly. Example:

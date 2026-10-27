@@ -13,6 +13,7 @@ mod arranque;
 mod editor;
 mod export_css;
 mod export_pdf;
+mod export_themes;
 mod file_manager;
 mod guardado;
 mod markdown_render;

@@ -20,6 +20,8 @@ mod editor;
 mod export_css;
 #[path = "../src/export_pdf.rs"]
 mod export_pdf;
+#[path = "../src/export_themes.rs"]
+mod export_themes;
 #[path = "../src/file_manager.rs"]
 mod file_manager;
 #[path = "../src/guardado.rs"]

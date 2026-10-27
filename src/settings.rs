@@ -285,6 +285,65 @@ impl ExportOrientation {
     }
 }
 
+/// Tema de hoja de estilo aplicado encima de la plantilla de página.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ExportTheme {
+    /// Sin tema: la plantilla tal cual.
+    None,
+    Sepia,
+    HighContrast,
+    Technical,
+    Academic,
+    /// La hoja de estilo que elija el usuario en disco.
+    CustomFile,
+}
+
+impl ExportTheme {
+    fn from_nick(nick: &str) -> Self {
+        match nick {
+            "sepia" => Self::Sepia,
+            "high-contrast" => Self::HighContrast,
+            "technical" => Self::Technical,
+            "academic" => Self::Academic,
+            "custom-file" => Self::CustomFile,
+            _ => Self::None,
+        }
+    }
+
+    pub fn nick(self) -> &'static str {
+        match self {
+            Self::None => "none",
+            Self::Sepia => "sepia",
+            Self::HighContrast => "high-contrast",
+            Self::Technical => "technical",
+            Self::Academic => "academic",
+            Self::CustomFile => "custom-file",
+        }
+    }
+
+    pub fn index(self) -> u32 {
+        match self {
+            Self::None => 0,
+            Self::Sepia => 1,
+            Self::HighContrast => 2,
+            Self::Technical => 3,
+            Self::Academic => 4,
+            Self::CustomFile => 5,
+        }
+    }
+
+    pub fn from_index(index: u32) -> Self {
+        match index {
+            1 => Self::Sepia,
+            2 => Self::HighContrast,
+            3 => Self::Technical,
+            4 => Self::Academic,
+            5 => Self::CustomFile,
+            _ => Self::None,
+        }
+    }
+}
+
 /// Plantilla de página del PDF exportado. `Custom` usa los ajustes
 /// granulares; el resto fija sus propios valores de maquetación.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -661,6 +720,20 @@ impl AppSettings {
         self.set(|s| {
             if let Err(e) = s.set_string("export-template", v.nick()) {
                 log_set_error("export-template", e);
+            }
+        });
+    }
+
+    /// Tema de hoja de estilo aplicado encima de la plantilla.
+    pub fn export_theme(&self) -> ExportTheme {
+        ExportTheme::from_nick(
+            &self.get("none".to_string(), |s| s.string("export-theme").to_string()),
+        )
+    }
+    pub fn set_export_theme(&self, v: ExportTheme) {
+        self.set(|s| {
+            if let Err(e) = s.set_string("export-theme", v.nick()) {
+                log_set_error("export-theme", e);
             }
         });
     }

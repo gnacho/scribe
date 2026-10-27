@@ -52,7 +52,7 @@ use crate::export_css::Ajustes;
 use crate::markdown_render::{analyze, Analysis, Ornament, SpanKind};
 use crate::settings::{
     AppSettings, ExportColorScheme, ExportMonoFont, ExportOrientation, ExportPageSize,
-    ExportTemplate, FontFamily,
+    ExportTemplate, ExportTheme, FontFamily,
 };
 
 // ---------------------------------------------------------------------------
@@ -103,7 +103,9 @@ pub struct ExportConfig {
     pub papel: ExportPageSize,
     pub orientacion: ExportOrientation,
     pub template: ExportTemplate,
-    /// Hoja de estilo del usuario, aplicada encima de la plantilla.
+    /// Tema de hoja de estilo incluido, aplicado encima de la plantilla.
+    pub theme: ExportTheme,
+    /// Hoja de estilo del usuario, aplicada encima del tema.
     pub css_path: Option<std::path::PathBuf>,
 }
 
@@ -119,6 +121,7 @@ impl ExportConfig {
             papel: s.export_page_size(),
             orientacion: s.export_orientation(),
             template: s.export_template(),
+            theme: s.export_theme(),
             css_path: s.export_css_path(),
         }
     }
@@ -386,11 +389,23 @@ fn aplicar_hoja(
     if let Some(v) = c.cita {
         paleta.cita = v;
     }
+    if let Some(v) = c.cita_barra {
+        paleta.cita_barra = v;
+    }
     if let Some(v) = c.enlace {
         paleta.enlace = v;
     }
+    if let Some(v) = c.regla {
+        paleta.regla = v;
+    }
     if let Some(v) = c.tabla_fondo {
         paleta.tabla_fondo = v;
+    }
+    if let Some(v) = c.tabla_cabecera {
+        paleta.tabla_cabecera = v;
+    }
+    if let Some(v) = c.atenuado {
+        paleta.atenuado = v;
     }
 }
 
@@ -1896,6 +1911,11 @@ pub fn crear_operacion(
     let mut plantilla = Plantilla::desde(config);
     let mut config = config.con_plantilla(&plantilla);
     let mut paleta = resolver_paleta(config.esquema, sistema_oscuro);
+    // Orden de capas: plantilla, tema incluido y, encima de todo, la hoja del
+    // usuario, que siempre puede corregir un detalle del tema.
+    if let Some(ajustes) = crate::export_themes::ajustes(config.theme) {
+        aplicar_hoja(&ajustes, &mut plantilla, &mut config, &mut paleta);
+    }
     let hoja = cargar_hoja(&config);
     if let Some(ajustes) = &hoja {
         aplicar_hoja(ajustes, &mut plantilla, &mut config, &mut paleta);
@@ -2340,6 +2360,7 @@ mod tests {
             papel: ExportPageSize::A4,
             orientacion: ExportOrientation::Portrait,
             template,
+            theme: ExportTheme::None,
             css_path: None,
         }
     }
@@ -2461,6 +2482,128 @@ mod tests {
         assert_eq!(paleta.texto, (17.0 / 255.0, 17.0 / 255.0, 17.0 / 255.0));
         assert_eq!(ajustes.margenes.superior, Some(30.0));
         assert_eq!(ajustes.margenes.izquierda, Some(30.0));
+    }
+
+    /// Resolución de capas tal como la hace `crear_operacion`, sin GTK:
+    /// plantilla, tema incluido y hoja del usuario por encima.
+    fn resolver_capas(config: &ExportConfig) -> (Plantilla, ExportConfig, Paleta) {
+        let mut plantilla = Plantilla::desde(config);
+        let mut config = config.con_plantilla(&plantilla);
+        let mut paleta = resolver_paleta(config.esquema, false);
+        if let Some(ajustes) = crate::export_themes::ajustes(config.theme) {
+            aplicar_hoja(&ajustes, &mut plantilla, &mut config, &mut paleta);
+        }
+        if let Some(ajustes) = cargar_hoja(&config) {
+            aplicar_hoja(&ajustes, &mut plantilla, &mut config, &mut paleta);
+        }
+        (plantilla, config, paleta)
+    }
+
+    #[test]
+    fn pdf_sin_tema_la_salida_es_la_de_siempre() {
+        let config = config_de(ExportTemplate::Article);
+        let (plantilla, resuelto, paleta) = resolver_capas(&config);
+        let referencia = Plantilla::desde(&config);
+        assert_eq!(plantilla.interlinea, referencia.interlinea);
+        assert_eq!(plantilla.espacio_bloque, referencia.espacio_bloque);
+        assert_eq!(plantilla.escala, referencia.escala);
+        assert_eq!(resuelto.familia_cuerpo, FontFamily::Sans);
+        assert_eq!(resuelto.tamano_cuerpo, 11.0);
+        assert_eq!(
+            paleta.texto,
+            resolver_paleta(ExportColorScheme::Light, false).texto
+        );
+    }
+
+    #[test]
+    fn pdf_el_tema_impone_tipografia_y_colores() {
+        let mut config = config_de(ExportTemplate::Article);
+        config.theme = ExportTheme::Sepia;
+        let (plantilla, resuelto, paleta) = resolver_capas(&config);
+        assert_eq!(resuelto.familia_cuerpo, FontFamily::Serif);
+        assert_eq!(resuelto.tamano_cuerpo, 11.5);
+        assert_eq!(plantilla.interlinea, 1.6);
+        assert_eq!(
+            paleta.fondo,
+            (
+                0xf7 as f64 / 255.0,
+                0xf1 as f64 / 255.0,
+                0xe3 as f64 / 255.0
+            )
+        );
+        assert_eq!(
+            paleta.texto,
+            (
+                0x3b as f64 / 255.0,
+                0x2f as f64 / 255.0,
+                0x24 as f64 / 255.0
+            )
+        );
+        assert!(paleta.atenuado != resolver_paleta(ExportColorScheme::Light, false).atenuado);
+    }
+
+    #[test]
+    fn pdf_el_tema_no_toca_los_margenes_de_la_plantilla() {
+        let mut config = config_de(ExportTemplate::Manuscript);
+        config.theme = ExportTheme::Technical;
+        let (plantilla, _, _) = resolver_capas(&config);
+        assert_eq!(plantilla.margenes.map(|m| m.superior), Some(72.0));
+        let mut config = config_de(ExportTemplate::Custom);
+        config.theme = ExportTheme::Technical;
+        let (plantilla, _, _) = resolver_capas(&config);
+        assert!(plantilla.margenes.is_none());
+    }
+
+    #[test]
+    fn pdf_la_hoja_del_usuario_gana_al_tema() {
+        let dir = std::env::temp_dir().join("scribe-tema-y-hoja");
+        let _ = std::fs::create_dir_all(&dir);
+        let ruta = dir.join("encima.css");
+        std::fs::write(&ruta, "body { color: #000000 } h1 { color: #ff0000 }")
+            .expect("escribir css");
+        let mut config = config_de(ExportTemplate::Article);
+        config.theme = ExportTheme::Sepia;
+        config.css_path = Some(ruta.clone());
+        let (_, _, paleta) = resolver_capas(&config);
+        assert_eq!(paleta.texto, (0.0, 0.0, 0.0));
+        assert_eq!(paleta.cabecera, (1.0, 0.0, 0.0));
+        // El fondo del tema sigue ahí: la hoja solo pisa lo que declara.
+        assert_eq!(
+            paleta.fondo,
+            (
+                0xf7 as f64 / 255.0,
+                0xf1 as f64 / 255.0,
+                0xe3 as f64 / 255.0
+            )
+        );
+        let _ = std::fs::remove_file(&ruta);
+    }
+
+    #[test]
+    fn pdf_cada_tema_se_combina_con_cada_plantilla() {
+        let temas = [
+            ExportTheme::Sepia,
+            ExportTheme::HighContrast,
+            ExportTheme::Technical,
+            ExportTheme::Academic,
+        ];
+        let plantillas = [
+            ExportTemplate::Article,
+            ExportTemplate::Manuscript,
+            ExportTemplate::Letter,
+            ExportTemplate::Compact,
+        ];
+        for tema in temas {
+            for plantilla in plantillas {
+                let mut config = config_de(plantilla);
+                config.theme = tema;
+                let (resuelta, resuelto, paleta) = resolver_capas(&config);
+                assert!(resuelto.tamano_cuerpo > 0.0, "{tema:?}/{plantilla:?}");
+                assert!(resuelta.interlinea > 0.0, "{tema:?}/{plantilla:?}");
+                assert!(resuelta.escala_cabecera(1) > 0.0, "{tema:?}/{plantilla:?}");
+                assert!(paleta.fondo != paleta.texto, "{tema:?}/{plantilla:?}");
+            }
+        }
     }
 
     #[test]

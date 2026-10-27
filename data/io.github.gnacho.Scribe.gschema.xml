@@ -41,6 +41,14 @@
     <value nick="letter" value="3"/>
     <value nick="compact" value="4"/>
   </enum>
+  <enum id="io.github.gnacho.Scribe.ExportTheme">
+    <value nick="none" value="0"/>
+    <value nick="sepia" value="1"/>
+    <value nick="high-contrast" value="2"/>
+    <value nick="technical" value="3"/>
+    <value nick="academic" value="4"/>
+    <value nick="custom-file" value="5"/>
+  </enum>
 
   <schema id="io.github.gnacho.Scribe" path="/io/github/gnacho/Scribe/">
     <key name="window-width" type="i">
@@ -162,6 +170,10 @@
     <key name="export-template" enum="io.github.gnacho.Scribe.ExportTemplate">
       <default>'custom'</default>
       <summary>PDF export page template</summary>
+    </key>
+    <key name="export-theme" enum="io.github.gnacho.Scribe.ExportTheme">
+      <default>'none'</default>
+      <summary>PDF export stylesheet theme applied on top of the page template</summary>
     </key>
     <key name="export-css-path" type="s">
       <default>''</default>

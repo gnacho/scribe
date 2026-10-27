@@ -1,0 +1,41 @@
+/* Tema Técnico: cuerpo monoespaciado y colores apagados, para notas y código. */
+
+body {
+  font-family: "Adwaita Mono", monospace;
+  font-size: 10pt;
+  line-height: 1.45;
+  color: #1d1f21;
+  background-color: #ffffff;
+  --muted-color: #6b7280;
+  --block-spacing: 8pt;
+}
+
+h1,
+h2,
+h3,
+h4 {
+  color: #111827;
+}
+
+h1 { font-size: 18pt; }
+h2 { font-size: 14pt; }
+h3 { font-size: 12pt; }
+h4 { font-size: 10.5pt; }
+
+pre,
+code {
+  color: #1f2937;
+  background-color: #f3f4f6;
+}
+
+blockquote {
+  color: #4b5563;
+  border-color: #d1d5db;
+}
+
+a { color: #1d4ed8; }
+
+table { background-color: #f9fafb; }
+table th { background-color: #eef0f3; }
+
+hr { color: #d1d5db; }
