@@ -53,10 +53,10 @@
   </screenshots>
   <content_rating type="oars-1.1" />
   <releases>
-    <release version="0.3.25" date="2026-10-25">
+    <release version="0.3.30" date="2026-10-27">
       <description>
-        <p>Three fixes: tables export to PDF as real columns with their alignments, wrapped cells and a painted header band; quitting no longer aborts the process with a TLS error; and the app now bundles the action icons that some systems lack, so the preferences pages and header buttons never show broken images. The project also has a website with every feature shown in action.</p>
-        <p xml:lang="es">Tres arreglos: las tablas se exportan a PDF como columnas reales con sus alineaciones, celdas que envuelven y franja de cabecera pintada; salir de la aplicacion ya no aborta el proceso con un error de TLS; y la app lleva ahora empaquetados los iconos de accion que faltan en algunos sistemas, asi que las paginas de preferencias y los botones de cabecera ya no muestran imagenes rotas. El proyecto ademas estrena web con todas las funcionalidades en accion.</p>
+        <p>PDF export now has named page templates (Custom, Article, Manuscript, Letter and Compact), a print preview that renders the real pages, and support for your own CSS stylesheet. Four bundled themes (Sepia, High contrast, Technical and Academic) change type, sizes, leading and colour, and combine with any template. The toolbar swaps the split view toggle for a typewriter mode toggle, and the export preferences are split into layout and typography.</p>
+        <p xml:lang="es">La exportacion a PDF gana plantillas de pagina con nombre (Personalizada, Articulo, Manuscrito, Carta y Compacta), una vista previa que dibuja las paginas reales y soporte para tu propia hoja de estilo CSS. Cuatro temas empaquetados (Sepia, Alto contraste, Tecnico y Academico) cambian tipografia, tamanos, interlineado y color, y se combinan con cualquier plantilla. La barra de herramientas cambia el boton de vista dividida por el de modo maquina de escribir, y las preferencias de exportar se separan en maquetacion y tipografia.</p>
       </description>
     </release>
     <release version="0.3.20" date="2026-10-24">
