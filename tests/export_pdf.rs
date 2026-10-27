@@ -76,6 +76,7 @@ fn exporta_un_pdf_real_de_prueba() {
         fuente_mono: settings::ExportMonoFont::AdwaitaMono,
         papel: settings::ExportPageSize::A4,
         orientacion: settings::ExportOrientation::Portrait,
+        template: settings::ExportTemplate::Custom,
     };
     export_pdf::exportar_a_fichero(&config, DOC, "Prueba", &ruta, false).expect("exportar a PDF");
 

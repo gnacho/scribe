@@ -50,14 +50,16 @@ use gtk4::prelude::*;
 
 use crate::markdown_render::{analyze, Analysis, Ornament, SpanKind};
 use crate::settings::{
-    AppSettings, ExportColorScheme, ExportMonoFont, ExportOrientation, ExportPageSize, FontFamily,
+    AppSettings, ExportColorScheme, ExportMonoFont, ExportOrientation, ExportPageSize,
+    ExportTemplate, FontFamily,
 };
 
 // ---------------------------------------------------------------------------
 // Constantes de maquetación
 // ---------------------------------------------------------------------------
 
-/// Altura de línea relativa al tamaño del bloque (cuerpo = 1.4).
+/// Altura de línea relativa al tamaño del bloque (cuerpo = 1.4). Es el valor
+/// de las plantillas Custom, Article y Letter.
 const INTERLINEA: f64 = 1.4;
 /// Separación vertical entre bloques consecutivos (puntos).
 const ESPACIO_BLOQUE: f64 = 10.0;
@@ -75,6 +77,15 @@ const IMAGEN_ALTO: f64 = 42.0;
 const INDENT_LISTA: f64 = 18.0;
 /// Sangrado de la barra de cita (puntos).
 const INDENT_CITA: f64 = 14.0;
+/// Escala de las cabeceras por nivel (índice 0 sin uso): misma proporción que
+/// la vista del editor.
+const ESCALA_CABECERA: [f64; 5] = [1.0, 1.9, 1.5, 1.25, 1.1];
+/// Espaciado extra de una cabecera, como fracción del cuerpo (índice 0 sin uso).
+const ESPACIADO_CABECERA: [f64; 5] = [0.0, 1.0, 0.8, 0.6, 0.4];
+/// Alto de la banda de cabecera/pie, dentro del área de contenido (puntos).
+const BANDA_ADORNO: f64 = 18.0;
+/// Cuerpo de los adornos de cabecera y pie.
+const TAMANO_ADORNO: f64 = 8.0;
 
 // ---------------------------------------------------------------------------
 // Configuración de exportación
@@ -90,6 +101,7 @@ pub struct ExportConfig {
     pub fuente_mono: ExportMonoFont,
     pub papel: ExportPageSize,
     pub orientacion: ExportOrientation,
+    pub template: ExportTemplate,
 }
 
 impl ExportConfig {
@@ -103,6 +115,188 @@ impl ExportConfig {
             fuente_mono: s.export_mono_font(),
             papel: s.export_page_size(),
             orientacion: s.export_orientation(),
+            template: s.export_template(),
+        }
+    }
+
+    /// Aplica la tipografía y el esquema que impone la plantilla, dejando
+    /// intactos los ajustes granulares cuando la plantilla no los fija.
+    fn con_plantilla(&self, plantilla: &Plantilla) -> Self {
+        let mut config = self.clone();
+        if let Some(familia) = plantilla.familia {
+            config.familia_cuerpo = familia;
+        }
+        if let Some(tamano) = plantilla.tamano {
+            config.tamano_cuerpo = tamano;
+        }
+        if let Some(esquema) = plantilla.esquema {
+            config.esquema = esquema;
+        }
+        config
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Plantillas de página
+// ---------------------------------------------------------------------------
+
+/// Márgenes de página en puntos.
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct Margenes {
+    superior: f64,
+    inferior: f64,
+    izquierda: f64,
+    derecha: f64,
+}
+
+impl Margenes {
+    /// Márgenes iguales en los cuatro lados.
+    const fn simetricos(margen: f64) -> Self {
+        Self {
+            superior: margen,
+            inferior: margen,
+            izquierda: margen,
+            derecha: margen,
+        }
+    }
+}
+
+/// Contenido de la banda de cabecera o pie de página.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Adorno {
+    Nada,
+    /// Título del documento (en la cabecera).
+    Titulo,
+    /// Número de página «n / total» (en el pie).
+    NumeroPagina,
+}
+
+/// Valores de maquetación resueltos de una plantilla. Los `None` significan
+/// "lo que traiga el ajuste granular" o "el margen por defecto del papel".
+#[derive(Debug, Clone, Copy)]
+struct Plantilla {
+    margenes: Option<Margenes>,
+    interlinea: f64,
+    espacio_bloque: f64,
+    /// Escala de cada nivel de cabecera (índices 1..=4).
+    escala: [f64; 5],
+    /// Espaciado extra de cabecera como fracción del cuerpo (1..=4).
+    espaciado: [f64; 5],
+    cabecera: Adorno,
+    pie: Adorno,
+    bloque_titulo: bool,
+    familia: Option<FontFamily>,
+    tamano: Option<f64>,
+    esquema: Option<ExportColorScheme>,
+}
+
+impl Plantilla {
+    /// Resuelve la plantilla elegida. Custom no fija nada: reproduce la salida
+    /// de siempre con los ajustes granulares del usuario.
+    fn desde(config: &ExportConfig) -> Self {
+        match config.template {
+            ExportTemplate::Custom => Self::custom(),
+            ExportTemplate::Article => Self::article(),
+            ExportTemplate::Manuscript => Self::manuscript(),
+            ExportTemplate::Letter => Self::letter(),
+            ExportTemplate::Compact => Self::compact(),
+        }
+    }
+
+    fn custom() -> Self {
+        Self {
+            margenes: None,
+            interlinea: INTERLINEA,
+            espacio_bloque: ESPACIO_BLOQUE,
+            escala: ESCALA_CABECERA,
+            espaciado: ESPACIADO_CABECERA,
+            cabecera: Adorno::Nada,
+            pie: Adorno::Nada,
+            bloque_titulo: false,
+            familia: None,
+            tamano: None,
+            esquema: None,
+        }
+    }
+
+    /// Artículo: los valores de siempre, sin adornos ni portada.
+    fn article() -> Self {
+        Self {
+            familia: Some(FontFamily::Sans),
+            tamano: Some(11.0),
+            esquema: Some(ExportColorScheme::Light),
+            ..Self::custom()
+        }
+    }
+
+    /// Manuscrito: serif, doble espacio, márgenes de una pulgada, portada con
+    /// el título, cabecera con el título y número de página al pie.
+    fn manuscript() -> Self {
+        Self {
+            margenes: Some(Margenes::simetricos(72.0)),
+            interlinea: 2.0,
+            espacio_bloque: 12.0,
+            escala: [1.0, 1.5, 1.3, 1.15, 1.05],
+            espaciado: [0.0, 1.2, 1.0, 0.8, 0.6],
+            cabecera: Adorno::Titulo,
+            pie: Adorno::NumeroPagina,
+            bloque_titulo: true,
+            familia: Some(FontFamily::Serif),
+            tamano: Some(12.0),
+            esquema: Some(ExportColorScheme::Light),
+        }
+    }
+
+    /// Carta: como el artículo pero con márgenes más ajustados y sin portada.
+    fn letter() -> Self {
+        Self {
+            margenes: Some(Margenes::simetricos(54.0)),
+            ..Self::article()
+        }
+    }
+
+    /// Compacta: para notas técnicas, cuerpo menor y espaciado apretado.
+    fn compact() -> Self {
+        Self {
+            margenes: Some(Margenes::simetricos(36.0)),
+            interlinea: 1.25,
+            espacio_bloque: 7.0,
+            escala: [1.0, 1.5, 1.3, 1.15, 1.05],
+            espaciado: [0.0, 0.8, 0.65, 0.5, 0.35],
+            cabecera: Adorno::Nada,
+            pie: Adorno::NumeroPagina,
+            bloque_titulo: false,
+            familia: Some(FontFamily::Sans),
+            tamano: Some(10.0),
+            esquema: Some(ExportColorScheme::Light),
+        }
+    }
+
+    /// Escala de una cabecera por nivel.
+    fn escala_cabecera(&self, nivel: u8) -> f64 {
+        self.escala.get(nivel as usize).copied().unwrap_or(1.0)
+    }
+
+    /// Espaciado extra de una cabecera (puntos).
+    fn espaciado_cabecera(&self, nivel: u8, tamano_cuerpo: f64) -> f64 {
+        tamano_cuerpo * self.espaciado.get(nivel as usize).copied().unwrap_or(0.4)
+    }
+
+    /// Banda reservada arriba para la cabecera.
+    fn banda_superior(&self) -> f64 {
+        if self.cabecera == Adorno::Nada {
+            0.0
+        } else {
+            BANDA_ADORNO
+        }
+    }
+
+    /// Banda reservada abajo para el pie.
+    fn banda_inferior(&self) -> f64 {
+        if self.pie == Adorno::Nada {
+            0.0
+        } else {
+            BANDA_ADORNO
         }
     }
 }
@@ -943,22 +1137,12 @@ pub fn planificar_paginas(bloques: &[Bloque], alto_util: f64) -> Vec<Pagina> {
 // Medición y dibujado con cairo
 // ---------------------------------------------------------------------------
 
+/// Familia tipográfica del cuerpo.
 fn familia_cuerpo(ff: FontFamily) -> &'static str {
     match ff {
         FontFamily::Sans => "Cantarell",
         FontFamily::Serif => "Source Serif 4",
         FontFamily::Mono => "Adwaita Mono",
-    }
-}
-
-/// Escala de las cabeceras (misma proporción que la vista del editor).
-fn escala_cabecera(nivel: u8) -> f64 {
-    match nivel {
-        1 => 1.9,
-        2 => 1.5,
-        3 => 1.25,
-        4 => 1.1,
-        _ => 1.0,
     }
 }
 
@@ -973,10 +1157,14 @@ fn fuente_para(config: &ExportConfig, estilo: Estilo, tamano_bloque: f64) -> (&'
 }
 
 /// Tamaño y estilo base de un bloque.
-fn tamano_y_estilo(tipo: TipoBloque, config: &ExportConfig) -> (f64, Estilo) {
+fn tamano_y_estilo(
+    tipo: TipoBloque,
+    config: &ExportConfig,
+    plantilla: &Plantilla,
+) -> (f64, Estilo) {
     match tipo {
         TipoBloque::Cabecera { nivel } => (
-            config.tamano_cuerpo * escala_cabecera(nivel),
+            config.tamano_cuerpo * plantilla.escala_cabecera(nivel),
             Estilo {
                 negrita: true,
                 ..Default::default()
@@ -1081,16 +1269,6 @@ fn envolver_frases(
     lineas
 }
 
-/// Espaciado extra (arriba + abajo) de una cabecera.
-fn espaciado_cabecera(nivel: u8, config: &ExportConfig) -> f64 {
-    match nivel {
-        1 => config.tamano_cuerpo * 1.0,
-        2 => config.tamano_cuerpo * 0.8,
-        3 => config.tamano_cuerpo * 0.6,
-        _ => config.tamano_cuerpo * 0.4,
-    }
-}
-
 /// Alto de una fila de tabla: máximo de líneas visuales entre sus celdas.
 fn alto_fila_tabla(fila: &[Vec<Vec<Palabra>>], alto_linea: f64) -> f64 {
     let lineas = fila.iter().map(Vec::len).max().unwrap_or(0).max(1);
@@ -1098,14 +1276,14 @@ fn alto_fila_tabla(fila: &[Vec<Vec<Palabra>>], alto_linea: f64) -> f64 {
 }
 
 /// Alto del contenido de un bloque (sin la separación inferior).
-fn alto_contenido(b: &Bloque, config: &ExportConfig) -> f64 {
+fn alto_contenido(b: &Bloque, config: &ExportConfig, plantilla: &Plantilla) -> f64 {
     match b.tipo {
         TipoBloque::Regla => REGLA_ALTO,
         TipoBloque::Imagen => IMAGEN_ALTO,
         TipoBloque::Salto => 0.0,
         TipoBloque::Tabla => {
             let tamano = config.tamano_cuerpo * 0.9;
-            let alto_linea = tamano * INTERLINEA;
+            let alto_linea = tamano * plantilla.interlinea;
             let mut alto = 2.0 * PADDING_CAJA;
             for fila in &b.tabla_envuelta {
                 alto += alto_fila_tabla(fila, alto_linea);
@@ -1113,11 +1291,11 @@ fn alto_contenido(b: &Bloque, config: &ExportConfig) -> f64 {
             alto
         }
         _ => {
-            let (tamano, _) = tamano_y_estilo(b.tipo, config);
-            let alto_linea = tamano * INTERLINEA;
+            let (tamano, _) = tamano_y_estilo(b.tipo, config, plantilla);
+            let alto_linea = tamano * plantilla.interlinea;
             let mut alto = b.envuelto.len() as f64 * alto_linea;
             if let TipoBloque::Cabecera { nivel } = b.tipo {
-                alto += espaciado_cabecera(nivel, config);
+                alto += plantilla.espaciado_cabecera(nivel, config.tamano_cuerpo);
             }
             if b.tipo == TipoBloque::Codigo {
                 alto += PADDING_CAJA * 2.0;
@@ -1128,8 +1306,14 @@ fn alto_contenido(b: &Bloque, config: &ExportConfig) -> f64 {
 }
 
 /// Mide un bloque (rellena `envuelto` y `alto`) con el contexto de cairo dado.
-fn medir_bloque(b: &mut Bloque, config: &ExportConfig, cr: &cairo::Context, ancho_util: f64) {
-    let (tamano, estilo_base) = tamano_y_estilo(b.tipo, config);
+fn medir_bloque(
+    b: &mut Bloque,
+    config: &ExportConfig,
+    plantilla: &Plantilla,
+    cr: &cairo::Context,
+    ancho_util: f64,
+) {
+    let (tamano, estilo_base) = tamano_y_estilo(b.tipo, config, plantilla);
     let ancho_texto = ancho_util - sangrado_x(b, ancho_util);
 
     let mut envuelto: Vec<Vec<Palabra>> = Vec::new();
@@ -1153,12 +1337,12 @@ fn medir_bloque(b: &mut Bloque, config: &ExportConfig, cr: &cairo::Context, anch
         b.envuelto = envuelto;
     }
 
-    let contenido = alto_contenido(b, config);
+    let contenido = alto_contenido(b, config, plantilla);
     b.alto = contenido
         + if b.tipo == TipoBloque::Salto {
             0.0
         } else {
-            ESPACIO_BLOQUE
+            plantilla.espacio_bloque
         };
 }
 
@@ -1217,18 +1401,25 @@ fn sangrado_x(b: &Bloque, _ancho_util: f64) -> f64 {
     }
 }
 
+/// Parámetros del dibujado que se mantienen entre bloques de una misma página.
+#[derive(Clone, Copy)]
+struct Lienzo<'a> {
+    config: &'a ExportConfig,
+    plantilla: &'a Plantilla,
+    paleta: &'a Paleta,
+    ancho: f64,
+}
+
 /// Dibuja un bloque en `(x, y_top)` y devuelve la nueva `y` tras el bloque.
-fn dibujar_bloque(
-    cr: &cairo::Context,
-    b: &Bloque,
-    config: &ExportConfig,
-    paleta: &Paleta,
-    ancho_util: f64,
-    x: f64,
-    y_top: f64,
-) -> f64 {
-    let (tamano, _) = tamano_y_estilo(b.tipo, config);
-    let alto_linea = tamano * INTERLINEA;
+fn dibujar_bloque(cr: &cairo::Context, b: &Bloque, lienzo: Lienzo, x: f64, y_top: f64) -> f64 {
+    let Lienzo {
+        config,
+        plantilla,
+        paleta,
+        ancho: ancho_util,
+    } = lienzo;
+    let (tamano, _) = tamano_y_estilo(b.tipo, config, plantilla);
+    let alto_linea = tamano * plantilla.interlinea;
 
     // Fondo de la página (solo en oscuro; el claro y el mono son blancos).
     // Se pinta una vez por página, no aquí.
@@ -1266,13 +1457,13 @@ fn dibujar_bloque(
         }
         TipoBloque::Salto => {}
         TipoBloque::Tabla => {
-            dibujar_tabla(cr, b, config, paleta, ancho_util, x, y_top);
+            dibujar_tabla(cr, b, lienzo, x, y_top);
         }
         TipoBloque::Codigo
         | TipoBloque::Cita
         | TipoBloque::Cabecera { .. }
         | TipoBloque::Parrafo => {
-            let contenido = alto_contenido(b, config);
+            let contenido = alto_contenido(b, config, plantilla);
             // Color base del texto según el tipo de bloque.
             let color_texto = match b.tipo {
                 TipoBloque::Cabecera { .. } => paleta.cabecera,
@@ -1306,7 +1497,7 @@ fn dibujar_bloque(
                 cursor_y += PADDING_CAJA;
             }
             if let TipoBloque::Cabecera { nivel } = b.tipo {
-                cursor_y += espaciado_cabecera(nivel, config) / 2.0;
+                cursor_y += plantilla.espaciado_cabecera(nivel, config.tamano_cuerpo) / 2.0;
             }
 
             let font_ext = {
@@ -1359,18 +1550,16 @@ fn dibujar_bloque(
 /// Dibuja una tabla con columnas reales: caja de fondo, franja de cabecera en
 /// negrita con filete fuerte, rejilla ligera entre filas y columnas, y texto
 /// de celda alineado y envuelto dentro de su columna.
-fn dibujar_tabla(
-    cr: &cairo::Context,
-    b: &Bloque,
-    config: &ExportConfig,
-    paleta: &Paleta,
-    ancho_util: f64,
-    x: f64,
-    y_top: f64,
-) {
+fn dibujar_tabla(cr: &cairo::Context, b: &Bloque, lienzo: Lienzo, x: f64, y_top: f64) {
+    let Lienzo {
+        config,
+        plantilla,
+        paleta,
+        ancho: ancho_util,
+    } = lienzo;
     let tamano = config.tamano_cuerpo * 0.9;
-    let alto_linea = tamano * INTERLINEA;
-    let contenido = alto_contenido(b, config);
+    let alto_linea = tamano * plantilla.interlinea;
+    let contenido = alto_contenido(b, config, plantilla);
 
     // Caja de fondo completa.
     cr.set_source_rgb(
@@ -1537,20 +1726,95 @@ fn dibujar_palabra(
 /// Construye una [`gtk4::PrintOperation`] lista para exportar `texto`.
 ///
 /// `begin_print` mide los bloques con cairo y planifica las páginas;
-/// `draw_page` pinta la página ya planificada. `sistema_oscuro` resuelve el
-/// esquema `system`.
+/// Bloque de título que encabeza la primera página de las plantillas con
+/// portada. Se mide y pagina como una cabecera de nivel 1.
+fn bloque_titulo(titulo: &str) -> Bloque {
+    Bloque {
+        tipo: TipoBloque::Cabecera { nivel: 1 },
+        frases: vec![Frase {
+            texto: titulo.to_string(),
+            estilo: Estilo::default(),
+        }],
+        ..Default::default()
+    }
+}
+
+/// Texto de una banda de cabecera o pie para la página `pagina` (0-based).
+fn texto_adorno(adorno: Adorno, titulo: &str, pagina: usize, total: usize) -> Option<String> {
+    match adorno {
+        Adorno::Nada => None,
+        Adorno::Titulo => Some(titulo.to_string()),
+        Adorno::NumeroPagina => Some(format!("{} / {}", pagina + 1, total)),
+    }
+}
+
+/// Dibuja una línea de adorno centrada en el ancho útil.
+fn dibujar_adorno(
+    cr: &cairo::Context,
+    config: &ExportConfig,
+    paleta: &Paleta,
+    texto: &str,
+    ancho: f64,
+    baseline: f64,
+) {
+    cr.select_font_face(
+        familia_cuerpo(config.familia_cuerpo),
+        cairo::FontSlant::Normal,
+        cairo::FontWeight::Normal,
+    );
+    cr.set_font_size(TAMANO_ADORNO);
+    cr.set_source_rgb(paleta.atenuado.0, paleta.atenuado.1, paleta.atenuado.2);
+    let recortado = recortar_a_ancho(cr, texto, ancho);
+    if let Ok(ext) = cr.text_extents(&recortado) {
+        cr.move_to(((ancho - ext.x_advance()) / 2.0).max(0.0), baseline);
+        let _ = cr.show_text(&recortado);
+    }
+}
+
+/// Recorta el texto con puntos suspensivos hasta que quepa en `ancho`.
+fn recortar_a_ancho(cr: &cairo::Context, texto: &str, ancho: f64) -> String {
+    let cabe = |t: &str| {
+        cr.text_extents(t)
+            .map(|e| e.x_advance() <= ancho)
+            .unwrap_or(true)
+    };
+    if cabe(texto) {
+        return texto.to_string();
+    }
+    let mut recortado: String = texto.to_string();
+    while !recortado.is_empty() {
+        recortado.pop();
+        let prueba = format!("{}…", recortado.trim_end());
+        if cabe(&prueba) {
+            return prueba;
+        }
+    }
+    String::new()
+}
+
+/// Prepara la operación de impresión. `draw_page` pinta la página ya
+/// planificada. `sistema_oscuro` resuelve el esquema `system`.
 pub fn crear_operacion(
     config: &ExportConfig,
     texto: &str,
     titulo: &str,
     sistema_oscuro: bool,
 ) -> gtk4::PrintOperation {
+    let plantilla = Plantilla::desde(config);
+    let config = config.con_plantilla(&plantilla);
+
     let op = gtk4::PrintOperation::new();
     op.set_job_name(titulo);
 
     let setup = gtk4::PageSetup::new();
     let papel = gtk4::PaperSize::new(Some(config.papel.paper_name()));
     setup.set_paper_size_and_default_margins(&papel);
+    if let Some(m) = plantilla.margenes {
+        setup.set_top_margin(m.superior, gtk4::Unit::Points);
+        setup.set_bottom_margin(m.inferior, gtk4::Unit::Points);
+        setup.set_left_margin(m.izquierda, gtk4::Unit::Points);
+        setup.set_right_margin(m.derecha, gtk4::Unit::Points);
+    }
     setup.set_orientation(match config.orientacion {
         ExportOrientation::Portrait => gtk4::PageOrientation::Portrait,
         ExportOrientation::Landscape => gtk4::PageOrientation::Landscape,
@@ -1558,11 +1822,16 @@ pub fn crear_operacion(
     op.set_default_page_setup(Some(&setup));
 
     let analisis = analyze(texto);
-    let bloques: Rc<RefCell<Vec<Bloque>>> =
-        Rc::new(RefCell::new(construir_bloques(texto, &analisis)));
+    let mut iniciales = construir_bloques(texto, &analisis);
+    if plantilla.bloque_titulo && !titulo.trim().is_empty() {
+        iniciales.insert(0, bloque_titulo(titulo));
+    }
+    let bloques: Rc<RefCell<Vec<Bloque>>> = Rc::new(RefCell::new(iniciales));
     let paginas: Rc<RefCell<Vec<Pagina>>> = Rc::new(RefCell::new(Vec::new()));
     let paleta = resolver_paleta(config.esquema, sistema_oscuro);
-    let config = config.clone();
+    let banda_sup = plantilla.banda_superior();
+    let banda_inf = plantilla.banda_inferior();
+    let titulo_adorno = titulo.to_string();
 
     {
         let bloques = bloques.clone();
@@ -1571,13 +1840,13 @@ pub fn crear_operacion(
         op.connect_begin_print(move |op, ctx| {
             let cr = ctx.cairo_context();
             let ancho = ctx.width();
-            let alto = ctx.height();
+            let alto_util = (ctx.height() - banda_sup - banda_inf).max(1.0);
             {
                 let mut bloques = bloques.borrow_mut();
                 for b in bloques.iter_mut() {
-                    medir_bloque(b, &config, &cr, ancho);
+                    medir_bloque(b, &config, &plantilla, &cr, ancho);
                 }
-                *paginas.borrow_mut() = planificar_paginas(&bloques, alto);
+                *paginas.borrow_mut() = planificar_paginas(&bloques, alto_util);
             }
             op.set_n_pages(paginas.borrow().len() as i32);
         });
@@ -1590,11 +1859,11 @@ pub fn crear_operacion(
         op.connect_draw_page(move |_op, ctx, nr| {
             let cr = ctx.cairo_context();
             let ancho = ctx.width();
-            let alto = ctx.height();
+            let alto_pagina = ctx.height();
 
             // Fondo de la página.
             cr.set_source_rgb(paleta.fondo.0, paleta.fondo.1, paleta.fondo.2);
-            cr.rectangle(0.0, 0.0, ancho, alto);
+            cr.rectangle(0.0, 0.0, ancho, alto_pagina);
             let _ = cr.fill();
 
             let paginas = paginas.borrow();
@@ -1602,16 +1871,68 @@ pub fn crear_operacion(
             let Some(pagina) = paginas.get(nr as usize) else {
                 return;
             };
-            let mut y = 0.0;
+            let total = paginas.len();
+            let mut y = banda_sup;
+            let lienzo = Lienzo {
+                config: &config,
+                plantilla: &plantilla,
+                paleta: &paleta,
+                ancho,
+            };
             for &idx in &pagina.bloques {
                 if let Some(b) = bloques.get(idx) {
-                    y = dibujar_bloque(&cr, b, &config, &paleta, ancho, 0.0, y);
+                    y = dibujar_bloque(&cr, b, lienzo, 0.0, y);
                 }
+            }
+
+            // Cabecera: en la primera página se omite si la portada ya lleva
+            // el título.
+            if !(nr == 0 && plantilla.bloque_titulo) {
+                if let Some(t) =
+                    texto_adorno(plantilla.cabecera, &titulo_adorno, nr as usize, total)
+                {
+                    dibujar_adorno(
+                        &cr,
+                        &config,
+                        &paleta,
+                        &t,
+                        ancho,
+                        (banda_sup + TAMANO_ADORNO) / 2.0,
+                    );
+                }
+            }
+            if let Some(t) = texto_adorno(plantilla.pie, &titulo_adorno, nr as usize, total) {
+                dibujar_adorno(
+                    &cr,
+                    &config,
+                    &paleta,
+                    &t,
+                    ancho,
+                    alto_pagina - banda_inf / 2.0 + TAMANO_ADORNO / 2.0,
+                );
             }
         });
     }
 
     op
+}
+
+/// Lanza la operación con la acción pedida y avisa si falla.
+fn ejecutar(
+    parent: &impl IsA<gtk4::Window>,
+    op: &gtk4::PrintOperation,
+    accion: gtk4::PrintOperationAction,
+    que: &str,
+) {
+    match op.run(accion, Some(parent)) {
+        Ok(gtk4::PrintOperationResult::Error) => {
+            if let Some(e) = op.error() {
+                glib::g_warning!("scribe", "no se pudo {que}: {e}");
+            }
+        }
+        Ok(_) => {}
+        Err(e) => glib::g_warning!("scribe", "no se pudo {que}: {e}"),
+    }
 }
 
 /// Abre el diálogo de impresión/exportación a PDF para el documento.
@@ -1623,15 +1944,29 @@ pub fn exportar(
     sistema_oscuro: bool,
 ) {
     let op = crear_operacion(config, texto, titulo, sistema_oscuro);
-    match op.run(gtk4::PrintOperationAction::PrintDialog, Some(parent)) {
-        Ok(gtk4::PrintOperationResult::Error) => {
-            if let Some(e) = op.error() {
-                glib::g_warning!("scribe", "no se pudo exportar a PDF: {e}");
-            }
-        }
-        Ok(_) => {}
-        Err(e) => glib::g_warning!("scribe", "no se pudo exportar a PDF: {e}"),
-    }
+    ejecutar(
+        parent,
+        &op,
+        gtk4::PrintOperationAction::PrintDialog,
+        "exportar a PDF",
+    );
+}
+
+/// Abre la previsualización de impresión con la misma maqueta que el PDF.
+pub fn previsualizar(
+    parent: &impl IsA<gtk4::Window>,
+    config: &ExportConfig,
+    texto: &str,
+    titulo: &str,
+    sistema_oscuro: bool,
+) {
+    let op = crear_operacion(config, texto, titulo, sistema_oscuro);
+    ejecutar(
+        parent,
+        &op,
+        gtk4::PrintOperationAction::Preview,
+        "previsualizar la impresión",
+    );
 }
 
 /// Exporta directamente a `ruta` (sin diálogo). La usan los tests de
@@ -1866,5 +2201,112 @@ mod tests {
             tabla.alineacion,
             vec![AlineacionCelda::Izquierda, AlineacionCelda::Derecha]
         );
+    }
+
+    fn config_de(template: ExportTemplate) -> ExportConfig {
+        ExportConfig {
+            esquema: ExportColorScheme::Light,
+            familia_cuerpo: FontFamily::Sans,
+            tamano_cuerpo: 11.0,
+            fuente_mono: ExportMonoFont::AdwaitaMono,
+            papel: ExportPageSize::A4,
+            orientacion: ExportOrientation::Portrait,
+            template,
+        }
+    }
+
+    #[test]
+    fn pdf_custom_no_impone_maquetacion_y_conserva_los_ajustes() {
+        let config = config_de(ExportTemplate::Custom);
+        let plantilla = Plantilla::desde(&config);
+        assert!(plantilla.margenes.is_none());
+        assert_eq!(plantilla.interlinea, INTERLINEA);
+        assert_eq!(plantilla.espacio_bloque, ESPACIO_BLOQUE);
+        assert_eq!(plantilla.cabecera, Adorno::Nada);
+        assert_eq!(plantilla.pie, Adorno::Nada);
+        assert!(!plantilla.bloque_titulo);
+        let efectiva = config.con_plantilla(&plantilla);
+        assert_eq!(efectiva.tamano_cuerpo, 11.0);
+        assert_eq!(efectiva.familia_cuerpo, FontFamily::Sans);
+    }
+
+    #[test]
+    fn pdf_article_reproduce_los_valores_de_siempre() {
+        let config = config_de(ExportTemplate::Article);
+        let plantilla = Plantilla::desde(&config);
+        assert!(plantilla.margenes.is_none());
+        assert_eq!(plantilla.interlinea, INTERLINEA);
+        assert_eq!(plantilla.espacio_bloque, ESPACIO_BLOQUE);
+        for (nivel, esperado) in [(1, 1.9), (2, 1.5), (3, 1.25), (4, 1.1)] {
+            assert_eq!(plantilla.escala_cabecera(nivel), esperado);
+        }
+        assert_eq!(plantilla.banda_superior(), 0.0);
+        assert_eq!(plantilla.banda_inferior(), 0.0);
+        assert!(!plantilla.bloque_titulo);
+    }
+
+    #[test]
+    fn pdf_manuscript_fija_margenes_interlineado_y_adornos() {
+        let config = config_de(ExportTemplate::Manuscript);
+        let plantilla = Plantilla::desde(&config);
+        let margenes = plantilla.margenes.expect("manuscrito fija márgenes");
+        assert_eq!(margenes, Margenes::simetricos(72.0));
+        assert_eq!(plantilla.interlinea, 2.0);
+        assert_eq!(plantilla.cabecera, Adorno::Titulo);
+        assert_eq!(plantilla.pie, Adorno::NumeroPagina);
+        assert!(plantilla.bloque_titulo);
+        assert_eq!(plantilla.banda_superior(), BANDA_ADORNO);
+        assert_eq!(plantilla.banda_inferior(), BANDA_ADORNO);
+        let efectiva = config.con_plantilla(&plantilla);
+        assert_eq!(efectiva.familia_cuerpo, FontFamily::Serif);
+        assert_eq!(efectiva.tamano_cuerpo, 12.0);
+    }
+
+    #[test]
+    fn pdf_compact_aprieta_el_espaciado_y_no_lleva_portada() {
+        let config = config_de(ExportTemplate::Compact);
+        let plantilla = Plantilla::desde(&config);
+        assert_eq!(plantilla.margenes, Some(Margenes::simetricos(36.0)));
+        assert_eq!(plantilla.interlinea, 1.25);
+        assert_eq!(plantilla.espacio_bloque, 7.0);
+        assert!(!plantilla.bloque_titulo);
+        assert_eq!(plantilla.pie, Adorno::NumeroPagina);
+    }
+
+    #[test]
+    fn pdf_letter_usa_margenes_ajustados_y_no_lleva_portada() {
+        let config = config_de(ExportTemplate::Letter);
+        let plantilla = Plantilla::desde(&config);
+        assert_eq!(plantilla.margenes, Some(Margenes::simetricos(54.0)));
+        assert!(!plantilla.bloque_titulo);
+        assert_eq!(plantilla.cabecera, Adorno::Nada);
+    }
+
+    #[test]
+    fn pdf_el_bloque_de_titulo_es_una_cabecera_de_nivel_uno() {
+        let bloque = bloque_titulo("Mi documento");
+        assert_eq!(bloque.tipo, TipoBloque::Cabecera { nivel: 1 });
+        assert_eq!(bloque.frases.len(), 1);
+        assert_eq!(bloque.frases[0].texto, "Mi documento");
+    }
+
+    #[test]
+    fn pdf_el_pie_numera_con_el_total_de_paginas() {
+        assert_eq!(
+            texto_adorno(Adorno::NumeroPagina, "Título", 0, 3),
+            Some("1 / 3".to_string())
+        );
+        assert_eq!(
+            texto_adorno(Adorno::Titulo, "Título", 4, 9),
+            Some("Título".to_string())
+        );
+        assert_eq!(texto_adorno(Adorno::Nada, "Título", 0, 1), None);
+    }
+
+    #[test]
+    fn pdf_la_escala_de_cabecera_desconocida_no_crece() {
+        let plantilla = Plantilla::desde(&config_de(ExportTemplate::Article));
+        assert_eq!(plantilla.escala_cabecera(0), 1.0);
+        assert_eq!(plantilla.escala_cabecera(9), 1.0);
     }
 }

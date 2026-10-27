@@ -34,6 +34,13 @@
     <value nick="portrait" value="0"/>
     <value nick="landscape" value="1"/>
   </enum>
+  <enum id="io.github.gnacho.Scribe.ExportTemplate">
+    <value nick="custom" value="0"/>
+    <value nick="article" value="1"/>
+    <value nick="manuscript" value="2"/>
+    <value nick="letter" value="3"/>
+    <value nick="compact" value="4"/>
+  </enum>
 
   <schema id="io.github.gnacho.Scribe" path="/io/github/gnacho/Scribe/">
     <key name="window-width" type="i">
@@ -151,6 +158,10 @@
     <key name="export-orientation" enum="io.github.gnacho.Scribe.ExportOrientation">
       <default>'portrait'</default>
       <summary>PDF export page orientation</summary>
+    </key>
+    <key name="export-template" enum="io.github.gnacho.Scribe.ExportTemplate">
+      <default>'custom'</default>
+      <summary>PDF export page template</summary>
     </key>
   </schema>
 </schemalist>
