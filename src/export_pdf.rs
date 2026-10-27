@@ -2521,22 +2521,22 @@ mod tests {
         config.theme = ExportTheme::Sepia;
         let (plantilla, resuelto, paleta) = resolver_capas(&config);
         assert_eq!(resuelto.familia_cuerpo, FontFamily::Serif);
-        assert_eq!(resuelto.tamano_cuerpo, 11.5);
-        assert_eq!(plantilla.interlinea, 1.6);
+        assert_eq!(resuelto.tamano_cuerpo, 12.0);
+        assert_eq!(plantilla.interlinea, 1.75);
         assert_eq!(
             paleta.fondo,
             (
-                0xf7 as f64 / 255.0,
-                0xf1 as f64 / 255.0,
-                0xe3 as f64 / 255.0
+                0xf6 as f64 / 255.0,
+                0xef as f64 / 255.0,
+                0xe0 as f64 / 255.0
             )
         );
         assert_eq!(
             paleta.texto,
             (
-                0x3b as f64 / 255.0,
-                0x2f as f64 / 255.0,
-                0x24 as f64 / 255.0
+                0x43 as f64 / 255.0,
+                0x36 as f64 / 255.0,
+                0x2a as f64 / 255.0
             )
         );
         assert!(paleta.atenuado != resolver_paleta(ExportColorScheme::Light, false).atenuado);
@@ -2571,9 +2571,9 @@ mod tests {
         assert_eq!(
             paleta.fondo,
             (
-                0xf7 as f64 / 255.0,
-                0xf1 as f64 / 255.0,
-                0xe3 as f64 / 255.0
+                0xf6 as f64 / 255.0,
+                0xef as f64 / 255.0,
+                0xe0 as f64 / 255.0
             )
         );
         let _ = std::fs::remove_file(&ruta);

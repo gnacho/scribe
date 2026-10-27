@@ -183,13 +183,13 @@ fija tipografía y color. Cualquier tema se combina con cualquier plantilla.
 | Tema | Qué hace |
 | --- | --- |
 | Ninguno | Deja la plantilla tal cual |
-| Sepia | Papel crema, serif cálida y espaciado amplio para leer mucho rato |
-| Alto contraste | Negro sobre blanco y cuerpo más grande, para imprimir |
-| Técnico | Cuerpo monoespaciado y colores apagados, para notas y código |
-| Académico | Serif sin color y leading amplio, en la línea de un paper |
+| Sepia | Papel crema, serif cálida, interlineado amplio y cabeceras grandes para leer mucho rato |
+| Alto contraste | Texto sans más grande, negro sobre blanco y enlaces azules, para imprimir |
+| Técnico | Todo monoespaciado, espaciado apretado y cabeceras azul marino, para notas y código |
+| Académico | Serif de 11 pt con interlineado doble y cabeceras discretas, como una página de journal |
 
-Elegir `Fichero propio…` carga un CSS del disco que se aplica **encima** del
-tema, así que puede corregir un solo detalle. El analizador es un subconjunto
+La fila **Hoja de estilo** del mismo grupo carga un CSS del disco que se aplica
+**encima** del tema, así que puede corregir un solo detalle. El analizador es un subconjunto
 mapeado, no un motor CSS: el export pinta y pagina con cairo, de modo que cada
 declaración se traduce a un valor que la maquetación ya entiende y lo que queda
 fuera se ignora con un aviso. Quitar el fichero o elegir Ninguno devuelve la

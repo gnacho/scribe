@@ -166,14 +166,14 @@ binary so there is nothing extra to install:
 | Theme | What it does |
 | --- | --- |
 | None | Leave the template as it is |
-| Sepia | Cream paper, warm serif text, generous spacing for long reading |
-| High contrast | Pure black on white with a larger body, for printing |
-| Technical | Monospaced body and muted colours for notes and code |
-| Academic | Serif without colour and wide leading, in the spirit of a paper |
+| Sepia | Cream paper, warm serif, wide leading and large headings for long reading |
+| High contrast | Bigger sans text, black on white, blue links, for printing |
+| Technical | Everything monospaced with tight spacing and navy headings, for notes and code |
+| Academic | Eleven point serif with double leading and small headings, like a journal page |
 
-Any theme combines with any template. Picking `Custom file…` instead loads a CSS
-file from disk, and that file is applied on top of the theme, so it can correct
-a single detail of it. The parser is a mapped subset, not a CSS engine: the
+Any theme combines with any template. The `Stylesheet` row of the same group
+takes a CSS file from disk, applied on top of the theme, so it can correct a
+single detail of it. The parser is a mapped subset, not a CSS engine: the
 export paints and paginates with cairo, so each declaration is translated into a
 value the layout already understands, and anything outside this table is ignored
 (the export warns once and keeps going).
