@@ -5,14 +5,40 @@ All notable changes to Scribe will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
-
-## [0.3.25] - 2026-10-25
+## [0.3.30] - 2026-10-27
 
 Thank you [@HelloKolla2004](https://github.com/HelloKolla2004) for the PDF
 tables report and [@kem-a](https://github.com/kem-a) for two sharp reports:
 the quit crash came with a stack trace that pointed straight at the culprit,
 and the missing icons came with a screenshot that said the rest.
+
+### Added
+
+- **Named page templates for PDF export** (#153): the export controls were a
+  flat list and nobody could save a layout, so anyone printing often re-tuned
+  the same values every time. Five named layouts now group the whole page:
+  Custom, Article, Manuscript, Letter and Compact. Each one decides margins,
+  leading, heading scale, running header and footer, and the title block built
+  from the document name. The choice persists across restarts, and Custom
+  reproduces the output of previous versions.
+- **Print preview** (#153): `Print Preview…` renders the real pages through the
+  export pipeline, so what you see is the PDF and not an approximation.
+- **Your own stylesheet** (#156): a CSS file can be chosen in
+  `Preferences > Export` and is applied on top of the theme, so it wins over it.
+  The parser is a mapped subset, not a CSS engine: selectors for the page, body,
+  headings, paragraphs, code, quotes, tables and links are translated into
+  values the cairo layout already understands, anything outside the table is
+  ignored with one warning, and removing the file restores the previous output
+  byte for byte.
+- **Four bundled themes** (#163): Sepia, High contrast, Technical and Academic,
+  written with our own values and compiled into the binary, so a Flatpak or
+  AppImage install gets them without installing anything. A theme changes type,
+  sizes, leading and colour, and combines with any template. The stylesheet
+  always applies last.
+- **Typewriter mode in the toolbar** (#151, #152): the split view toggle is
+  replaced by a typewriter mode toggle that shares its state with the menu item
+  and the preferences switch. Split view stays available on Ctrl+Shift+P, and a
+  symbolic typewriter icon ships with the app.
 
 ### Fixed
 
@@ -34,12 +60,31 @@ and the missing icons came with a screenshot that said the rest.
   into any icon theme. The action icons now ship with the app as resource
   fallbacks; the system theme still wins when it has them (#143).
 
+### Changed
+
+- **The export preferences are split by job** (#163): the PDF group keeps the
+  layout controls and a new Typography and colour group holds the PDF theme and
+  the stylesheet. The theme row is called PDF theme so it is not confused with
+  the text theme of the editor, and loading a stylesheet has its own row: it
+  used to live inside the theme combo and got stuck when the file chooser was
+  cancelled.
+
 ### Docs
 
 - **The project has a website**: every feature is shown in action at
   [scribe.cloudless.club](https://scribe.cloudless.club). The READMEs invite
   the reader to it, and the AppStream homepage and the About dialog now use
   it instead of the GitHub repository (#144).
+- **Flathub comes first in the install instructions** (#158, #159): both
+  READMEs now lead with `flatpak install flathub io.github.gnacho.Scribe` and
+  keep the distribution packages below.
+- **One Flatpak manifest instead of two** (#160, #161): the stale copy under
+  `packaging/flatpak` is gone. The published manifest lives in the Flathub
+  repository, and the local one under `build-aux` is only for building against
+  the GNOME runtime.
+- **The landing page offers Flathub first** (#162): the install section opens
+  with the Flathub tab, the hero links to it, and the structured data declares
+  it as the install URL.
 
 ## [0.3.20] - 2026-10-24
 
