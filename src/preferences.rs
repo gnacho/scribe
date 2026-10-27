@@ -9,7 +9,7 @@ use std::rc::Rc;
 
 use crate::settings::{
     gtk_hides_invisible_safely, AppSettings, ExportColorScheme, ExportMonoFont, ExportOrientation,
-    ExportPageSize, FontFamily, MarkupVisibility,
+    ExportPageSize, ExportTemplate, FontFamily, MarkupVisibility,
 };
 
 fn spin(title: &str, subtitle: &str, adj: &gtk4::Adjustment, digits: u32) -> adw::SpinRow {
@@ -406,6 +406,18 @@ fn export_page(settings: &Rc<AppSettings>, apply: &Rc<dyn Fn()>) -> adw::Prefere
         ))
         .build();
 
+    let template = combo_i18n(
+        &gettext("Template"),
+        &gettext("Page layout preset; Custom uses the settings below"),
+        &[
+            gettext("Custom"),
+            gettext("Article"),
+            gettext("Manuscript"),
+            gettext("Letter"),
+            gettext("Compact"),
+        ],
+        settings.export_template().index(),
+    );
     let scheme = combo_i18n(
         &gettext("Color scheme"),
         &gettext("Monochrome prints everything in black on white"),
@@ -456,12 +468,37 @@ fn export_page(settings: &Rc<AppSettings>, apply: &Rc<dyn Fn()>) -> adw::Prefere
         settings.export_orientation().index(),
     );
 
+    // Los ajustes granulares solo mandan con la plantilla Custom.
+    let granulares: Vec<gtk4::Widget> = vec![
+        scheme.clone().upcast(),
+        family.clone().upcast(),
+        size.clone().upcast(),
+        mono.clone().upcast(),
+    ];
+    for row in &granulares {
+        row.set_sensitive(settings.export_template() == ExportTemplate::Custom);
+    }
+
+    group.add(&template);
     for row in [&scheme, &family, &mono, &page_size, &orientation] {
         group.add(row);
     }
     group.add(&size);
     page.add(&group);
 
+    {
+        let settings = settings.clone();
+        let apply = apply.clone();
+        let granulares = granulares.clone();
+        template.connect_selected_notify(move |row| {
+            let plantilla = ExportTemplate::from_index(row.selected());
+            settings.set_export_template(plantilla);
+            for fila in &granulares {
+                fila.set_sensitive(plantilla == ExportTemplate::Custom);
+            }
+            apply();
+        });
+    }
     {
         let settings = settings.clone();
         let apply = apply.clone();
