@@ -285,6 +285,56 @@ impl ExportOrientation {
     }
 }
 
+/// Plantilla de página del PDF exportado. `Custom` usa los ajustes
+/// granulares; el resto fija sus propios valores de maquetación.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ExportTemplate {
+    Custom,
+    Article,
+    Manuscript,
+    Letter,
+    Compact,
+}
+
+impl ExportTemplate {
+    fn from_nick(nick: &str) -> Self {
+        match nick {
+            "article" => Self::Article,
+            "manuscript" => Self::Manuscript,
+            "letter" => Self::Letter,
+            "compact" => Self::Compact,
+            _ => Self::Custom,
+        }
+    }
+    pub fn nick(self) -> &'static str {
+        match self {
+            Self::Custom => "custom",
+            Self::Article => "article",
+            Self::Manuscript => "manuscript",
+            Self::Letter => "letter",
+            Self::Compact => "compact",
+        }
+    }
+    pub fn index(self) -> u32 {
+        match self {
+            Self::Custom => 0,
+            Self::Article => 1,
+            Self::Manuscript => 2,
+            Self::Letter => 3,
+            Self::Compact => 4,
+        }
+    }
+    pub fn from_index(i: u32) -> Self {
+        match i {
+            1 => Self::Article,
+            2 => Self::Manuscript,
+            3 => Self::Letter,
+            4 => Self::Compact,
+            _ => Self::Custom,
+        }
+    }
+}
+
 pub struct AppSettings {
     settings: Option<gio::Settings>,
 }
@@ -598,6 +648,39 @@ impl AppSettings {
         self.set(|s| {
             if let Err(e) = s.set_string("export-orientation", v.nick()) {
                 log_set_error("export-orientation", e);
+            }
+        });
+    }
+
+    pub fn export_template(&self) -> ExportTemplate {
+        ExportTemplate::from_nick(&self.get("custom".to_string(), |s| {
+            s.string("export-template").to_string()
+        }))
+    }
+    pub fn set_export_template(&self, v: ExportTemplate) {
+        self.set(|s| {
+            if let Err(e) = s.set_string("export-template", v.nick()) {
+                log_set_error("export-template", e);
+            }
+        });
+    }
+
+    /// Ruta de la hoja de estilo del usuario. Vacía significa "ninguna".
+    pub fn export_css_path(&self) -> Option<std::path::PathBuf> {
+        let ruta = self.get(String::new(), |s| s.string("export-css-path").to_string());
+        if ruta.trim().is_empty() {
+            None
+        } else {
+            Some(std::path::PathBuf::from(ruta))
+        }
+    }
+    pub fn set_export_css_path(&self, ruta: Option<&std::path::Path>) {
+        let valor = ruta
+            .map(|r| r.to_string_lossy().into_owned())
+            .unwrap_or_default();
+        self.set(|s| {
+            if let Err(e) = s.set_string("export-css-path", &valor) {
+                log_set_error("export-css-path", e);
             }
         });
     }

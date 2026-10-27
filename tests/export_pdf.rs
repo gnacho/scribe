@@ -8,6 +8,8 @@
 // use (mismo criterio que tests/render_shot.rs).
 #![allow(dead_code)]
 
+#[path = "../src/export_css.rs"]
+mod export_css;
 #[path = "../src/export_pdf.rs"]
 mod export_pdf;
 #[path = "../src/markdown_render.rs"]
@@ -61,6 +63,75 @@ fn main() {
 This text lands on a new page because of the explicit `\\newpage` above.
 ";
 
+/// Vuelca a PNG la primera página del PDF. `None` si no hay poppler.
+fn raster(pdf: &std::path::Path, prefijo: &std::path::Path) -> Option<Vec<u8>> {
+    let salida = std::process::Command::new("pdftoppm")
+        .arg("-png")
+        .arg("-r")
+        .arg("60")
+        .arg("-f")
+        .arg("1")
+        .arg("-l")
+        .arg("1")
+        .arg(pdf)
+        .arg(prefijo)
+        .output()
+        .ok()?;
+    if !salida.status.success() {
+        return None;
+    }
+    std::fs::read(format!("{}-1.png", prefijo.display())).ok()
+}
+
+#[test]
+#[ignore = "requiere display: xvfb-run -a cargo test --test export_pdf -- --ignored --nocapture"]
+fn la_hoja_de_estilo_cambia_el_pdf_y_quitarla_lo_deja_igual() {
+    gtk4::init().expect("GTK necesita un display; ejecuta bajo xvfb-run");
+    libadwaita::init().expect("libadwaita init");
+
+    let dir = std::env::temp_dir().join("scribe-css-prueba");
+    std::fs::create_dir_all(&dir).expect("crear directorio de prueba");
+    let css = dir.join("estilo.css");
+    std::fs::write(
+        &css,
+        "body { font-size: 14pt; color: #003366; background-color: #fffdf5 }\n@page { margin: 48pt }\n",
+    )
+    .expect("escribir css");
+
+    let base = export_pdf::ExportConfig {
+        esquema: settings::ExportColorScheme::Light,
+        familia_cuerpo: settings::FontFamily::Sans,
+        tamano_cuerpo: 11.0,
+        fuente_mono: settings::ExportMonoFont::AdwaitaMono,
+        papel: settings::ExportPageSize::A4,
+        orientacion: settings::ExportOrientation::Portrait,
+        template: settings::ExportTemplate::Custom,
+        css_path: None,
+    };
+    let con_hoja = export_pdf::ExportConfig {
+        css_path: Some(css.clone()),
+        ..base.clone()
+    };
+
+    let sin = dir.join("sin-hoja.pdf");
+    let con = dir.join("con-hoja.pdf");
+    let otra_vez = dir.join("otra-vez.pdf");
+    export_pdf::exportar_a_fichero(&base, DOC, "Prueba", &sin, false).expect("exportar sin hoja");
+    export_pdf::exportar_a_fichero(&con_hoja, DOC, "Prueba", &con, false)
+        .expect("exportar con hoja");
+    export_pdf::exportar_a_fichero(&base, DOC, "Prueba", &otra_vez, false).expect("reexportar");
+
+    let Some(a) = raster(&sin, &dir.join("a")) else {
+        eprintln!("pdftoppm no disponible: se omite la comparación visual");
+        return;
+    };
+    let b = raster(&con, &dir.join("b")).expect("rasterizar el PDF con hoja");
+    let c = raster(&otra_vez, &dir.join("c")).expect("rasterizar el PDF sin hoja");
+    assert_eq!(a, c, "quitar la hoja debe dejar la página como estaba");
+    assert_ne!(a, b, "la hoja de estilo debe cambiar la página");
+    eprintln!("PDFs de prueba en {}", dir.display());
+}
+
 #[test]
 #[ignore = "requiere display: xvfb-run -a cargo test --test export_pdf -- --ignored --nocapture"]
 fn exporta_un_pdf_real_de_prueba() {
@@ -76,6 +147,8 @@ fn exporta_un_pdf_real_de_prueba() {
         fuente_mono: settings::ExportMonoFont::AdwaitaMono,
         papel: settings::ExportPageSize::A4,
         orientacion: settings::ExportOrientation::Portrait,
+        template: settings::ExportTemplate::Custom,
+        css_path: None,
     };
     export_pdf::exportar_a_fichero(&config, DOC, "Prueba", &ruta, false).expect("exportar a PDF");
 

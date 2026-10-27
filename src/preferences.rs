@@ -2,6 +2,7 @@
 //! según las HIG de GNOME: apariencia, editor y exportación.
 
 use gettextrs::gettext;
+use gio::prelude::*;
 use gtk4::prelude::*;
 use libadwaita as adw;
 use libadwaita::prelude::*;
@@ -9,7 +10,7 @@ use std::rc::Rc;
 
 use crate::settings::{
     gtk_hides_invisible_safely, AppSettings, ExportColorScheme, ExportMonoFont, ExportOrientation,
-    ExportPageSize, FontFamily, MarkupVisibility,
+    ExportPageSize, ExportTemplate, FontFamily, MarkupVisibility,
 };
 
 fn spin(title: &str, subtitle: &str, adj: &gtk4::Adjustment, digits: u32) -> adw::SpinRow {
@@ -393,6 +394,20 @@ fn editor_page(settings: &Rc<AppSettings>, apply: &Rc<dyn Fn()>) -> adw::Prefere
     page
 }
 
+/// Descripción de la hoja de estilo elegida para la fila de preferencias.
+fn describir_hoja(settings: &AppSettings) -> String {
+    match settings.export_css_path() {
+        Some(ruta) => ruta.display().to_string(),
+        None => gettext("None"),
+    }
+}
+
+/// Refresca la fila de la hoja de estilo tras elegirla o quitarla.
+fn refrescar_hoja(fila: &adw::ActionRow, quitar: &gtk4::Button, settings: &AppSettings) {
+    fila.set_subtitle(&describir_hoja(settings));
+    quitar.set_sensitive(settings.export_css_path().is_some());
+}
+
 fn export_page(settings: &Rc<AppSettings>, apply: &Rc<dyn Fn()>) -> adw::PreferencesPage {
     let page = adw::PreferencesPage::builder()
         .title(gettext("Export"))
@@ -406,6 +421,18 @@ fn export_page(settings: &Rc<AppSettings>, apply: &Rc<dyn Fn()>) -> adw::Prefere
         ))
         .build();
 
+    let template = combo_i18n(
+        &gettext("Template"),
+        &gettext("Page layout preset; Custom uses the settings below"),
+        &[
+            gettext("Custom"),
+            gettext("Article"),
+            gettext("Manuscript"),
+            gettext("Letter"),
+            gettext("Compact"),
+        ],
+        settings.export_template().index(),
+    );
     let scheme = combo_i18n(
         &gettext("Color scheme"),
         &gettext("Monochrome prints everything in black on white"),
@@ -456,12 +483,55 @@ fn export_page(settings: &Rc<AppSettings>, apply: &Rc<dyn Fn()>) -> adw::Prefere
         settings.export_orientation().index(),
     );
 
+    let estilos = adw::ActionRow::builder()
+        .title(gettext("Stylesheet"))
+        .subtitle(describir_hoja(settings))
+        .build();
+    let cargar_estilos = gtk4::Button::builder()
+        .label(gettext("Load…"))
+        .valign(gtk4::Align::Center)
+        .build();
+    let quitar_estilos = gtk4::Button::builder()
+        .icon_name("edit-clear-symbolic")
+        .tooltip_text(gettext("Use the template as is"))
+        .valign(gtk4::Align::Center)
+        .build();
+    quitar_estilos.set_sensitive(settings.export_css_path().is_some());
+    estilos.add_suffix(&cargar_estilos);
+    estilos.add_suffix(&quitar_estilos);
+
+    // Los ajustes granulares solo mandan con la plantilla Custom.
+    let granulares: Vec<gtk4::Widget> = vec![
+        scheme.clone().upcast(),
+        family.clone().upcast(),
+        size.clone().upcast(),
+        mono.clone().upcast(),
+    ];
+    for row in &granulares {
+        row.set_sensitive(settings.export_template() == ExportTemplate::Custom);
+    }
+
+    group.add(&template);
     for row in [&scheme, &family, &mono, &page_size, &orientation] {
         group.add(row);
     }
     group.add(&size);
+    group.add(&estilos);
     page.add(&group);
 
+    {
+        let settings = settings.clone();
+        let apply = apply.clone();
+        let granulares = granulares.clone();
+        template.connect_selected_notify(move |row| {
+            let plantilla = ExportTemplate::from_index(row.selected());
+            settings.set_export_template(plantilla);
+            for fila in &granulares {
+                fila.set_sensitive(plantilla == ExportTemplate::Custom);
+            }
+            apply();
+        });
+    }
     {
         let settings = settings.clone();
         let apply = apply.clone();
@@ -507,6 +577,50 @@ fn export_page(settings: &Rc<AppSettings>, apply: &Rc<dyn Fn()>) -> adw::Prefere
         let apply = apply.clone();
         orientation.connect_selected_notify(move |row| {
             settings.set_export_orientation(ExportOrientation::from_index(row.selected()));
+            apply();
+        });
+    }
+    {
+        let settings = settings.clone();
+        let apply = apply.clone();
+        let estilos = estilos.clone();
+        let quitar = quitar_estilos.clone();
+        cargar_estilos.connect_clicked(move |boton| {
+            let ventana = boton.root().and_then(|r| r.downcast::<gtk4::Window>().ok());
+            let filtro = gtk4::FileFilter::new();
+            filtro.set_name(Some(&gettext("CSS stylesheets")));
+            filtro.add_suffix("css");
+            let filtros = gio::ListStore::new::<gtk4::FileFilter>();
+            filtros.append(&filtro);
+            let dialog = gtk4::FileDialog::builder()
+                .title(gettext("Choose a stylesheet"))
+                .filters(&filtros)
+                .build();
+            let settings = settings.clone();
+            let apply = apply.clone();
+            let estilos = estilos.clone();
+            let quitar = quitar.clone();
+            dialog.open(ventana.as_ref(), gio::Cancellable::NONE, move |resultado| {
+                let Ok(fichero) = resultado else {
+                    return;
+                };
+                let Some(ruta) = fichero.path() else {
+                    return;
+                };
+                settings.set_export_css_path(Some(&ruta));
+                refrescar_hoja(&estilos, &quitar, &settings);
+                apply();
+            });
+        });
+    }
+    {
+        let settings = settings.clone();
+        let apply = apply.clone();
+        let estilos = estilos.clone();
+        let fila = quitar_estilos.clone();
+        quitar_estilos.connect_clicked(move |_| {
+            settings.set_export_css_path(None);
+            refrescar_hoja(&estilos, &fila, &settings);
             apply();
         });
     }

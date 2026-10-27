@@ -818,6 +818,7 @@ impl ScribeWindow {
         file_section.append(Some(&gettext("_Save")), Some("win.save"));
         file_section.append(Some(&gettext("Save _As…")), Some("win.save-as"));
         file_section.append(Some(&gettext("Export to _PDF…")), Some("win.export-pdf"));
+        file_section.append(Some(&gettext("Print Pre_view…")), Some("win.preview-pdf"));
         menu.append_section(None, &file_section);
 
         let view_section = gio::Menu::new();
@@ -1593,6 +1594,7 @@ impl ScribeWindow {
         let action_tab_prev = gio::SimpleAction::new("tab-prev", None);
         let action_reload = gio::SimpleAction::new("reload", None);
         let action_export_pdf = gio::SimpleAction::new("export-pdf", None);
+        let action_preview_pdf = gio::SimpleAction::new("preview-pdf", None);
         let action_find = gio::SimpleAction::new("find", None);
         let action_find_next = gio::SimpleAction::new("find-next", None);
         let action_find_prev = gio::SimpleAction::new("find-prev", None);
@@ -1647,6 +1649,7 @@ impl ScribeWindow {
             &action_tab_prev,
             &action_reload,
             &action_export_pdf,
+            &action_preview_pdf,
             &action_find,
             &action_find_next,
             &action_find_prev,
@@ -1736,12 +1739,12 @@ impl ScribeWindow {
             });
         }
 
-        // ---- exportar a PDF ----
-        {
+        // ---- exportar a PDF y previsualizar ----
+        let lanzar_pdf: Rc<dyn Fn(bool)> = {
             let active_document = active_document.clone();
             let window = window.downgrade();
             let settings = settings.clone();
-            action_export_pdf.connect_activate(move |_, _| {
+            Rc::new(move |previsualizar: bool| {
                 let Some(window) = window.upgrade() else {
                     return;
                 };
@@ -1751,14 +1754,21 @@ impl ScribeWindow {
                 let config = export_pdf::ExportConfig::desde_settings(&settings);
                 let texto = doc.editor.text();
                 let titulo = doc.display_name.borrow().clone();
-                export_pdf::exportar(
-                    &window,
-                    &config,
-                    &texto,
-                    &titulo,
-                    adw::StyleManager::default().is_dark(),
-                );
-            });
+                let oscuro = adw::StyleManager::default().is_dark();
+                if previsualizar {
+                    export_pdf::previsualizar(&window, &config, &texto, &titulo, oscuro);
+                } else {
+                    export_pdf::exportar(&window, &config, &texto, &titulo, oscuro);
+                }
+            })
+        };
+        {
+            let lanzar_pdf = lanzar_pdf.clone();
+            action_export_pdf.connect_activate(move |_, _| lanzar_pdf(false));
+        }
+        {
+            let lanzar_pdf = lanzar_pdf.clone();
+            action_preview_pdf.connect_activate(move |_, _| lanzar_pdf(true));
         }
 
         {
