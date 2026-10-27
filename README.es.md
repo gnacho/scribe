@@ -6,6 +6,7 @@
 </p>
 
 <p align="center">
+  <a href="https://flathub.org/apps/io.github.gnacho.Scribe"><img alt="Flathub" src="https://img.shields.io/badge/Flathub-io.github.gnacho.Scribe-4a90d9"></a>
   <a href="https://github.com/gnacho/scribe/releases"><img alt="Release" src="https://img.shields.io/github/v/release/gnacho/scribe"></a>
   <a href="LICENSE"><img alt="License: AGPL-3.0-or-later" src="https://img.shields.io/badge/license-AGPL--3.0--or--later-blue"></a>
 </p>
@@ -26,7 +27,13 @@ usar un motor de navegador.
 
 Míralo en acción en [scribe.cloudless.club](https://scribe.cloudless.club): todas
 las funciones explicadas y funcionando, capturas en claro y oscuro, una demo de
-escritura y la instalación para .deb, .rpm, AppImage y AUR.
+escritura y la instalación para Flathub, .deb, .rpm, AppImage y AUR.
+
+Disponible en Flathub:
+
+```sh
+flatpak install flathub io.github.gnacho.Scribe
+```
 
 ## Por qué existe esto
 
@@ -252,7 +259,21 @@ Fedora:
 sudo dnf install gtk4-devel libadwaita-devel gtksourceview5-devel enchant2-devel glib2-devel
 ```
 
-## Instalar
+## Instalar desde Flathub
+
+Flathub es la forma más sencilla de instalar Scribe, y se actualiza junto con el
+resto del sistema:
+
+```sh
+flatpak install flathub io.github.gnacho.Scribe
+flatpak run io.github.gnacho.Scribe
+```
+
+La ficha está en [flathub.org/apps/io.github.gnacho.Scribe](https://flathub.org/apps/io.github.gnacho.Scribe).
+Hay builds para x86_64 y aarch64. Los paquetes `.deb`, `.rpm` y AppImage se
+siguen generando en cada versión, por si prefieres instalarlos a mano.
+
+## Compilar e instalar en local
 
 Instala en `~/.local` (sin root) con:
 
@@ -292,11 +313,13 @@ por defecto (no guarda preferencias) y avisa por stderr.
 Hay dos manifiestos dirigidos al runtime GNOME 51:
 [packaging/flatpak](packaging/flatpak) compila desde un commit fijado y es el que
 se envía a Flathub, y [build-aux/flatpak](build-aux/flatpak) compila el
-directorio de trabajo. Los dos son YAML y leen el mismo `cargo-sources.json`,
-generado con
+directorio de trabajo. La ficha publicada vive en
+[flathub/io.github.gnacho.Scribe](https://github.com/flathub/io.github.gnacho.Scribe),
+y ahí se actualiza cada versión. Los dos son YAML, y el `cargo-sources.json` que
+usa `build-aux/flatpak` es un enlace simbólico a la copia canónica de
+`packaging/flatpak/`, generada con
 [flatpak-cargo-generator](https://github.com/flatpak/flatpak-builder-tools/tree/master/cargo)
-a partir del `Cargo.lock` commiteado. La copia canónica vive en
-`packaging/flatpak/`; la de `build-aux/flatpak/` es un enlace simbólico a ella:
+a partir del `Cargo.lock` commiteado:
 
 ```sh
 cargo generate-lockfile
