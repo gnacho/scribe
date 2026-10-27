@@ -624,8 +624,12 @@ fn export_page(settings: &Rc<AppSettings>, apply: &Rc<dyn Fn()>) -> adw::Prefere
             let estilos = estilos.clone();
             let quitar = quitar.clone();
             dialog.open(ventana.as_ref(), gio::Cancellable::NONE, move |resultado| {
-                let Ok(fichero) = resultado else {
-                    return;
+                let fichero = match resultado {
+                    Ok(fichero) => fichero,
+                    Err(error) => {
+                        eprintln!("No se pudo elegir la hoja de estilo: {error}");
+                        return;
+                    }
                 };
                 let Some(ruta) = fichero.path() else {
                     return;
