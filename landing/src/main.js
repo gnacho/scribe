@@ -1,4 +1,4 @@
-import { currentLanguage, setLanguage, t, translatePage } from './i18n.js';
+import { currentLanguage, setLanguage, t, translatePage } from './i18n.js?v=20261027a';
 
 const root = document.documentElement;
 const themeButton = document.querySelector('.theme-toggle');
@@ -130,36 +130,59 @@ featureTabs.forEach((tab, index) => {
 });
 
 const formats = {
+  flathub: {
+    description: 'Para cualquier distribución, con actualizaciones automáticas junto al sistema.',
+    descriptionEn: 'For any distribution, updating together with the rest of your system.',
+    code: 'flatpak install flathub io.github.gnacho.Scribe\nflatpak run io.github.gnacho.Scribe',
+    link: 'https://flathub.org/apps/io.github.gnacho.Scribe',
+    linkText: 'Ver en Flathub',
+    linkTextEn: 'View on Flathub'
+  },
   deb: {
     description: 'Para Debian, Ubuntu y derivados. Descarga e instala con apt.',
     descriptionEn: 'For Debian, Ubuntu and derivatives. Download and install with apt.',
-    code: 'wget https://github.com/gnacho/scribe/releases/download/v<version>/scribe_<version>-1_amd64.deb\nsudo apt install ./scribe_<version>-1_amd64.deb'
+    code: 'wget https://github.com/gnacho/scribe/releases/download/v<version>/scribe_<version>-1_amd64.deb\nsudo apt install ./scribe_<version>-1_amd64.deb',
+    link: 'https://github.com/gnacho/scribe/releases/latest',
+    linkText: 'Descargar desde GitHub',
+    linkTextEn: 'Download from GitHub'
   },
   rpm: {
     description: 'Para Fedora y derivados. Descarga e instala con dnf.',
     descriptionEn: 'For Fedora and derivatives. Download and install with dnf.',
-    code: 'wget https://github.com/gnacho/scribe/releases/download/v<version>/scribe-<version>-1.x86_64.rpm\nsudo dnf install ./scribe-<version>-1.x86_64.rpm'
+    code: 'wget https://github.com/gnacho/scribe/releases/download/v<version>/scribe-<version>-1.x86_64.rpm\nsudo dnf install ./scribe-<version>-1.x86_64.rpm',
+    link: 'https://github.com/gnacho/scribe/releases/latest',
+    linkText: 'Descargar desde GitHub',
+    linkTextEn: 'Download from GitHub'
   },
   appimage: {
     description: 'Un único archivo, sin instalación. Descarga, da permisos y abre.',
     descriptionEn: 'A single file, no installation. Download, make it executable and open.',
-    code: 'wget https://github.com/gnacho/scribe/releases/download/v<version>/Scribe-<version>-x86_64.AppImage\nchmod +x Scribe-<version>-x86_64.AppImage\n./Scribe-<version>-x86_64.AppImage'
+    code: 'wget https://github.com/gnacho/scribe/releases/download/v<version>/Scribe-<version>-x86_64.AppImage\nchmod +x Scribe-<version>-x86_64.AppImage\n./Scribe-<version>-x86_64.AppImage',
+    link: 'https://github.com/gnacho/scribe/releases/latest',
+    linkText: 'Descargar desde GitHub',
+    linkTextEn: 'Download from GitHub'
   },
   aur: {
     description: 'Para Arch Linux, disponible desde AUR con tu helper habitual.',
     descriptionEn: 'For Arch Linux, available from AUR with your usual helper.',
-    code: 'yay -S scribe-bin'
+    code: 'yay -S scribe-bin',
+    link: 'https://aur.archlinux.org/packages/scribe-bin',
+    linkText: 'Ver en AUR',
+    linkTextEn: 'View on AUR'
   }
 };
 
 const description = document.querySelector('#install-description');
 const code = document.querySelector('#install-code');
+const installDownload = document.querySelector('#install-download');
 const tabs = document.querySelectorAll('.install-tabs button');
 function updateInstall(tab) {
   tabs.forEach(item => item.setAttribute('aria-selected', String(item === tab)));
   const format = formats[tab.dataset.format];
   description.textContent = currentLanguage === 'en' ? format.descriptionEn : format.description;
   code.textContent = format.code;
+  installDownload.href = format.link;
+  installDownload.innerHTML = `${currentLanguage === 'en' ? format.linkTextEn : format.linkText} <span>↗</span>`;
 }
 tabs.forEach(tab => tab.addEventListener('click', () => updateInstall(tab)));
 
@@ -182,21 +205,110 @@ document.querySelector('.copy-button').addEventListener('click', async () => {
   toastTimer = setTimeout(() => toast.classList.remove('visible'), 2600);
 });
 
-const typedText = document.querySelector('#typed-text');
-let typingTimer;
-function typeDemo() {
-  const phrase = currentLanguage === 'en' ? 'And keep writing.' : 'Y seguir escribiendo.';
-  clearInterval(typingTimer);
+const demoContent = document.querySelector('#demo-content');
+const DEMO_PAUSE = 2000;
+let demoRun = 0;
+let demoHasStarted = false;
+let demoStartTimer;
+let demoLoopTimer;
+let demoCompleted = false;
+let demoHeroVisible = false;
+
+function getDemoSteps() {
+  if (currentLanguage === 'en') return [
+    { raw: '# Field journal', html: '<h2 class="demo-rendered">Field journal</h2>' },
+    { raw: 'The fog has not lifted yet. I write slowly, **as the text finds its shape**.', html: '<p class="doc-lead demo-rendered">The fog has not lifted yet. I write slowly, <strong>as the text finds its shape</strong>.</p>' },
+    { raw: '## The trail', html: '<h3 class="demo-rendered">The trail</h3>' },
+    { raw: 'Two things worth remembering:', html: '<p>Two things worth remembering:</p>', plain: true },
+    { raw: '- The trail is marked again.', html: '<ul class="demo-rendered"><li>The trail is marked again.</li></ul>' },
+    { raw: '- Bring gloves next time.', html: '<li class="demo-rendered">Bring gloves next time.</li>', append: 'ul' },
+    { raw: '> Clarity is not adding more.', html: '<blockquote class="demo-rendered">Clarity is not adding more.</blockquote>' },
+    { raw: '> It is removing everything in the way.', html: '<br><span class="demo-rendered">It is removing everything in the way.</span>', append: 'blockquote' },
+    { raw: '*And keep writing.*', html: '<div class="typing-line demo-rendered"><em>And keep writing.</em><span class="caret" aria-hidden="true"></span></div>' }
+  ];
+  return [
+    { raw: '# Cuaderno de campo', html: '<h2 class="demo-rendered">Cuaderno de campo</h2>' },
+    { raw: 'La niebla todavía no se ha levantado. Escribo despacio, **mientras el texto encuentra su forma**.', html: '<p class="doc-lead demo-rendered">La niebla todavía no se ha levantado. Escribo despacio, <strong>mientras el texto encuentra su forma</strong>.</p>' },
+    { raw: '## El sendero', html: '<h3 class="demo-rendered">El sendero</h3>' },
+    { raw: 'Dos cosas que merece la pena recordar:', html: '<p>Dos cosas que merece la pena recordar:</p>', plain: true },
+    { raw: '- El camino vuelve a estar señalizado.', html: '<ul class="demo-rendered"><li>El camino vuelve a estar señalizado.</li></ul>' },
+    { raw: '- Traer guantes la próxima vez.', html: '<li class="demo-rendered">Traer guantes la próxima vez.</li>', append: 'ul' },
+    { raw: '> La claridad no es añadir más.', html: '<blockquote class="demo-rendered">La claridad no es añadir más.</blockquote>' },
+    { raw: '> Es quitar todo lo que estorba.', html: '<br><span class="demo-rendered">Es quitar todo lo que estorba.</span>', append: 'blockquote' },
+    { raw: '*Y seguir escribiendo.*', html: '<div class="typing-line demo-rendered"><em>Y seguir escribiendo.</em><span class="caret" aria-hidden="true"></span></div>' }
+  ];
+}
+
+function appendRenderedStep(step) {
+  if (step.append) {
+    const target = demoContent.querySelector(`${step.append}:last-of-type`);
+    target.insertAdjacentHTML('beforeend', step.html);
+  } else {
+    demoContent.insertAdjacentHTML('beforeend', step.html);
+  }
+}
+
+function renderStaticDemo() {
+  demoContent.innerHTML = '';
+  getDemoSteps().forEach(appendRenderedStep);
+}
+
+function demoWait(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+function scheduleDemoRestart(run) {
+  clearTimeout(demoLoopTimer);
+  if (run !== demoRun || !demoHeroVisible || document.visibilityState !== 'visible') return;
+  demoLoopTimer = setTimeout(() => {
+    if (run !== demoRun || !demoHeroVisible || document.visibilityState !== 'visible') return;
+    typeDemo();
+  }, DEMO_PAUSE);
+}
+
+async function typeDemo() {
+  demoHasStarted = true;
+  demoCompleted = false;
+  clearTimeout(demoStartTimer);
+  clearTimeout(demoLoopTimer);
+  const run = ++demoRun;
   if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
-    typedText.textContent = phrase;
+    renderStaticDemo();
     return;
   }
-  typedText.textContent = '';
-  let index = 0;
-  typingTimer = setInterval(() => {
-    typedText.textContent = phrase.slice(0, ++index);
-    if (index >= phrase.length) clearInterval(typingTimer);
-  }, 75);
+  demoContent.innerHTML = '';
+  for (const step of getDemoSteps()) {
+    if (run !== demoRun) return;
+    const rawLine = document.createElement('div');
+    rawLine.className = 'demo-raw';
+    if (step.plain) rawLine.classList.add('demo-plain');
+    const rawText = document.createElement('span');
+    const caret = document.createElement('span');
+    caret.className = 'demo-caret';
+    caret.setAttribute('aria-hidden', 'true');
+    rawLine.append(rawText, caret);
+    demoContent.appendChild(rawLine);
+    for (let index = 1; index <= step.raw.length; index++) {
+      if (run !== demoRun) return;
+      rawText.textContent = step.raw.slice(0, index);
+      await demoWait(24);
+    }
+    await demoWait(180);
+    if (run !== demoRun) return;
+    if (step.plain) {
+      caret.remove();
+      rawLine.classList.remove('demo-raw', 'demo-plain');
+      rawLine.classList.add('demo-plain-done');
+      await demoWait(260);
+      continue;
+    }
+    rawLine.remove();
+    appendRenderedStep(step);
+    await demoWait(260);
+  }
+  if (run !== demoRun) return;
+  demoCompleted = true;
+  scheduleDemoRestart(run);
 }
 document.querySelector('.replay-button').addEventListener('click', typeDemo);
 document.querySelector('.demo-open').addEventListener('click', () => {
@@ -207,7 +319,7 @@ document.querySelector('.demo-open').addEventListener('click', () => {
 function refreshLocalizedContent() {
   selectFeature(document.querySelector('.feature-tabs button[aria-selected="true"]'));
   updateInstall(document.querySelector('.install-tabs button[aria-selected="true"]'));
-  typedText.textContent = currentLanguage === 'en' ? 'And keep writing.' : 'Y seguir escribiendo.';
+  renderStaticDemo();
 }
 
 document.querySelector('.language-toggle').addEventListener('click', () => {
@@ -218,6 +330,25 @@ document.querySelector('.language-toggle').addEventListener('click', () => {
 
 setLanguage(currentLanguage);
 refreshLocalizedContent();
+
 if (!window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
-  setTimeout(typeDemo, 900);
+  const maybeStartDemo = () => {
+    if (demoHasStarted || !demoHeroVisible || document.visibilityState !== 'visible') return;
+    clearTimeout(demoStartTimer);
+    demoStartTimer = setTimeout(() => {
+      if (!demoHasStarted && demoHeroVisible && document.visibilityState === 'visible') typeDemo();
+    }, 1400);
+  };
+  const heroObserver = new IntersectionObserver(entries => {
+    demoHeroVisible = entries[0].isIntersecting;
+    if (!demoHeroVisible) return;
+    if (demoCompleted) scheduleDemoRestart(demoRun);
+    else maybeStartDemo();
+  }, { threshold: 0.35 });
+  heroObserver.observe(document.querySelector('.hero-product'));
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState !== 'visible') return;
+    if (demoCompleted) scheduleDemoRestart(demoRun);
+    else maybeStartDemo();
+  });
 }
