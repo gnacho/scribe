@@ -5,8 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="description" content="Scribe es un editor Markdown nativo para Linux. Software libre AGPL-3, sin telemetría, cuentas ni nube obligatoria." />
   <title>Scribe — Escribe. Ya está maquetado.</title>
-  <link rel="stylesheet" href="/src/fonts.css" />
-  <link rel="stylesheet" href="/src/style.css" />
+  <link rel="stylesheet" href="/src/fonts.css?v=20261027a" />
+  <link rel="stylesheet" href="/src/style.css?v=20261027a" />
   <link rel="canonical" href="https://scribe.cloudless.club/" />
   <link rel="icon" href="/assets/app-icon.svg" type="image/svg+xml" />
   <link rel="icon" href="/assets/favicon.png" type="image/png" sizes="64x64" />
@@ -24,7 +24,7 @@
   <meta name="twitter:title" content="Scribe - Escribe. Ya está maquetado." />
   <meta name="twitter:description" content="Scribe es un editor Markdown nativo para Linux. Software libre AGPL-3, sin telemetría, cuentas ni nube obligatoria." />
   <meta name="twitter:image" content="https://scribe.cloudless.club/assets/og.png" />
-  <script type="application/ld+json">{"@context":"https://schema.org","@type":"SoftwareApplication","name":"Scribe","applicationCategory":"TextEditor","operatingSystem":"Linux","url":"https://scribe.cloudless.club/","downloadUrl":"https://github.com/gnacho/scribe/releases/latest","license":"https://www.gnu.org/licenses/agpl-3.0.html","offers":{"@type":"Offer","price":"0","priceCurrency":"EUR"},"description":"Scribe es un editor Markdown nativo para Linux. Software libre AGPL-3, sin telemetría, cuentas ni nube obligatoria."}</script>
+  <script type="application/ld+json">{"@context":"https://schema.org","@type":"SoftwareApplication","name":"Scribe","applicationCategory":"TextEditor","operatingSystem":"Linux","url":"https://scribe.cloudless.club/","downloadUrl":"https://github.com/gnacho/scribe/releases/latest","installUrl":"https://flathub.org/apps/io.github.gnacho.Scribe","sameAs":["https://flathub.org/apps/io.github.gnacho.Scribe","https://github.com/gnacho/scribe"],"license":"https://www.gnu.org/licenses/agpl-3.0.html","offers":{"@type":"Offer","price":"0","priceCurrency":"EUR"},"description":"Scribe es un editor Markdown nativo para Linux. Software libre AGPL-3, sin telemetría, cuentas ni nube obligatoria."}</script>
   <script defer src="https://stat.domatix.com/script.js" data-website-id="0a831c45-c2e7-4801-b015-f1d050f589e8"></script>
   <script data-goatcounter="https://stats.scribe.cloudless.club/count" async src="https://stats.scribe.cloudless.club/count.js"></script>
 </head>
@@ -48,7 +48,7 @@
       <button class="theme-toggle icon-button" aria-label="Activar tema oscuro" title="Cambiar tema">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20.2 15.1A8.5 8.5 0 0 1 8.9 3.8 8.5 8.5 0 1 0 20.2 15.1Z"/></svg>
       </button>
-      <a class="button button-small" href="https://github.com/gnacho/scribe/releases/latest">Descargar <span aria-hidden="true">↓</span></a>
+      <a class="button button-small" href="#instalar">Descargar <span aria-hidden="true">↓</span></a>
     </div>
   </header>
 
@@ -60,9 +60,9 @@
         <p class="hero-intro">Sin panel de vista previa. Sin cambiar de modo. Scribe convierte el Markdown en una página mientras escribes, justo donde estás escribiendo.</p>
         <div class="hero-actions">
           <a class="button" href="#instalar">Instalar para Linux <span aria-hidden="true">↓</span></a>
+          <a class="text-link" href="https://flathub.org/apps/io.github.gnacho.Scribe">Disponible en Flathub <span aria-hidden="true">↗</span></a>
           <a class="text-link" href="#experiencia">Ver cómo funciona <span aria-hidden="true">↘</span></a>
         </div>
-        <div class="release-meta"><span>v0.3.20</span><span>AGPL-3.0</span><span>Gratis, siempre</span></div>
       </div>
 
       <div class="hero-product" aria-label="Demostración visual del editor Scribe">
@@ -75,13 +75,15 @@
           </div>
           <div class="document">
             <div class="doc-meta">27 OCTUBRE 2026 &nbsp; / &nbsp; NOTAS</div>
-            <h2>Cuaderno de campo</h2>
-            <p class="doc-lead">La niebla todavía no se ha levantado. Escribo despacio, <strong>mientras el texto encuentra su forma</strong>.</p>
-            <h3>El sendero</h3>
-            <p>Dos cosas que merece la pena recordar:</p>
-            <ul><li>El camino vuelve a estar señalizado.</li><li>Traer guantes la próxima vez.</li></ul>
-            <blockquote>La claridad no es añadir más.<br>Es quitar todo lo que estorba.</blockquote>
-            <div class="typing-line"><span id="typed-text">Y seguir escribiendo.</span><span class="caret" aria-hidden="true"></span></div>
+            <div id="demo-content" aria-label="Demostración de Markdown convirtiéndose en formato">
+              <h2>Cuaderno de campo</h2>
+              <p class="doc-lead">La niebla todavía no se ha levantado. Escribo despacio, <strong>mientras el texto encuentra su forma</strong>.</p>
+              <h3>El sendero</h3>
+              <p>Dos cosas que merece la pena recordar:</p>
+              <ul><li>El camino vuelve a estar señalizado.</li><li>Traer guantes la próxima vez.</li></ul>
+              <blockquote>La claridad no es añadir más.<br>Es quitar todo lo que estorba.</blockquote>
+              <div class="typing-line"><em>Y seguir escribiendo.</em><span class="caret" aria-hidden="true"></span></div>
+            </div>
           </div>
           <div class="window-status"><span>Markdown</span><span>142 palabras</span><span class="status-native"><i></i> Nativo</span></div>
         </div>
@@ -91,7 +93,7 @@
 
     <section class="proof-strip" aria-label="Datos principales">
       <div><strong>AGPL-3</strong><span>Software libre</span></div>
-      <div><strong>0</strong><span>Telemetría</span></div>
+      <div><strong>0%</strong><span>Sin telemetría, sin cuentas, ni email, ni nube. Totalmente local.</span></div>
       <div><strong>100%</strong><span>Gratis, ahora y siempre</span></div>
       <div class="proof-gnome"><strong>GNOME</strong><p>Hecho con Rust, GTK4 y libadwaita.<br>Como debe sentirse una app de Linux.</p></div>
     </section>
@@ -174,16 +176,20 @@
       </div>
       <div class="install-panel">
         <div class="install-tabs" role="tablist" aria-label="Formatos de instalación">
-          <button role="tab" aria-selected="true" data-format="deb">.deb</button>
+          <button role="tab" aria-selected="true" data-format="flathub">Flathub</button>
+          <button role="tab" aria-selected="false" data-format="deb">.deb</button>
           <button role="tab" aria-selected="false" data-format="rpm">.rpm</button>
           <button role="tab" aria-selected="false" data-format="appimage">AppImage</button>
           <button role="tab" aria-selected="false" data-format="aur">AUR</button>
         </div>
         <div class="install-content">
-          <p id="install-description" data-i18n-skip>Para Debian, Ubuntu y derivados. Descarga e instala con apt.</p>
-          <div class="code-block"><pre><code id="install-code">wget https://github.com/gnacho/scribe/releases/download/v&lt;version&gt;/scribe_&lt;version&gt;-1_amd64.deb
-sudo apt install ./scribe_&lt;version&gt;-1_amd64.deb</code></pre><button class="copy-button" aria-label="Copiar comandos de instalación">Copiar</button></div>
-          <a id="install-download" class="text-link" href="https://github.com/gnacho/scribe/releases/latest">Descargar última versión <span>↗</span></a>
+          <p id="install-description" data-i18n-skip>Para cualquier distribución, con actualizaciones automáticas junto al sistema.</p>
+          <div class="code-block"><pre><code id="install-code">flatpak install flathub io.github.gnacho.Scribe
+flatpak run io.github.gnacho.Scribe</code></pre></div>
+          <div class="install-foot">
+            <button class="copy-button" aria-label="Copiar comandos de instalación">Copiar</button>
+            <a id="install-download" class="text-link" href="https://flathub.org/apps/io.github.gnacho.Scribe">Ver en Flathub <span>↗</span></a>
+          </div>
         </div>
       </div>
     </section>
@@ -191,7 +197,7 @@ sudo apt install ./scribe_&lt;version&gt;-1_amd64.deb</code></pre><button class=
     <section class="story section" id="historia">
       <div class="story-mark" aria-hidden="true">“</div>
       <div class="story-copy"><p class="section-label">Por qué existe</p><blockquote>Buscaba un editor que renderizara el texto mientras escribía. En Linux tenía todas las piezas para hacerlo mejor. Así que lo escribí.</blockquote><p>Scribe es un proyecto personal de Nacho, mantenido en su tiempo libre. El código, las versiones y los problemas pendientes están a la vista. Es software libre hoy y seguirá siéndolo mañana.</p><div class="signature">Nacho <span>·</span> <a href="https://github.com/gnacho/scribe">github.com/gnacho/scribe</a></div></div>
-      <div class="story-aside"><span>AGPL-3.0</span><span>v0.3.20 · camino a 1.0</span><a href="https://github.com/gnacho/scribe/issues">Ver issues abiertos ↗</a></div>
+      <div class="story-aside"><span>AGPL-3.0</span><span>camino a 1.0</span><a href="https://github.com/gnacho/scribe/issues">Ver issues abiertos ↗</a></div>
     </section>
 
     <section class="final-cta">
@@ -205,6 +211,6 @@ sudo apt install ./scribe_&lt;version&gt;-1_amd64.deb</code></pre><button class=
 
   <footer><a class="brand footer-brand" href="#inicio">Scribe</a><p>Markdown nativo para GNOME y Linux.</p><div class="footer-links"><a href="https://github.com/gnacho/scribe"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 0 0-3.2 19.5c.5.1.7-.2.7-.5v-1.9c-2.8.6-3.4-1.2-3.4-1.2-.5-1.2-1.1-1.5-1.1-1.5-.9-.6.1-.6.1-.6 1 .1 1.5 1 1.5 1 .9 1.5 2.3 1.1 2.9.8.1-.7.4-1.1.6-1.3-2.2-.3-4.6-1.1-4.6-5 0-1.1.4-2 1-2.7-.1-.3-.4-1.3.1-2.7 0 0 .8-.3 2.8 1a9.4 9.4 0 0 1 5 0c1.9-1.3 2.8-1 2.8-1 .5 1.4.2 2.4.1 2.7.6.7 1 1.6 1 2.7 0 3.9-2.4 4.7-4.6 5 .4.3.7.9.7 1.9V21c0 .3.2.6.7.5A10 10 0 0 0 12 2Z"/></svg>GitHub</a><a href="https://github.com/gnacho/scribe/issues"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v6m0 4v.1"/></svg>Issues</a><a href="https://github.com/gnacho/scribe/releases"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m20 13-7 7-9-9V4h7l9 9Z"/><circle cx="8.5" cy="8.5" r="1"/></svg>Releases</a><a href="https://github.com/gnacho/scribe/blob/master/LICENSE"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v18M5 7h14M7 7l-4 7h8L7 7Zm10 0-4 7h8l-4-7ZM8 21h8"/></svg>AGPL-3.0</a></div><small>Analítica sin cookies, sin anuncios ni perfiles.</small></footer>
   <div class="toast" role="status" aria-live="polite">Comandos copiados</div>
-  <script type="module" src="/src/main.js"></script>
+  <script type="module" src="/src/main.js?v=20261027a"></script>
 </body>
 </html>
