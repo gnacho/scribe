@@ -163,5 +163,9 @@
       <default>'custom'</default>
       <summary>PDF export page template</summary>
     </key>
+    <key name="export-css-path" type="s">
+      <default>''</default>
+      <summary>Path of the user stylesheet applied on top of the page template</summary>
+    </key>
   </schema>
 </schemalist>

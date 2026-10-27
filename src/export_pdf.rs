@@ -48,6 +48,7 @@ use std::rc::Rc;
 use gtk4::cairo;
 use gtk4::prelude::*;
 
+use crate::export_css::Ajustes;
 use crate::markdown_render::{analyze, Analysis, Ornament, SpanKind};
 use crate::settings::{
     AppSettings, ExportColorScheme, ExportMonoFont, ExportOrientation, ExportPageSize,
@@ -102,6 +103,8 @@ pub struct ExportConfig {
     pub papel: ExportPageSize,
     pub orientacion: ExportOrientation,
     pub template: ExportTemplate,
+    /// Hoja de estilo del usuario, aplicada encima de la plantilla.
+    pub css_path: Option<std::path::PathBuf>,
 }
 
 impl ExportConfig {
@@ -116,6 +119,7 @@ impl ExportConfig {
             papel: s.export_page_size(),
             orientacion: s.export_orientation(),
             template: s.export_template(),
+            css_path: s.export_css_path(),
         }
     }
 
@@ -298,6 +302,95 @@ impl Plantilla {
         } else {
             BANDA_ADORNO
         }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Hoja de estilo del usuario
+// ---------------------------------------------------------------------------
+
+/// Carga la hoja de estilo elegida. Un fichero ilegible no aborta la
+/// exportación: se avisa por stderr y se sigue con la plantilla.
+fn cargar_hoja(config: &ExportConfig) -> Option<Ajustes> {
+    let ruta = config.css_path.as_ref()?;
+    match crate::export_css::cargar(ruta) {
+        Ok(ajustes) => {
+            if !ajustes.ignoradas.is_empty() {
+                eprintln!(
+                    "hoja de estilo {}: propiedades sin efecto en el export: {}",
+                    ruta.display(),
+                    ajustes.ignoradas.join(", ")
+                );
+            }
+            if ajustes.es_vacio() {
+                None
+            } else {
+                Some(ajustes)
+            }
+        }
+        Err(e) => {
+            eprintln!("no se pudo leer la hoja de estilo {}: {e}", ruta.display());
+            None
+        }
+    }
+}
+
+/// Aplica encima de la plantilla lo que impone la hoja de estilo. Lo que la
+/// hoja no menciona se queda como estaba.
+fn aplicar_hoja(
+    ajustes: &Ajustes,
+    plantilla: &mut Plantilla,
+    config: &mut ExportConfig,
+    paleta: &mut Paleta,
+) {
+    if let Some(interlinea) = ajustes.interlinea {
+        plantilla.interlinea = interlinea;
+    }
+    if let Some(espacio) = ajustes.espacio_bloque {
+        plantilla.espacio_bloque = espacio;
+    }
+    if let Some(familia) = ajustes.familia {
+        config.familia_cuerpo = familia;
+    }
+    if let Some(fuente) = ajustes.fuente_mono {
+        config.fuente_mono = fuente;
+    }
+    if let Some(tamano) = ajustes.tamano_cuerpo {
+        config.tamano_cuerpo = tamano;
+    }
+    // El tamaño absoluto de cada cabecera se convierte en escala respecto al
+    // cuerpo ya resuelto.
+    for nivel in 1..=4usize {
+        if let Some(tamano) = ajustes.tamanos_cabecera[nivel] {
+            if config.tamano_cuerpo > 0.0 {
+                plantilla.escala[nivel] = tamano / config.tamano_cuerpo;
+            }
+        }
+    }
+    let c = ajustes.colores;
+    if let Some(v) = c.fondo {
+        paleta.fondo = v;
+    }
+    if let Some(v) = c.texto {
+        paleta.texto = v;
+    }
+    if let Some(v) = c.cabecera {
+        paleta.cabecera = v;
+    }
+    if let Some(v) = c.codigo {
+        paleta.codigo = v;
+    }
+    if let Some(v) = c.codigo_fondo {
+        paleta.codigo_fondo = v;
+    }
+    if let Some(v) = c.cita {
+        paleta.cita = v;
+    }
+    if let Some(v) = c.enlace {
+        paleta.enlace = v;
+    }
+    if let Some(v) = c.tabla_fondo {
+        paleta.tabla_fondo = v;
     }
 }
 
@@ -1800,8 +1893,13 @@ pub fn crear_operacion(
     titulo: &str,
     sistema_oscuro: bool,
 ) -> gtk4::PrintOperation {
-    let plantilla = Plantilla::desde(config);
-    let config = config.con_plantilla(&plantilla);
+    let mut plantilla = Plantilla::desde(config);
+    let mut config = config.con_plantilla(&plantilla);
+    let mut paleta = resolver_paleta(config.esquema, sistema_oscuro);
+    let hoja = cargar_hoja(&config);
+    if let Some(ajustes) = &hoja {
+        aplicar_hoja(ajustes, &mut plantilla, &mut config, &mut paleta);
+    }
 
     let op = gtk4::PrintOperation::new();
     op.set_job_name(titulo);
@@ -1815,6 +1913,21 @@ pub fn crear_operacion(
         setup.set_left_margin(m.izquierda, gtk4::Unit::Points);
         setup.set_right_margin(m.derecha, gtk4::Unit::Points);
     }
+    if let Some(ajustes) = &hoja {
+        let m = ajustes.margenes;
+        if let Some(v) = m.superior {
+            setup.set_top_margin(v, gtk4::Unit::Points);
+        }
+        if let Some(v) = m.inferior {
+            setup.set_bottom_margin(v, gtk4::Unit::Points);
+        }
+        if let Some(v) = m.izquierda {
+            setup.set_left_margin(v, gtk4::Unit::Points);
+        }
+        if let Some(v) = m.derecha {
+            setup.set_right_margin(v, gtk4::Unit::Points);
+        }
+    }
     setup.set_orientation(match config.orientacion {
         ExportOrientation::Portrait => gtk4::PageOrientation::Portrait,
         ExportOrientation::Landscape => gtk4::PageOrientation::Landscape,
@@ -1826,9 +1939,15 @@ pub fn crear_operacion(
     if plantilla.bloque_titulo && !titulo.trim().is_empty() {
         iniciales.insert(0, bloque_titulo(titulo));
     }
+    // Márgenes efectivos: el contexto de `draw_page` empieza en el área
+    // imprimible, así que hacen falta para pintar el fondo de la hoja entera.
+    let margen_sup = setup.top_margin(gtk4::Unit::Points);
+    let margen_inf = setup.bottom_margin(gtk4::Unit::Points);
+    let margen_izq = setup.left_margin(gtk4::Unit::Points);
+    let margen_der = setup.right_margin(gtk4::Unit::Points);
+
     let bloques: Rc<RefCell<Vec<Bloque>>> = Rc::new(RefCell::new(iniciales));
     let paginas: Rc<RefCell<Vec<Pagina>>> = Rc::new(RefCell::new(Vec::new()));
-    let paleta = resolver_paleta(config.esquema, sistema_oscuro);
     let banda_sup = plantilla.banda_superior();
     let banda_inf = plantilla.banda_inferior();
     let titulo_adorno = titulo.to_string();
@@ -1861,10 +1980,19 @@ pub fn crear_operacion(
             let ancho = ctx.width();
             let alto_pagina = ctx.height();
 
-            // Fondo de la página.
+            // Fondo de la hoja completa, márgenes incluidos: el contexto de
+            // `draw_page` solo cubre el área imprimible.
+            let _ = cr.save();
+            cr.translate(-margen_izq, -margen_sup);
             cr.set_source_rgb(paleta.fondo.0, paleta.fondo.1, paleta.fondo.2);
-            cr.rectangle(0.0, 0.0, ancho, alto_pagina);
+            cr.rectangle(
+                0.0,
+                0.0,
+                ancho + margen_izq + margen_der,
+                alto_pagina + margen_sup + margen_inf,
+            );
             let _ = cr.fill();
+            let _ = cr.restore();
 
             let paginas = paginas.borrow();
             let bloques = bloques.borrow();
@@ -2212,6 +2340,7 @@ mod tests {
             papel: ExportPageSize::A4,
             orientacion: ExportOrientation::Portrait,
             template,
+            css_path: None,
         }
     }
 
@@ -2308,5 +2437,53 @@ mod tests {
         let plantilla = Plantilla::desde(&config_de(ExportTemplate::Article));
         assert_eq!(plantilla.escala_cabecera(0), 1.0);
         assert_eq!(plantilla.escala_cabecera(9), 1.0);
+    }
+
+    #[test]
+    fn pdf_la_hoja_de_estilo_pisa_a_la_plantilla() {
+        let config = config_de(ExportTemplate::Manuscript);
+        let mut plantilla = Plantilla::desde(&config);
+        let mut config = config.con_plantilla(&plantilla);
+        let mut paleta = resolver_paleta(config.esquema, false);
+        let ajustes = crate::export_css::analizar(
+            "body { font-family: sans-serif; font-size: 10pt; line-height: 1.2; color: #111 }
+             h1 { font-size: 20pt }
+             p { margin-bottom: 6pt }
+             @page { margin: 30pt }",
+        );
+        aplicar_hoja(&ajustes, &mut plantilla, &mut config, &mut paleta);
+        assert_eq!(config.familia_cuerpo, FontFamily::Sans);
+        assert_eq!(config.tamano_cuerpo, 10.0);
+        assert_eq!(plantilla.interlinea, 1.2);
+        assert_eq!(plantilla.espacio_bloque, 6.0);
+        assert_eq!(plantilla.escala_cabecera(1), 2.0);
+        assert_eq!(plantilla.escala_cabecera(2), 1.3);
+        assert_eq!(paleta.texto, (17.0 / 255.0, 17.0 / 255.0, 17.0 / 255.0));
+        assert_eq!(ajustes.margenes.superior, Some(30.0));
+        assert_eq!(ajustes.margenes.izquierda, Some(30.0));
+    }
+
+    #[test]
+    fn pdf_una_hoja_que_no_se_puede_leer_no_cambia_el_export() {
+        let mut config = config_de(ExportTemplate::Article);
+        config.css_path = Some(std::path::PathBuf::from("/no/existe/estilo.css"));
+        assert!(cargar_hoja(&config).is_none());
+        config.css_path = None;
+        assert!(cargar_hoja(&config).is_none());
+    }
+
+    #[test]
+    fn pdf_una_hoja_vacia_equivale_a_no_tenerla() {
+        let dir = std::env::temp_dir().join("scribe-css-vacia");
+        let _ = std::fs::create_dir_all(&dir);
+        let ruta = dir.join("vacia.css");
+        std::fs::write(&ruta, "/* nada que aplicar */\nsection { padding: 2pt }\n")
+            .expect("escribir css");
+        let mut config = config_de(ExportTemplate::Article);
+        config.css_path = Some(ruta.clone());
+        assert!(cargar_hoja(&config).is_none());
+        std::fs::write(&ruta, "body { color: black }").expect("escribir css");
+        assert!(cargar_hoja(&config).is_some());
+        let _ = std::fs::remove_file(&ruta);
     }
 }

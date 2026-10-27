@@ -664,4 +664,24 @@ impl AppSettings {
             }
         });
     }
+
+    /// Ruta de la hoja de estilo del usuario. Vacía significa "ninguna".
+    pub fn export_css_path(&self) -> Option<std::path::PathBuf> {
+        let ruta = self.get(String::new(), |s| s.string("export-css-path").to_string());
+        if ruta.trim().is_empty() {
+            None
+        } else {
+            Some(std::path::PathBuf::from(ruta))
+        }
+    }
+    pub fn set_export_css_path(&self, ruta: Option<&std::path::Path>) {
+        let valor = ruta
+            .map(|r| r.to_string_lossy().into_owned())
+            .unwrap_or_default();
+        self.set(|s| {
+            if let Err(e) = s.set_string("export-css-path", &valor) {
+                log_set_error("export-css-path", e);
+            }
+        });
+    }
 }

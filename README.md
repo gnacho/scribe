@@ -114,6 +114,14 @@ actually use to draft notes and docs.
   Headings, code blocks, quotes and tables are themed, with separate export
   settings (color scheme, fonts, page size and orientation) and careful
   pagination (no orphan headings, `\newpage` support).
+- **Page templates** (Custom, Article, Manuscript, Letter, Compact) group
+  margins, body and code typography, line spacing, heading scale, header and
+  footer and an optional title block. The same template feeds both the exported
+  file and the preview, so what you see is what prints.
+- **Print preview** (menu, next to Export to PDF) renders the real pages through
+  the export pipeline before committing to paper or a file.
+- **Your own stylesheet**: an optional CSS file applies on top of the chosen
+  template (see [Stylesheets](#stylesheets)).
 - **Files**: open, save and save-as with `GtkFileDialog`, atomic writes,
   unsaved-changes warning, configurable autosave.
 - **Sidebar** (F9) with filterable recent files and a navigable outline.
@@ -139,6 +147,39 @@ Two modules, neither depending on application types:
 Markers replaced by an ornament (bullets, `[x]`, `---`, `>`, fences, pipes) are
 shrunk rather than hidden: the tiny glyph stays in GTK's layout, so the
 invisible-text abort path of GNOME/gtk#8346 is unreachable by construction.
+
+## Stylesheets
+
+`Preferences > Export > Stylesheet` loads a CSS file that is applied on top of
+the page template. It is a mapped subset, not a CSS engine: the export paints
+and paginates with cairo, so each declaration is translated into a value the
+layout already understands, and anything outside this table is ignored (the
+export warns once and keeps going).
+
+| Selector | Properties |
+| --- | --- |
+| `@page` | `margin`, `margin-top`, `margin-right`, `margin-bottom`, `margin-left` (`pt`, `mm`, `cm`, `in`, `px`) |
+| `body`, `html`, `:root` | `font-family`, `font-size`, `line-height`, `color`, `background-color`, `margin-bottom`, `--block-spacing` |
+| `p` | `line-height`, `color`, `margin-bottom`, `--block-spacing` |
+| `h1` to `h4` | `font-size`, `color` |
+| `pre`, `code` | `font-family`, `color`, `background-color` |
+| `blockquote`, `a`, `table` | `color`, plus `background-color` on `table` |
+
+When the sheet says nothing about a value, the template keeps its own, and
+removing the file restores the previous output exactly. Example:
+
+```css
+@page { margin: 2cm 2.5cm }
+body {
+  font-family: "Source Serif 4", serif;
+  font-size: 11pt;
+  line-height: 1.6;
+  color: #1a1a1a;
+  --block-spacing: 8pt;
+}
+h1 { font-size: 20pt; color: #003366 }
+pre { background-color: #f5f5f5 }
+```
 
 ## Limitations
 
