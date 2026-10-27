@@ -310,20 +310,20 @@ por defecto (no guarda preferencias) y avisa por stderr.
 
 ## Flatpak
 
-Hay dos manifiestos dirigidos al runtime GNOME 51:
-[packaging/flatpak](packaging/flatpak) compila desde un commit fijado y es el que
-se envía a Flathub, y [build-aux/flatpak](build-aux/flatpak) compila el
-directorio de trabajo. La ficha publicada vive en
+El manifiesto que compila Flathub vive en
 [flathub/io.github.gnacho.Scribe](https://github.com/flathub/io.github.gnacho.Scribe),
-y ahí se actualiza cada versión. Los dos son YAML, y el `cargo-sources.json` que
-usa `build-aux/flatpak` es un enlace simbólico a la copia canónica de
-`packaging/flatpak/`, generada con
+y ahí se actualiza cada versión: ese repositorio es la fuente de verdad y este no
+guarda ninguna copia.
+
+[build-aux/flatpak](build-aux/flatpak) es un manifiesto aparte que compila el
+directorio de trabajo contra el runtime GNOME 51, que es lo que quieres mientras
+trabajas en la aplicación. Su `cargo-sources.json` se genera con
 [flatpak-cargo-generator](https://github.com/flatpak/flatpak-builder-tools/tree/master/cargo)
 a partir del `Cargo.lock` commiteado:
 
 ```sh
 cargo generate-lockfile
-python3 flatpak-cargo-generator.py Cargo.lock -o packaging/flatpak/cargo-sources.json
+python3 flatpak-cargo-generator.py Cargo.lock -o build-aux/flatpak/cargo-sources.json
 cd build-aux/flatpak
 flatpak-builder --user --install build-dir io.github.gnacho.Scribe.yml --force-clean
 ```
