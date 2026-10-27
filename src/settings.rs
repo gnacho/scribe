@@ -294,8 +294,6 @@ pub enum ExportTheme {
     HighContrast,
     Technical,
     Academic,
-    /// La hoja de estilo que elija el usuario en disco.
-    CustomFile,
 }
 
 impl ExportTheme {
@@ -305,7 +303,6 @@ impl ExportTheme {
             "high-contrast" => Self::HighContrast,
             "technical" => Self::Technical,
             "academic" => Self::Academic,
-            "custom-file" => Self::CustomFile,
             _ => Self::None,
         }
     }
@@ -317,7 +314,6 @@ impl ExportTheme {
             Self::HighContrast => "high-contrast",
             Self::Technical => "technical",
             Self::Academic => "academic",
-            Self::CustomFile => "custom-file",
         }
     }
 
@@ -328,7 +324,6 @@ impl ExportTheme {
             Self::HighContrast => 2,
             Self::Technical => 3,
             Self::Academic => 4,
-            Self::CustomFile => 5,
         }
     }
 
@@ -338,7 +333,6 @@ impl ExportTheme {
             2 => Self::HighContrast,
             3 => Self::Technical,
             4 => Self::Academic,
-            5 => Self::CustomFile,
             _ => Self::None,
         }
     }

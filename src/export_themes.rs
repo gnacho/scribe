@@ -12,7 +12,7 @@ use crate::settings::ExportTheme;
 /// Hoja de estilo empotrada de un tema, si lo tiene.
 pub fn hoja(tema: ExportTheme) -> Option<&'static str> {
     match tema {
-        ExportTheme::None | ExportTheme::CustomFile => None,
+        ExportTheme::None => None,
         ExportTheme::Sepia => Some(include_str!("../data/themes/sepia.css")),
         ExportTheme::HighContrast => Some(include_str!("../data/themes/high-contrast.css")),
         ExportTheme::Technical => Some(include_str!("../data/themes/technical.css")),
@@ -37,9 +37,8 @@ mod tests {
     ];
 
     #[test]
-    fn tema_none_y_fichero_no_traen_hoja() {
+    fn el_tema_none_no_trae_hoja() {
         assert!(hoja(ExportTheme::None).is_none());
-        assert!(hoja(ExportTheme::CustomFile).is_none());
         assert!(ajustes(ExportTheme::None).is_none());
     }
 

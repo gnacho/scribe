@@ -6,7 +6,6 @@ use gio::prelude::*;
 use gtk4::prelude::*;
 use libadwaita as adw;
 use libadwaita::prelude::*;
-use std::cell::Cell;
 use std::rc::Rc;
 
 use crate::settings::{
@@ -396,22 +395,19 @@ fn editor_page(settings: &Rc<AppSettings>, apply: &Rc<dyn Fn()>) -> adw::Prefere
 }
 
 /// Descripción de la hoja de estilo elegida para la fila de preferencias.
-/// Subtítulo de la fila de tema: la ruta cuando se usa un fichero propio y una
-/// descripción del efecto en el resto de los casos.
-fn describir_tema(settings: &AppSettings) -> String {
-    if settings.export_theme() == ExportTheme::CustomFile {
-        match settings.export_css_path() {
-            Some(ruta) => ruta.display().to_string(),
-            None => gettext("Choose a stylesheet"),
-        }
-    } else {
-        gettext("Typography and colours on top of the template")
+/// Texto de la fila de hoja de estilo: la ruta elegida o el aviso de que no
+/// hay ninguna.
+fn describir_hoja(settings: &AppSettings) -> String {
+    match settings.export_css_path() {
+        Some(ruta) => ruta.display().to_string(),
+        None => gettext("None"),
     }
 }
 
-/// Refresca la fila del tema tras elegir o cambiar la hoja de estilo.
-fn refrescar_tema(fila: &adw::ComboRow, settings: &AppSettings) {
-    fila.set_subtitle(&describir_tema(settings));
+/// Refresca la fila de la hoja de estilo tras elegirla o quitarla.
+fn refrescar_hoja(fila: &adw::ActionRow, quitar: &gtk4::Button, settings: &AppSettings) {
+    fila.set_subtitle(&describir_hoja(settings));
+    quitar.set_sensitive(settings.export_css_path().is_some());
 }
 
 fn export_page(settings: &Rc<AppSettings>, apply: &Rc<dyn Fn()>) -> adw::PreferencesPage {
@@ -491,17 +487,32 @@ fn export_page(settings: &Rc<AppSettings>, apply: &Rc<dyn Fn()>) -> adw::Prefere
 
     let tema = combo_i18n(
         &gettext("Theme"),
-        &describir_tema(settings),
+        &gettext("Typography and colours on top of the template"),
         &[
             gettext("None"),
             gettext("Sepia"),
             gettext("High contrast"),
             gettext("Technical"),
             gettext("Academic"),
-            gettext("Custom file…"),
         ],
         settings.export_theme().index(),
     );
+    let estilos = adw::ActionRow::builder()
+        .title(gettext("Stylesheet"))
+        .subtitle(describir_hoja(settings))
+        .build();
+    let cargar_estilos = gtk4::Button::builder()
+        .label(gettext("Load…"))
+        .valign(gtk4::Align::Center)
+        .build();
+    let quitar_estilos = gtk4::Button::builder()
+        .icon_name("edit-clear-symbolic")
+        .tooltip_text(gettext("Use the template as is"))
+        .valign(gtk4::Align::Center)
+        .build();
+    quitar_estilos.set_sensitive(settings.export_css_path().is_some());
+    estilos.add_suffix(&cargar_estilos);
+    estilos.add_suffix(&quitar_estilos);
 
     // Los ajustes granulares solo mandan con la plantilla Custom.
     let granulares: Vec<gtk4::Widget> = vec![
@@ -520,6 +531,7 @@ fn export_page(settings: &Rc<AppSettings>, apply: &Rc<dyn Fn()>) -> adw::Prefere
     }
     group.add(&size);
     group.add(&tema);
+    group.add(&estilos);
     page.add(&group);
 
     {
@@ -586,33 +598,18 @@ fn export_page(settings: &Rc<AppSettings>, apply: &Rc<dyn Fn()>) -> adw::Prefere
     {
         let settings = settings.clone();
         let apply = apply.clone();
-        let tema = tema.clone();
-        // La selección anterior, para volver a ella si el diálogo se cancela.
-        let anterior = Rc::new(Cell::new(settings.export_theme().index()));
-        // `set_selected` vuelve a emitir la señal: este cerrojo evita que la
-        // vuelta atrás se tome por una elección del usuario.
-        let silencio = Rc::new(Cell::new(false));
-        tema.connect_selected_notify(move |fila| {
-            if silencio.get() {
-                return;
-            }
-            let elegido = ExportTheme::from_index(fila.selected());
-            if elegido != ExportTheme::CustomFile {
-                settings.set_export_theme(elegido);
-                settings.set_export_css_path(None);
-                refrescar_tema(fila, &settings);
-                anterior.set(elegido.index());
-                apply();
-                return;
-            }
-            // "Custom file…" con un fichero ya elegido no tiene nada que hacer.
-            if settings.export_theme() == ExportTheme::CustomFile
-                && settings.export_css_path().is_some()
-            {
-                refrescar_tema(fila, &settings);
-                return;
-            }
-            let ventana = fila.root().and_then(|r| r.downcast::<gtk4::Window>().ok());
+        tema.connect_selected_notify(move |row| {
+            settings.set_export_theme(ExportTheme::from_index(row.selected()));
+            apply();
+        });
+    }
+    {
+        let settings = settings.clone();
+        let apply = apply.clone();
+        let estilos = estilos.clone();
+        let quitar = quitar_estilos.clone();
+        cargar_estilos.connect_clicked(move |boton| {
+            let ventana = boton.root().and_then(|r| r.downcast::<gtk4::Window>().ok());
             let filtro = gtk4::FileFilter::new();
             filtro.set_name(Some(&gettext("CSS stylesheets")));
             filtro.add_suffix("css");
@@ -624,26 +621,30 @@ fn export_page(settings: &Rc<AppSettings>, apply: &Rc<dyn Fn()>) -> adw::Prefere
                 .build();
             let settings = settings.clone();
             let apply = apply.clone();
-            let fila = fila.clone();
-            let anterior = anterior.clone();
-            let silencio_dialogo = silencio.clone();
+            let estilos = estilos.clone();
+            let quitar = quitar.clone();
             dialog.open(ventana.as_ref(), gio::Cancellable::NONE, move |resultado| {
-                let ruta = resultado.ok().and_then(|f| f.path());
-                match ruta {
-                    Some(ruta) => {
-                        settings.set_export_css_path(Some(&ruta));
-                        settings.set_export_theme(ExportTheme::CustomFile);
-                        refrescar_tema(&fila, &settings);
-                        anterior.set(ExportTheme::CustomFile.index());
-                        apply();
-                    }
-                    None => {
-                        silencio_dialogo.set(true);
-                        fila.set_selected(anterior.get());
-                        silencio_dialogo.set(false);
-                    }
-                }
+                let Ok(fichero) = resultado else {
+                    return;
+                };
+                let Some(ruta) = fichero.path() else {
+                    return;
+                };
+                settings.set_export_css_path(Some(&ruta));
+                refrescar_hoja(&estilos, &quitar, &settings);
+                apply();
             });
+        });
+    }
+    {
+        let settings = settings.clone();
+        let apply = apply.clone();
+        let estilos = estilos.clone();
+        let fila = quitar_estilos.clone();
+        quitar_estilos.connect_clicked(move |_| {
+            settings.set_export_css_path(None);
+            refrescar_hoja(&estilos, &fila, &settings);
+            apply();
         });
     }
 

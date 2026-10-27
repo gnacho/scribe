@@ -47,7 +47,6 @@
     <value nick="high-contrast" value="2"/>
     <value nick="technical" value="3"/>
     <value nick="academic" value="4"/>
-    <value nick="custom-file" value="5"/>
   </enum>
 
   <schema id="io.github.gnacho.Scribe" path="/io/github/gnacho/Scribe/">
