@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: scribe\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-27 15:54+0100\n"
+"POT-Creation-Date: 2026-10-27 16:20+0100\n"
 "PO-Revision-Date: 2026-09-19 19:58+0200\n"
 "Last-Translator: Automatically generated\n"
 "Language-Team: none\n"
@@ -282,7 +282,7 @@ msgstr "Ctrl+clic para abrir {url}"
 msgid "Appearance"
 msgstr "Apariencia"
 
-#: src/preferences.rs:56 src/preferences.rs:489
+#: src/preferences.rs:56
 msgid "Theme"
 msgstr "Tema"
 
@@ -590,6 +590,10 @@ msgstr "Vertical"
 msgid "Landscape"
 msgstr "Horizontal"
 
+#: src/preferences.rs:489
+msgid "PDF theme"
+msgstr "Tema del PDF"
+
 #: src/preferences.rs:490
 msgid "Typography and colours on top of the template"
 msgstr "Tipografía y colores encima de la plantilla"
@@ -622,11 +626,23 @@ msgstr "Cargar…"
 msgid "Use the template as is"
 msgstr "Usar la plantilla tal cual"
 
-#: src/preferences.rs:614
+#: src/preferences.rs:542
+msgid "Typography and colour"
+msgstr "Tipografía y color"
+
+#: src/preferences.rs:544
+msgid ""
+"A theme changes type and colours on top of the template. Your own stylesheet "
+"is applied last, so it wins over both"
+msgstr ""
+"El tema cambia la tipografía y los colores encima de la plantilla. Tu hoja "
+"de estilo se aplica al final y manda sobre los dos"
+
+#: src/preferences.rs:628
 msgid "CSS stylesheets"
 msgstr "Hojas de estilo CSS"
 
-#: src/preferences.rs:619
+#: src/preferences.rs:633
 msgid "Choose a stylesheet"
 msgstr "Elige una hoja de estilo"
 

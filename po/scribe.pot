@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PACKAGE VERSION\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-27 15:54+0100\n"
+"POT-Creation-Date: 2026-10-27 16:20+0100\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -282,7 +282,7 @@ msgstr ""
 msgid "Appearance"
 msgstr ""
 
-#: src/preferences.rs:56 src/preferences.rs:489
+#: src/preferences.rs:56
 msgid "Theme"
 msgstr ""
 
@@ -586,6 +586,10 @@ msgstr ""
 msgid "Landscape"
 msgstr ""
 
+#: src/preferences.rs:489
+msgid "PDF theme"
+msgstr ""
+
 #: src/preferences.rs:490
 msgid "Typography and colours on top of the template"
 msgstr ""
@@ -618,11 +622,21 @@ msgstr ""
 msgid "Use the template as is"
 msgstr ""
 
-#: src/preferences.rs:614
+#: src/preferences.rs:542
+msgid "Typography and colour"
+msgstr ""
+
+#: src/preferences.rs:544
+msgid ""
+"A theme changes type and colours on top of the template. Your own stylesheet "
+"is applied last, so it wins over both"
+msgstr ""
+
+#: src/preferences.rs:628
 msgid "CSS stylesheets"
 msgstr ""
 
-#: src/preferences.rs:619
+#: src/preferences.rs:633
 msgid "Choose a stylesheet"
 msgstr ""
 

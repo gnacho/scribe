@@ -486,7 +486,7 @@ fn export_page(settings: &Rc<AppSettings>, apply: &Rc<dyn Fn()>) -> adw::Prefere
     );
 
     let tema = combo_i18n(
-        &gettext("Theme"),
+        &gettext("PDF theme"),
         &gettext("Typography and colours on top of the template"),
         &[
             gettext("None"),
@@ -526,13 +526,27 @@ fn export_page(settings: &Rc<AppSettings>, apply: &Rc<dyn Fn()>) -> adw::Prefere
     }
 
     group.add(&template);
-    for row in [&scheme, &family, &mono, &page_size, &orientation] {
+    for row in [
+        page_size.upcast_ref::<gtk4::Widget>(),
+        orientation.upcast_ref::<gtk4::Widget>(),
+        scheme.upcast_ref::<gtk4::Widget>(),
+        family.upcast_ref::<gtk4::Widget>(),
+        size.upcast_ref::<gtk4::Widget>(),
+        mono.upcast_ref::<gtk4::Widget>(),
+    ] {
         group.add(row);
     }
-    group.add(&size);
-    group.add(&tema);
-    group.add(&estilos);
     page.add(&group);
+
+    let grupo_color = adw::PreferencesGroup::builder()
+        .title(gettext("Typography and colour"))
+        .description(gettext(
+            "A theme changes type and colours on top of the template. Your own stylesheet is applied last, so it wins over both",
+        ))
+        .build();
+    grupo_color.add(&tema);
+    grupo_color.add(&estilos);
+    page.add(&grupo_color);
 
     {
         let settings = settings.clone();
