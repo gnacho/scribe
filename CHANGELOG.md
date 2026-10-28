@@ -5,6 +5,21 @@ All notable changes to Scribe will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.35] - 2026-10-28
+
+Thank you [@HelloKolla2004](https://github.com/HelloKolla2004) for the Fedora
+report. The crash notification appeared right after a normal close, which is
+the kind of clue that only comes from watching the app where it fails.
+
+### Fixed
+
+- **Abort when closing the window** (#166): shutting down with the window
+  close button, or with Alt+F4, ended in an abort and, on systems that notify
+  crashes, in a crash dialog right after a clean close. The window cleanup ran
+  while the internal window registry was still borrowed, so the internal panic
+  could not unwind. The previous release fixed the same abort for Ctrl+Q, this
+  one covers the window itself, on any desktop.
+
 ## [0.3.30] - 2026-10-27
 
 Thank you [@HelloKolla2004](https://github.com/HelloKolla2004) for the PDF

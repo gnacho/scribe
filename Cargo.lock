@@ -704,7 +704,7 @@ dependencies = [
 
 [[package]]
 name = "scribe"
-version = "0.3.30"
+version = "0.3.35"
 dependencies = [
  "enchant",
  "gdk-pixbuf",
