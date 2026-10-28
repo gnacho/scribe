@@ -63,6 +63,20 @@ thread_local! {
     static WINDOWS: RefCell<Vec<Rc<ScribeWindow>>> = const { RefCell::new(Vec::new()) };
 }
 
+/// Poda el registro de ventanas sin bloquear si el `RefCell` ya está prestado
+/// (issues #141 y #166). Soltar el último `Rc` de una ventana dispara su
+/// `destroy`, y ese handler vuelve a pedir el registro: dentro de un
+/// `borrow_mut` el reintento paniquea con `RefCell already borrowed`, y un
+/// panic que atraviesa FFI aborta el proceso (SIGABRT al cerrar la ventana).
+/// Si el préstamo está ocupado la poda se deja para la siguiente consulta.
+fn podar_registro(mantener: impl Fn(&Rc<ScribeWindow>) -> bool) {
+    let _ = WINDOWS.try_with(|list| {
+        if let Ok(mut lista) = list.try_borrow_mut() {
+            lista.retain(|w| mantener(w));
+        }
+    });
+}
+
 /// Guarda de «recuperación ya ofrecida»: el diálogo de snapshots pendientes
 /// se muestra una sola vez por proceso, en la primera ventana construida
 /// (aunque luego se abran más ventanas).
@@ -216,10 +230,14 @@ fn main() -> glib::ExitCode {
 
     let code = app.run();
     // Al terminar el bucle se sueltan las ventanas ANTES de que el proceso
-    // entre en los dtors del thread_local WINDOWS (issue #141): si el drop
-    // del registro disparara destroys de ventanas, el handler ya no podria
-    // consultar un TLS en destruccion.
-    WINDOWS.with(|list| list.borrow_mut().clear());
+    // entre en los dtors del thread_local WINDOWS (issue #141), y se sueltan
+    // FUERA del préstamo (issue #166): soltar el último Rc destruye la ventana
+    // y su `destroy` vuelve a pedir el registro. Con `clear()` el drop ocurría
+    // dentro del `borrow_mut` y el reintento abortaba el proceso al cerrar.
+    let ventanas: Vec<Rc<ScribeWindow>> = WINDOWS
+        .try_with(|list| std::mem::take(&mut *list.borrow_mut()))
+        .unwrap_or_default();
+    drop(ventanas);
     code
 }
 
@@ -242,14 +260,11 @@ fn build_window(app: &adw::Application) -> Rc<ScribeWindow> {
     // handler no captura nada: usar `dead` evita un autociclo.
     win.window.connect_destroy(|dead| {
         // El proceso puede estar destruyendo ya el thread_local WINDOWS
-        // (issue #141: en exit, los dtors TLS sueltan el ultimo Rc, el
-        // destroy de la ventana dispara este handler y with() paniquearia
-        // con AccessError -> SIGABRT). try_with devuelve Err en ese caso y
-        // no hay nada que podar: la lista esta desapareciendo entera.
-        let _ = WINDOWS.try_with(|list| {
-            list.borrow_mut().retain(|w| {
-                w.window.upcast_ref::<gtk4::Window>() != dead.upcast_ref::<gtk4::Window>()
-            });
+        // (issue #141) o recorriéndolo mientras se suelta el Rc de esta
+        // ventana (issue #166): la poda es no bloqueante y, si el registro no
+        // está disponible, no hay nada que podar.
+        podar_registro(|w| {
+            w.window.upcast_ref::<gtk4::Window>() != dead.upcast_ref::<gtk4::Window>()
         });
     });
     // Oferta de recuperación de snapshots pendientes (issue #23), una sola
@@ -311,12 +326,14 @@ fn ofrecer_recuperacion(win: &Rc<ScribeWindow>) {
 /// La ventana activa de Scribe, o una nueva si no hay ninguna. Poda del
 /// registro las ventanas que la aplicación ya ha olvidado (cerradas).
 fn active_or_new_window(app: &adw::Application) -> Rc<ScribeWindow> {
+    // Poda sin retener el préstamo: `Vec::retain` suelta los Rc descartados y
+    // uno de ellos puede ser el último de su ventana (issues #141 y #166).
+    let open = app.windows();
+    podar_registro(|w| open.contains(w.window.upcast_ref::<gtk4::Window>()));
     let found = WINDOWS.with(|list| {
-        let open = app.windows();
-        list.borrow_mut()
-            .retain(|w| open.contains(w.window.upcast_ref::<gtk4::Window>()));
+        let lista = list.borrow();
         app.active_window().and_then(|active| {
-            list.borrow()
+            lista
                 .iter()
                 .find(|w| w.window.upcast_ref::<gtk4::Window>() == &active)
                 .cloned()
@@ -333,5 +350,25 @@ fn resolver_argumento(arg: &OsStr) -> (PathBuf, Option<(u32, u32)>) {
     match arranque::parsear_argumento(&texto) {
         Ok((ruta, Some((linea, columna)))) if ruta.exists() => (ruta, Some((linea, columna))),
         _ => (PathBuf::from(arg), None),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Regresión de los issues #141 y #166: el `destroy` de una ventana
+    /// vuelve a pedir el registro mientras el apagado lo está vaciando. Si la
+    /// poda usa `borrow_mut()` a secas, el reintento paniquea dentro del
+    /// handler y, como el panic atraviesa FFI, el proceso muere con SIGABRT
+    /// (la notificación de crash de ABRT al cerrar). La reproducción real
+    /// necesita un gestor de ventanas, así que aquí se cubre el invariante
+    /// que rompía: podar con el `RefCell` ya prestado no debe paniquear.
+    #[test]
+    fn la_poda_no_paniquea_con_el_registro_prestado() {
+        WINDOWS.with(|list| {
+            let _prestamo = list.borrow_mut();
+            podar_registro(|_| false);
+        });
     }
 }
