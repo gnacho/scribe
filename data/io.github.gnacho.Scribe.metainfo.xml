@@ -53,6 +53,12 @@
   </screenshots>
   <content_rating type="oars-1.1" />
   <releases>
+    <release version="0.3.35" date="2026-10-28">
+      <description>
+        <p>Closing the window no longer aborts the app. On systems that report crashes, a normal close could end with a crash notification right after the window disappeared. The same abort was already fixed for quitting with Ctrl+Q, and this release covers the window close button and Alt+F4 on any desktop.</p>
+        <p xml:lang="es">Cerrar la ventana ya no aborta la aplicacion. En sistemas que notifican fallos, un cierre normal podia acabar con un aviso de crash justo despues de desaparecer la ventana. El mismo aborto ya se corrigio para salir con Ctrl+Q, y esta version cubre el boton de cerrar y Alt+F4 en cualquier escritorio.</p>
+      </description>
+    </release>
     <release version="0.3.30" date="2026-10-27">
       <description>
         <p>PDF export now has named page templates (Custom, Article, Manuscript, Letter and Compact), a print preview that renders the real pages, and support for your own CSS stylesheet. Four bundled themes (Sepia, High contrast, Technical and Academic) change type, sizes, leading and colour, and combine with any template. The toolbar swaps the split view toggle for a typewriter mode toggle, and the export preferences are split into layout and typography.</p>
