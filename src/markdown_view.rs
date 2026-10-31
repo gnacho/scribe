@@ -218,6 +218,36 @@ mod imp {
             Some((rect.x() as f32, rect.y() as f32, rect.height() as f32))
         }
 
+        pub(super) fn bullet_center(&self, line: i32) -> Option<(f32, f32)> {
+            let (x, y, height) = self.line_origin(line)?;
+            let view = self.obj();
+            let buffer = view.buffer();
+            let hidden = buffer.tag_table().lookup("syn_shrink");
+            let mut iter = buffer.iter_at_line(line)?;
+            let range = view.line_yrange(&iter);
+
+            // El marcador sustituido no tiene una caja de texto útil. La viñeta
+            // se centra en el primer glifo visible de la primera línea visual,
+            // no en esa marca ni en el conjunto de líneas envueltas.
+            loop {
+                let visible = match hidden.as_ref() {
+                    Some(tag) => !iter.has_tag(tag),
+                    None => true,
+                };
+                let rect = view.iter_location(&iter);
+                if visible && rect.height() > 0 {
+                    return Some((
+                        x - BULLET_OFFSET,
+                        rect.y() as f32 + rect.height() as f32 / 2.0,
+                    ));
+                }
+                if !iter.forward_char() || view.line_yrange(&iter) != range {
+                    break;
+                }
+            }
+            Some((x - BULLET_OFFSET, y + height / 2.0))
+        }
+
         /// Extremos horizontales de la columna de texto.
         fn column(&self) -> (f32, f32) {
             let view = self.obj();
@@ -643,7 +673,10 @@ mod imp {
 
                 match ornament {
                     Ornament::Bullet { depth, .. } => {
-                        draw_bullet(snapshot, x - BULLET_OFFSET, middle, *depth, &palette)
+                        let Some((bullet_x, bullet_y)) = self.bullet_center(line) else {
+                            continue;
+                        };
+                        draw_bullet(snapshot, bullet_x, bullet_y, *depth, &palette)
                     }
                     Ornament::Checkbox { checked, .. } => draw_checkbox(
                         snapshot,
@@ -1401,6 +1434,11 @@ glib::wrapper! {
 impl MarkdownView {
     pub fn with_buffer(buffer: &impl IsA<gtk4::TextBuffer>) -> Self {
         glib::Object::builder().property("buffer", buffer).build()
+    }
+
+    #[cfg(test)]
+    pub fn bullet_center_for_test(&self, line: i32) -> Option<(f32, f32)> {
+        self.imp().bullet_center(line)
     }
 
     /// Sustituye la lista de adornos y repinta. Barata: no calcula geometría,
