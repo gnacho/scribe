@@ -332,13 +332,15 @@ fn build_tags() -> gtk4::TextTagTable {
     add(gtk4::TextTag::builder().name("unfocused").build());
 
     // Encoger en vez de ocultar (mitigación de GNOME/gtk#8346): la marca
-    // sustituida sigue en la maquetación con escala mínima y totalmente
+    // sustituida sigue en la maquetación con escala cero y totalmente
     // transparente, así que el texto nunca queda excluido del layout y el
-    // camino del aborto es inalcanzable por construcción. El color se fija
-    // aquí y no en el tema: debe ser transparente con cualquier paleta.
+    // camino del aborto es inalcanzable por construcción. Una escala residual
+    // como 0.05 aún puede ocupar un píxel y desalinear la primera línea de una
+    // lista respecto a sus continuaciones (issue #169). El color se fija aquí
+    // y no en el tema: debe ser transparente con cualquier paleta.
     add(gtk4::TextTag::builder()
         .name("syn_shrink")
-        .scale(0.05)
+        .scale(0.0)
         .foreground_rgba(&rgba(0x000000, 0.0))
         .build());
     // Filas fuente de un lienzo de tabla pintado: colapsan (igual que las
