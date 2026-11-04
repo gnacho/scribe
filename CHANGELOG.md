@@ -289,361 +289,310 @@ the editor is better for every one of them.
 
 ### Added
 
-- **Vista dividida desde la cabecera** (#35): un icono en la cabecera muestra u
-  oculta la previsualización, que se pinta a la derecha del editor con el mismo
-  motor de `GtkTextTag`.
-- **Esquemas de color en el menú** (#36): seguir el sistema, claro y oscuro, como
-  acción con estado y sincronizada con la página de Apariencia de Preferencias.
-  El menú deja de ofrecer lo que ya está en la cabecera (nueva ventana, abrir,
-  recargar y cerrar pestaña).
-- **Buscar en el documento** (#37): barra de búsqueda dentro del panel del
-  editor, con contador de coincidencias, botones de anterior/siguiente y Ctrl+F,
-  Intro y Mayús+Intro.
-- **Imágenes remotas** (#38): las imágenes con URL se descargan y se cachean en
-  `~/.cache/scribe/images` (se pregunta primero el tamaño, con límite de 20 MB),
-  de modo que las siguientes veces se pintan sin salir a la red. Si la descarga
-  falla queda el placeholder y no se reintenta en cada repintado.
-- **Tarjetas de YouTube** (#39): un vídeo solo en su línea (enlace de Markdown,
-  URL suelta o `<iframe>`) se dibuja como tarjeta 16:9 con su miniatura y botón
-  de reproducción, sin tocar el buffer. No hay reproductor embebido: al pulsar
-  la tarjeta se abre el navegador.
-- **Ctrl+clic en un enlace** (#40): abre el destino con la aplicación
-  predeterminada (solo `http`, `https` y `mailto`) y, con Ctrl pulsado encima de
-  un enlace, el globo de ayuda dice a dónde va. El clic normal sigue siendo del
-  texto: coloca el cursor y selecciona.
-- **Exportar a PDF** (Ctrl+P) por el pipeline de impresión de GTK, con ajustes
-  propios (esquema de color, fuentes, tamaño y orientación) y paginación
-  cuidada, y **recarga automática** cuando el fichero cambia en disco (#31).
-- **Pegado y arrastre de imágenes**: se guardan junto al documento y se enlazan
-  con ruta relativa. **Recuperación del borrador** tras un cierre inesperado
-  (#31).
-- **Línea de órdenes**: `scribe fichero.md:12:4` abre en la línea y columna
-  indicadas, y acepta contenido por tubería (#31).
-- **Icono nuevo** (#44): un portanotas con una nota (cabecera, línea
-  resaltada y lista) y una pluma estilográfica escribiendo en la esquina,
-  dibujado en Impress y exportado a SVG; se lee de 16 px en adelante.
+- **Split view from the header** (#35): a header icon shows or hides the preview, painted to the right of the editor with the same `GtkTextTag` engine.
+- **Colour schemes in the menu** (#36): follow the system, light and dark, as a stateful action kept in sync with the Appearance page in Preferences. The menu stops offering what the header already has (new window, open, reload and close tab).
+- **Find in the document** (#37): a search bar inside the editor pane with a match counter, previous/next buttons and Ctrl+F, Enter and Shift+Enter.
+- **Remote images** (#38): images with a URL are downloaded and cached under `~/.cache/scribe/images` (the size is checked first, with a 20 MB limit), so later paints happen without going to the network. A failed download leaves the placeholder and is not retried on every repaint.
+- **YouTube cards** (#39): a video alone on its line (Markdown link, bare URL or `<iframe>`) is drawn as a 16:9 card with its thumbnail and a play badge, without touching the buffer. There is no embedded player: clicking the card opens the browser.
+- **Ctrl+click on a link** (#40): opens the destination with the default application (`http`, `https` and `mailto` only) and, with Ctrl held over a link, the tooltip says where it goes. A normal click still belongs to the text: it places the cursor and selects.
+- **PDF export** (Ctrl+P) through the GTK print pipeline, with its own settings (colour scheme, fonts, size and orientation) and careful pagination, and **automatic reload** when the file changes on disk (#31).
+- **Pasting and dropping images**: they are saved next to the document and linked with a relative path. **Draft recovery** after an unexpected close (#31).
+- **Command line**: `scribe file.md:12:4` opens at the given line and column, and accepts piped content (#31).
+- **New icon** (#44): a clipboard holding a note (heading, highlighted line and a list) with a fountain pen writing in the corner, drawn in Impress and exported to SVG; it reads from 16 px up.
 
 ### Changed
 
-- **Instalación de usuario** (`make install`) que incluye el binario, el esquema
-  GSettings recompilado, el fichero .desktop y los iconos; **MSRV a Rust 1.85**
-  (el árbol de dependencias exige edition2024) y **presupuestos de rendimiento**
-  en modo release para abrir y decorar (#31).
-- **Menú principal depurado** (#46): fuera la sección «Estilo» (el esquema de
-  color se elige en Preferencias), la entrada «Vista dividida» (está en la
-  cabecera y en Ctrl+Shift+P), la fila de zoom con el tamaño de fuente en px,
-  y «Alinear tablas» y «Cerrar vallas». Las acciones y sus atajos siguen:
-  Ctrl+Shift+P, Ctrl +/-/0, Ctrl+Alt+T y Ctrl+Alt+F.
-- **Privacidad y documentación**: el aviso de privacidad pasa a decir la verdad
-  sobre la red (las únicas peticiones son las que pide el documento, con su
-  caché en disco) y el README (inglés y español) recoge las funciones nuevas con
-  sus límites reales y capturas al día.
+- **User installation** (`make install`) that ships the binary, the recompiled GSettings schema, the .desktop file and the icons; **MSRV moved to Rust 1.85** (the dependency tree requires edition2024) and **performance budgets** in release mode for opening and decorating (#31).
+- **Main menu trimmed** (#46): out go the "Style" section (the colour scheme lives in Preferences), the "Split view" entry (it is in the header and on Ctrl+Shift+P), the zoom row with the font size in px, and "Align tables" and "Close fences". The actions and their shortcuts stay: Ctrl+Shift+P, Ctrl +/-/0, Ctrl+Alt+T and Ctrl+Alt+F.
+- **Privacy and documentation**: the privacy notice now tells the truth about the network (the only requests are the ones the document asks for, cached on disk) and the README (English and Spanish) covers the new features with their real limits and up-to-date screenshots.
 
 ### Removed
 
-- **Barra de estado** (#45): se quita el footer con el contador de palabras, el
-  botón «Ln, Col» con su popover de ir a la línea, el botón «Markdown» con las
-  propiedades y el aviso de vallas. «Cerrar vallas» queda en Ctrl+Alt+F y
-  «Alinear tablas» en Ctrl+Alt+T.
+- **Status bar** (#45): the footer with the word counter, the "Ln, Col" button with its go-to-line popover, the "Markdown" button with the properties and the fence warning are gone. "Close fences" stays on Ctrl+Alt+F and "Align tables" on Ctrl+Alt+T.
 
 ### Fixed
 
-- **Aborto al arrancar en Wayland** (#32, #34): los márgenes de columna se
-  aplicaban dentro del ciclo de validación de GTK y disparaban el `g_assert` de
-  `gtk_text_view_validate_onscreen` en cada arranque bajo un compositor (GTK
-  4.22.5 y 4.24.1; con Xvfb no se reproducía). Ahora se aplican desde un idle.
-- **Tablas** (#30, #34): las columnas se miden desde la fila de guiones en vez de
-  desde los espacios que tenga cada fila, con una línea vertical continua por
-  frontera, regla de cabecera y respeto de `:---`, `:---:` y `---:`. La fila
-  donde está el cursor dentro de una tabla se muestra en su fuente para poder
-  editarla. Una celda más ancha que su columna sigue desbordando: Ctrl+Alt+T
-  («Formatear tablas») la deja alineada.
-- **Test de pestañas** (#33, #34): el título del borrador se comparaba con el
-  msgid sin traducir.
+- **Abort on startup under Wayland** (#32, #34): column margins were applied inside GTK's validation cycle and tripped the `g_assert` in `gtk_text_view_validate_onscreen` on every start under a compositor (GTK 4.22.5 and 4.24.1, not reproducible under Xvfb). They are applied from an idle now.
+- **Tables** (#30, #34): columns are measured from the delimiter row instead of from the spaces each row happens to have, with a continuous vertical line per border, a header rule and respect for `:---`, `:---:` and `---:`. The row the cursor is in inside a table is shown as source so it can be edited. A cell wider than its column still overflows: Ctrl+Alt+T ("Format tables") aligns it.
+- **Tab test** (#33, #34): the draft title was compared against the untranslated msgid.
 
 ## [0.3.10] - 2026-09-19
 
+Thank you [@sewnie](https://github.com/sewnie) for asking for an English
+interface (#12).
+
 ### Added
 
-- **Interfaz traducida (gettext)**: las cadenas de la interfaz pasan a inglés
-  como idioma fuente, con catálogo completo en español (`po/es.po`), de modo
-  que cada usuario ve Scribe en el idioma de su sistema. Nuevas traducciones en
-  `po/` (ver `po/update-pot.sh`). Las plantillas integradas se crean en el
-  idioma actual en el primer arranque y los atajos de teclado se traducen.
-- **Detección y cierre de vallas de código sin cerrar** (#11): cuando una valla
-  fenced no se cierra, la barra de estado avisa («Valla abierta (línea N)») y
-  una acción (menú, Ctrl+Alt+F o pulsando el aviso) la cierra con una
-  heurística best-effort (antes de la siguiente cabecera o regla, de la
-  siguiente valla de apertura o al final del documento). Deshacer (Ctrl+Z)
-  restaura el texto original.
+- **Translated interface (gettext)**: the interface strings move to English as
+  the source language, with a full Spanish catalog (`po/es.po`), so each user
+  sees Scribe in the language of their system. New translations live in `po/`
+  (see `po/update-pot.sh`). Built-in templates are seeded in the current locale
+  on first launch and the keyboard shortcuts are translated.
+- **Unterminated code fences are detected and closed** (#11): when a fenced
+  block is not closed, the status bar warns ("Unclosed fence (line N)") and an
+  action (menu, Ctrl+Alt+F or clicking the warning) closes it with a best-effort
+  heuristic (before the next heading or rule, the next opening fence, or the end
+  of the document). Undo (Ctrl+Z) restores the original text.
 
 ## [0.3.8] - 2026-08-22
 
 ### Fixed
 
-- **Caja de las tablas y regla de cabecera abrazan el contenido**: la caja de
-  fondo se pintaba a todo el ancho de la columna de texto (sobraba un
-  rectángulo pálido a la derecha, la «columna fantasma») y la regla bajo la
-  cabecera cruzaba de margen a margen. Ahora miden el contenido real de las
-  filas (con los pipes encogidos, el texto de las celdas); tablas de más de 200
-  filas se miden solo en la ventana visible. Las celdas con pipe escapado
-  (`\|`) muestran solo `|`; la barra invertida se encoge como marca de escape.
+- **The table box and the header rule hug the content**: the background box was
+  painted at the full width of the text column (a pale rectangle was left on the
+  right, the "ghost column") and the rule under the header crossed from margin
+  to margin. They now measure the real content of the rows (shrunk pipes, cell
+  text); tables with more than 200 rows are measured only in the visible window.
+  Cells with an escaped pipe (`\|`) show just `|`; the backslash shrinks like an
+  escape mark.
 
 ## [0.3.6] - 2026-08-22
 
 ### Added
 
-- **Pestañas reales multi-documento** (`AdwTabView` + `AdwTabBar`, estilo
-  gnome-text-editor). Cada documento tiene su editor, su undo, su estado de
-  guardado y su pestaña, con botón de cierre, reordenado por arrastre y
-  overflow. `Ctrl+N` nueva pestaña; `Ctrl+O`, recientes o `scribe fichero.md`
-  abren pestañas en la ventana activa; `Ctrl+W` cierra; `Ctrl+Tab` /
-  `Ctrl+Mayús+Tab` / `Ctrl+AvPág` / `Ctrl+RePág` navegan. Abrir un fichero ya
-  abierto enfoca su pestaña (dedupe por ruta canónica). Al cerrar una pestaña
-  con cambios: diálogo Guardar/Descartar/Cancelar; al cerrar la ventana con
-  varios modificados: diálogos secuenciales. Punto «•» en la pestaña modificada
-  + badge de atención en segundo plano; autoguardado por documento. La última
-  pestaña no se cierra (queda una en blanco).
+- **Real multi-document tabs** (`AdwTabView` + `AdwTabBar`, gnome-text-editor
+  style). Each document has its own editor, undo, saved state and tab, with a
+  close button, drag reordering and overflow. `Ctrl+N` opens a tab. `Ctrl+O`,
+  recents or `scribe file.md` open tabs in the active window. `Ctrl+W` closes.
+  `Ctrl+Tab` / `Ctrl+Shift+Tab` / `Ctrl+PageDown` / `Ctrl+PageUp` navigate.
+  Opening an already open file focuses its tab (dedupe by canonical path).
+  Closing a tab with changes shows a Save/Discard/Cancel dialog. Closing the
+  window with several modified documents shows sequential dialogs. A "•" dot
+  marks the modified tab, with an attention badge in the background, and
+  autosave is per document. The last tab never closes (a blank one stays).
 
 ### Fixed
 
-- **Caja de fondo continua en bloques largos**: la caja se alargaba fuera de
-  pantalla para esconder las esquinas, y con origen muy negativo GSK no pintaba
-  nada (la caja desaparecía a mitad de un bloque de código de 120 líneas). Ahora
-  el rectángulo se limita a lo visible y las esquinas redondeadas solo se
-  dibujan en los bordes reales del bloque; la barra de cita usa el mismo
-  criterio.
+- **Continuous background box in long blocks**: the box was stretched off screen
+  to hide the corners, and with a very negative origin GSK painted nothing (the
+  box vanished halfway through a 120-line code block). The rectangle is now
+  limited to the visible area and rounded corners are drawn only at the real
+  edges of the block; the blockquote bar uses the same rule.
 
 ## [0.3.4] - 2026-08-22
 
 ### Fixed
 
-- **Contenido de tablas vuelve a monoespaciada** para que la rejilla visual
-  cuadre. La rejilla (cabecera en negrita, separadores pintados, filete) se
-  apoya en el padding del fuente que produce `format_tables`; con fuente
-  proporcional las columnas no alineaban. El inline (negrita, código, color)
-  sigue aplicando: son atributos independientes de la familia. Si una tabla no
-  cuadra, Ctrl+Alt+T («Formatear tablas») la deja alineada.
-- **Test de render headless**: `tests/render_shot.rs` renderiza el editor a PNG
-  bajo xvfb (`SCRIBE_SHOTS_DIR` o temp dir) para verificar visualmente la vista
-  enriquecida sin abrir ventanas. El camino de salida original apuntaba al
-  sandbox del agente (`/mnt/agents/work/shots`) y fallaba en máquinas reales;
-  ahora es configurable por variable de entorno.
+- **Table content is monospaced again** so the visual grid lines up. The grid
+  (bold header, painted separators, rule) relies on the font padding that
+  `format_tables` produces; with a proportional font the columns did not align.
+  Inline styling (bold, code, colour) still applies: those are attributes
+  independent of the family. If a table does not line up, Ctrl+Alt+T ("Format
+  tables") aligns it.
+- **Headless render test**: `tests/render_shot.rs` renders the editor to PNG
+  under xvfb (`SCRIBE_SHOTS_DIR` or a temp dir) to check the rich view visually
+  without opening windows. The original output path pointed at the agent sandbox
+  (`/mnt/agents/work/shots`) and failed on real machines; it is configurable
+  through an environment variable now.
 
 ## [0.3.2] - 2026-08-22
 
 ### Fixed
 
-- **Crash «byte index off the end of the line» (SIGABRT) eliminado por
-  construccion**: GTK aborta (GNOME/gtk#8346, `gtktextbtree.c:4012`) cuando el
-  buffer tiene texto `invisible=true` y una conversion pixel-iter consulta
-  geometria con el layout obsoleto. El editor ya no genera texto invisible en
-  ningun camino; las marcas se atenuan o encogen (`syn_shrink`). Cuando GTK
-  publique el fix, la puerta `gtk_hides_invisible_safely()` reactivara el
-  ocultado real sin tocar mas nada. El canario `gtk_invisible_canary` detecta si
-  el GTK del sistema sigue siendo vulnerable.
-- **Perdida de datos al alinear tablas** (`format_tables`): absorbia lineas
-  ajenas con `\|` y descartaba celdas de filas mas anchas que la cabecera. Ahora
-  el cuerpo lo delimita pulldown-cmark y las columnas cubren la fila mas ancha.
-  Conserva los finales CRLF por linea.
-- **Fugas de memoria**: ciclos `Rc` en StyleManager, senales del buffer y
-  acciones de ventana impedian que ninguna ventana ni editor se liberara. Todo a
+- **The "byte index off the end of the line" crash (SIGABRT) is eliminated by
+  construction**: GTK aborts (GNOME/gtk#8346, `gtktextbtree.c:4012`) when the
+  buffer holds `invisible=true` text and a pixel-iter conversion asks for
+  geometry with a stale layout. The editor no longer generates invisible text on
+  any path: marks are dimmed or shrunk (`syn_shrink`). When GTK ships the fix,
+  the `gtk_hides_invisible_safely()` gate will re-enable real hiding without
+  touching anything else. The `gtk_invisible_canary` canary detects whether the
+  system GTK is still vulnerable.
+- **Data loss when aligning tables** (`format_tables`): it absorbed foreign lines
+  containing `\|` and dropped cells from rows wider than the header. The body is
+  now delimited by pulldown-cmark and the columns cover the widest row. CRLF
+  line endings are preserved.
+- **Memory leaks**: `Rc` cycles in StyleManager, buffer signals and window
+  actions kept every window and editor alive. All moved to
   `downgrade()`/`upgrade()`.
-- **Errores tragados en silencio**: el autoguardado y las preferencias ahora
-  avisan cuando falla una escritura (toast una vez por racha).
-- **Guardar sin extension** ahora anade `.md`.
-- **Indexacion defensiva** del mapa byte-char (acceso a rango).
-- **Manifest Flatpak** (issue #5): runtime GNOME 50, `cargo-sources.json` en el
-  formato oficial de flatpak-cargo-generator, `Cargo.lock` commiteado, metainfo
-  AppStream 1.0 conforme, CI endurecido (MSRV 1.83, `--locked`, appstreamcli).
+- **Silently swallowed errors**: autosave and preferences now warn when a write
+  fails (one toast per streak).
+- **Saving without an extension** now appends `.md`.
+- **Defensive indexing** of the byte-char map (range access).
+- **Flatpak manifest** (issue #5): GNOME 50 runtime, `cargo-sources.json` in the
+  official flatpak-cargo-generator format, committed `Cargo.lock`, compliant
+  AppStream 1.0 metainfo, hardened CI (MSRV 1.83, `--locked`, appstreamcli).
 
-### Added — vista de edicion enriquecida estilo GitHub
+### Added - GitHub-style rich editing view
 
-- **Bloques de codigo con caja de fondo** y el contenido en monoespaciada.
-- **Tablas como tabla visual**: caja, cabecera en negrita, fila de guiones
-  reducida a un filete y separadores de columna pintados.
-- **Titulos**: jerarquia por escala/peso + filete inferior en H1/H2; las
-  almohadillas se encogen en modo WYSIWYG.
-- **Citas con barra lateral** dibujada y **listas** con vinetas y casillas en el
-  canalon.
-- **Imagenes locales en bloque**: si `![alt](ruta)` esta sola en su linea y el
-  fichero existe (relativo al documento), se pinta escalada (max 144 px, limite
-  20 MB, cache de 64). Remotas o ausentes, placeholder discreto. El documento no
-  se contamina: nunca se insertan widgets ni caracteres.
-- **Preferencias con sentido real**: «Atenuar» = vista cruda atenuada con
-  adornos de ambiente; «Ocultar»/«Al enfocar» = WYSIWYG con marcas encogidas
-  (etiquetado como «encoge las marcas; GTK aun no permite ocultarlas»).
+- **Code blocks with a background box** and monospaced content.
+- **Tables as a visual table**: box, bold header, delimiter row reduced to a
+  rule and painted column separators.
+- **Headings**: hierarchy by scale/weight plus an underline rule on H1/H2; the
+  hashes shrink in WYSIWYG mode.
+- **Blockquotes with a painted side bar** and **lists** with bullets and
+  checkboxes in the gutter.
+- **Local images in a block**: if `![alt](path)` is alone on its line and the
+  file exists (relative to the document), it is painted scaled (max 144 px,
+  20 MB limit, cache of 64). Remote or missing, a discreet placeholder. The
+  document is never polluted: no widgets or characters are ever inserted.
+- **Preferences that mean something**: "Dim" is the raw view dimmed with ambient
+  ornaments; "Hide"/"On focus" is WYSIWYG with shrunk marks (labelled "shrinks
+  the marks, GTK does not allow hiding them yet").
 
 ### Changed
 
-- El marcado sustituido por un adorno se **encoge** (escala 0.05 + alpha 0) en
-  vez de ocultarse: sigue en la maquetacion de GTK, asi que el camino del aborto
-  es inalcanzable por construccion.
-- El cursor solo re-aplica el atenuado del modo foco (antes re-analizaba todo).
-- Una sola copia del buffer para los contadores, en el timeout debounced.
-- README reescrito: EN principal + `README.es.md`, con las features de la vista
-  enriquecida.
+- Markup replaced by an ornament now **shrinks** (scale 0.05 + alpha 0) instead
+  of hiding, so it stays in GTK's layout and the abort path is unreachable by
+  construction.
+- The cursor only re-applies the focus-mode dimming (it used to re-analyse
+  everything).
+- A single copy of the buffer for the counters, in the debounced timeout.
+- README rewritten: EN main + `README.es.md`, with the rich view features.
 
 ## [0.3.1] - 2026-08-08
 
 ### Fixed
 
-- **Una valla de codigo seguida de un tabulador no cerraba el bloque**, con lo
-  que el resto del documento pasaba a verse como codigo. El spec de CommonMark
-  dice que la valla de cierre «puede ir seguida solo de espacios o tabuladores,
-  que se ignoran», pero pulldown-cmark no lo respeta: se reproduce con
-  `` ```\ncodigo\n```\t\n `` tanto en 0.12 como en 0.13, asi que no es cosa
-  nuestra ni esta arreglado aguas arriba. Como apano, `normalize_fences()`
-  sustituye por espacios los tabuladores que van detras de una valla antes de
-  parsear. Solo toca lineas de valla, y como espacio y tabulador ocupan un byte
-  cada uno, todos los desplazamientos siguen valiendo sobre el texto original:
-  los tabuladores de dentro del bloque no se tocan.
-- Tres tests nuevos, incluido el de que la normalizacion conserva las
-  posiciones (33 en total).
+- **A code fence followed by a tab did not close the block**, so the rest of the
+  document started to render as code. The CommonMark spec says the closing fence
+  "may be followed only by spaces or tabs, which are ignored", but pulldown-cmark
+  does not honour it: it reproduces with `` ```\ncode\n```\t\n `` both in 0.12 and
+  in 0.13, so it is neither ours nor fixed upstream. As a workaround,
+  `normalize_fences()` replaces the tabs after a fence with spaces before
+  parsing. It only touches fence lines, and since a space and a tab are one byte
+  each, all offsets remain valid against the original text: tabs inside the
+  block are not touched.
+- Three new tests, including the one proving normalisation preserves positions
+  (33 in total).
 
 ## [0.3.0] - 2026-08-08
 
-### Added — tablas
+### Added - tables
 
-- **Las tablas se renderizan como tablas**: la fila de guiones del fuente se
-  oculta y en su hueco se dibuja la línea que separa la cabecera; el bloque
-  lleva su propia caja redondeada, distinta de la de los bloques de código; y
-  los pipes quedan atenuados, haciendo de separador de columna sin competir con
-  el contenido.
-- **Alinear tablas** (Ctrl+Alt+T, y en el menú principal): reformatea todas las
-  tablas del documento para que sus columnas cuadren en el fuente. Como el
-  bloque va en monoespaciada, alinear el fuente es lo que hace que la tabla se
-  vea alineada en pantalla. Respeta los `:` de alineación, los pipes escapados
-  (`\|`) y las tablas de ejemplo dentro de bloques de código, que no se tocan.
-  Es una sola acción de usuario: se deshace de golpe con Ctrl+Z.
-- Siete tests nuevos para el formateador y los adornos de tabla (29 en total).
+- **Tables are rendered as tables**: the delimiter row from the source is hidden
+  and the header separator line is drawn in its place, the block gets its own
+  rounded box, different from code blocks, and the pipes are dimmed, acting as
+  column separators without competing with the content.
+- **Align tables** (Ctrl+Alt+T, and in the main menu): reformats every table in
+  the document so its columns line up in the source. Since the block is
+  monospaced, aligning the source is what makes the table look aligned on screen.
+  It respects the alignment `:` marks, escaped pipes (`\|`) and sample tables
+  inside code blocks, which are left alone. It is a single user action: one
+  Ctrl+Z undoes it.
+- Seven new tests for the formatter and the table ornaments (29 in total).
 
 ### Changed
 
-- El tag `tabledelim` desaparece: la fila de guiones ya no se atenúa, se oculta.
+- The `tabledelim` tag is gone: the delimiter row is no longer dimmed, it is
+  hidden.
 
 ## [0.2.1] - 2026-08-08
 
 ### Fixed
 
-- **Crash al editar** (`gtk_text_iter_set_visible_line_index`, «byte index off
-  the end of the line»). Tres causas encadenadas, las tres arregladas:
-  - `decorate()` se llamaba de forma sincrona desde
-    `notify::cursor-position`, que es una senal del buffer. Aplicar tags de
-    invisibilidad mientras GTK esta procesando una edicion descuadra su
-    maquetacion. Ahora toda la decoracion pasa por `schedule_decoration()` y se
-    difiere al bucle principal; no se toca el buffer desde ninguna senal suya.
-  - Al dibujar, un bloque de codigo que abarcaba mucho mas que la pantalla hacia
-    que se pidiera geometria de lineas muy lejanas, obligando a GTK a validar
-    miles de lineas en mitad del `snapshot`. La geometria se limita ahora a la
-    franja visible y la caja se alarga fuera de pantalla, para que las esquinas
-    redondeadas no aparezcan cortadas a mitad del bloque.
-  - Los adornos van por numero de linea; si el buffer cambiaba entre el calculo
-    y el dibujado, apuntaban a sitios equivocados. `set_ornaments` guarda ahora
-    el numero de lineas para el que se calcularon y el dibujado se salta el
-    fotograma si ya no coincide.
-- **La version en `Cargo.toml` seguia en 1.0.0** desde la pre-alpha, asi que la
-  ventana «Acerca de» mentia. Ahora sale de `CARGO_PKG_VERSION` y coincide con
-  el CHANGELOG. De paso: licencia como `AGPL-3.0-or-later`, `rust-version`
-  declarada y fuera `serde`/`serde_json`, que no los usa nadie.
-- **Tags de bloque que se extendian de mas**: el mismo problema de decorar
-  dentro de una senal podia dejar el tag `codeblock` cubriendo texto posterior
-  al cierre de la valla, con lo que el documento entero pasaba a verse como
-  codigo despues de editar.
+- **Crash while editing** (`gtk_text_iter_set_visible_line_index`, "byte index
+  off the end of the line"). Three chained causes, all fixed:
+  - `decorate()` was called synchronously from `notify::cursor-position`, which
+    is a buffer signal. Applying invisibility tags while GTK is processing an
+    edit throws its layout off. All decoration now goes through
+    `schedule_decoration()` and is deferred to the main loop, so the buffer is
+    never touched from one of its own signals.
+  - When drawing, a code block spanning far beyond the screen requested
+    geometry for very distant lines, forcing GTK to validate thousands of lines
+    in the middle of `snapshot`. Geometry is now limited to the visible strip and
+    the box is stretched off screen so the rounded corners do not appear cut in
+    the middle of the block.
+  - Ornaments are keyed by line number, so if the buffer changed between
+    computing and drawing they pointed at the wrong places. `set_ornaments` now
+    stores the line count they were computed for and drawing skips the frame when
+    it no longer matches.
+- **The version in `Cargo.toml` was still 1.0.0** since the pre-alpha, so the
+  About window lied. It now comes from `CARGO_PKG_VERSION` and matches the
+  CHANGELOG. While at it: licence as `AGPL-3.0-or-later`, `rust-version`
+  declared and `serde`/`serde_json` dropped, nobody used them.
+- **Block tags extending too far**: the same problem of decorating inside a
+  signal could leave the `codeblock` tag covering text past the closing fence,
+  so the whole document started to look like code after editing.
 
 ## [0.2.0] - 2026-08-07
 
-## [0.2.0] - 2026-08-07
+### Added - drawn ornaments
 
-### Added — adornos dibujados
-
-- **`src/markdown_view.rs`**: `MarkdownView`, un `GtkSourceView` subclaseado que
-  implementa `snapshot_layer` para pintar lo que un `GtkTextTag` no puede
-  expresar. Dibuja vinetas (disco, anillo y cuadrado segun el nivel), casillas
-  de tarea con su marca de verificacion, reglas horizontales, la barra vertical
-  de las citas y la caja redondeada de los bloques de codigo. Trabaja en
-  coordenadas de buffer y solo calcula geometria de lo que esta en pantalla.
-- **`Ornament` y `Analysis`** en `markdown_render`: el analizador devuelve ahora
-  tramos *y* adornos referidos a numero de linea.
-- **`SpanKind`**: distingue estilo permanente, marca de Markdown y marca
-  sustituida por un adorno. Las sustituidas no se revelan al pasar el cursor,
-  porque hacerlo desplazaria el texto en cada cambio de linea.
-- **Notas al pie**: la referencia deja solo el numero en volado y la definicion
-  se atenua.
+- **`src/markdown_view.rs`**: `MarkdownView`, a `GtkSourceView` subclass
+  implementing `snapshot_layer` to paint what a `GtkTextTag` cannot express. It
+  draws bullets (disc, ring and square by level), task checkboxes with their
+  check mark, horizontal rules, the vertical bar of blockquotes and the rounded
+  box of code blocks. It works in buffer coordinates and only computes geometry
+  for what is on screen.
+- **`Ornament` and `Analysis`** in `markdown_render`: the analyser now returns
+  spans *and* ornaments keyed by line number.
+- **`SpanKind`**: distinguishes permanent style, Markdown mark and a mark
+  replaced by an ornament. Replaced marks do not reveal on hover, since doing so
+  would shift the text on every line change.
+- **Footnotes**: the reference keeps only the superscript number and the
+  definition is dimmed.
 - Tests: 16 -> 22.
 
 ### Changed
 
-- Las citas y los bloques de codigo ya no usan `paragraph-background`: su caja y
-  su barra se dibujan, lo que permite esquinas redondeadas y margenes reales.
-- Las listas sin ordenar pierden la sangria francesa: la vineta va en el canalon
-  y todas las lineas del elemento arrancan alineadas.
-- En modo «atenuar siempre» los adornos se desactivan, para no duplicar
-  informacion con las marcas visibles.
+- Blockquotes and code blocks no longer use `paragraph-background`: their box and
+  bar are drawn, which allows rounded corners and real margins.
+- Unordered lists lose the hanging indent: the bullet goes in the gutter and
+  every line of the item starts aligned.
+- In "always dim" mode the ornaments are disabled, so information is not
+  duplicated with the visible marks.
 
 ### Fixed
 
-- **Sangria de listas anidadas**: pulldown-cmark empieza el rango del elemento en
-  el marcador, no al principio de la linea. Como el tag no cubria el inicio del
-  parrafo, GTK aplicaba el margen del nivel de arriba y la vineta quedaba
-  alineada con la lista padre. Ahora el tramo llega hasta el inicio de linea y la
-  sangria literal se oculta, para que el desplazamiento lo de solo el margen.
-- **Espacio suelto tras las casillas**: el rango de `TaskListMarker` cubre `[x]`
-  pero no el espacio siguiente, que quedaba como sangria fantasma.
+- **Nested list indentation**: pulldown-cmark starts the item range at the
+  marker, not at the start of the line. Since the tag did not cover the
+  paragraph start, GTK applied the parent level margin and the bullet lined up
+  with the parent list. The span now reaches the start of the line and the
+  literal indent is hidden, so the margin alone provides the offset.
+- **Stray space after checkboxes**: the `TaskListMarker` range covers `[x]` but
+  not the following space, which was left as a phantom indent.
 
-### Added — interfaz HIG, plantillas y preferencias
+### Added - HIG interface, templates and preferences
 
-- **Preferencias completas** (`src/preferences.rs`) con `AdwPreferencesWindow` y
-  tres paginas: Apariencia (esquema de color, familia tipografica, tamano,
-  interlineado, ancho de columna), Editor (visibilidad del marcado, continuar
-  listas, modo foco, maquina de escribir, tabulacion, autoguardado e intervalo)
-  y Plantillas.
-- **Plantillas** (`src/templates.rs`): ficheros `.md` en
-  `$XDG_DATA_HOME/scribe/templates`, sembrados con cuatro ejemplos la primera
-  vez. Admiten `{{title}}`, `{{date}}`, `{{time}}`, `{{datetime}}` y `{{year}}`.
-- **Visibilidad del marcado configurable**: ocultar siempre, revelar en la linea
-  del cursor o atenuar siempre.
-- **Modo foco** (Ctrl+Shift+F) y **maquina de escribir** (Ctrl+Shift+T).
-- **Continuacion de listas** al pulsar Intro, con renumeracion de las ordenadas
-  y cierre automatico al dejar un elemento vacio.
-- **Zoom** (Ctrl +/-/0) con fila de control en el menu principal.
-- **Ir a la linea** desde la barra de estado.
-- **Marcado ampliado**: cabeceras setext, autoenlaces `<url>`, notas al pie,
-  bloques HTML atenuados y tablas en monoespaciada para que las columnas cuadren.
-  Tests: 13 -> 16.
-- **Ventana de atajos** externalizada a `src/shortcuts.ui`.
+- **Complete preferences** (`src/preferences.rs`) with `AdwPreferencesWindow` and
+  three pages: Appearance (colour scheme, font family, size, line spacing,
+  column width), Editor (markup visibility, continue lists, focus mode,
+  typewriter, tab width, autosave and interval) and Templates.
+- **Templates** (`src/templates.rs`): `.md` files in
+  `$XDG_DATA_HOME/scribe/templates`, seeded with four examples the first time.
+  They support `{{title}}`, `{{date}}`, `{{time}}`, `{{datetime}}` and
+  `{{year}}`.
+- **Configurable markup visibility**: hide always, reveal on the cursor line or
+  dim always.
+- **Focus mode** (Ctrl+Shift+F) and **typewriter** (Ctrl+Shift+T).
+- **List continuation** on Enter, with renumbering of ordered lists and automatic
+  closing when an item is left empty.
+- **Zoom** (Ctrl +/-/0) with a control row in the main menu.
+- **Go to line** from the status bar.
+- **Extended markup**: setext headings, autolinks `<url>`, footnotes, dimmed HTML
+  blocks and monospaced tables so the columns line up. Tests: 13 -> 16.
+- **Shortcuts window** moved out to `src/shortcuts.ui`.
 
 ### Changed
 
-- **Cabecera reorganizada** igual que GNOME Text Editor: `AdwSplitButton`
-  «Abrir» con desplegable de recientes y boton de documento nuevo a la
-  izquierda, titulo al centro, menu principal a la derecha. La barra de estado
-  lleva el contador de palabras a la izquierda y los botones de posicion y
-  propiedades a la derecha.
-- **Alternancias con estado** (`SimpleAction::new_stateful`) para barra lateral,
-  vista dividida, modo foco y maquina de escribir: el menu muestra la marca.
-- **Esquema GSettings** reescrito con enumeraciones y rangos.
-- **`settings.rs`** reescrito con tipos propios (`MarkupVisibility`,
-  `FontFamily`) en lugar de cadenas sueltas.
+- **Header reorganised** like GNOME Text Editor: `AdwSplitButton` "Open" with a
+  recents dropdown and a new document button on the left, title in the centre,
+  main menu on the right. The status bar carries the word counter on the left
+  and the position and properties buttons on the right.
+- **Stateful toggles** (`SimpleAction::new_stateful`) for the sidebar, split
+  view, focus mode and typewriter: the menu shows the check mark.
+- **GSettings schema** rewritten with enumerations and ranges.
+- **`settings.rs`** rewritten with its own types (`MarkupVisibility`,
+  `FontFamily`) instead of loose strings.
 
 ### Fixed
 
-- Restauradas `app.quit` y `app.new-window`, que se habian perdido al rehacer
-  `main.rs`: Ctrl+Q no hacia nada y dos entradas del menu salian grises.
-- Restaurado `ApplicationFlags::HANDLES_OPEN`, sin el cual `scribe fichero.md` y
-  «Abrir con» del gestor de archivos se ignoraban.
-- `GtkTextTag:letter-spacing` no admite valores negativos: usarlos abortaba la
-  aplicacion al construir los tags de cabecera.
+- Restored `app.quit` and `app.new-window`, lost when `main.rs` was redone:
+  Ctrl+Q did nothing and two menu entries came out greyed.
+- Restored `ApplicationFlags::HANDLES_OPEN`, without which `scribe file.md` and
+  "Open with" from the file manager were ignored.
+- `GtkTextTag:letter-spacing` does not accept negative values: using them
+  aborted the application while building the heading tags.
 
-### Added — render WYSIWYG en linea
+### Added - inline WYSIWYG rendering
 
 - **Inline WYSIWYG rendering**: the editor buffer is now decorated with `GtkTextTag`
   spans computed from the Markdown source. Headings render at their actual scale,
   bold/italic/strikethrough/code appear styled inline, and the Markdown syntax
   markers (`**`, `##`, backticks, link URLs) are hidden everywhere except on the
-  cursor line — which is what makes editing feel WYSIWYG.
+  cursor line, which is what makes editing feel WYSIWYG.
 - **New `src/markdown_render.rs`** module: pure-logic span calculator backed by
-  pulldown-cmark. No GTK dependency — returns byte ranges and tag names so it can
+  pulldown-cmark. No GTK dependency: returns byte ranges and tag names so it can
   be tested without a display. Ships with 13 unit tests (headings, emphasis, code,
   links, images, blockquotes, lists, nested lists, code blocks, rules, task lists,
   Unicode boundaries, empty input).
@@ -656,7 +605,7 @@ the editor is better for every one of them.
   (`recent-files` key as a string array), deduplicated, capped at 20 entries,
   and filterable from the sidebar search entry.
 - **Rich preferences window** with font size spin button, line spacing adjustment,
-  and autosave toggle — all persisted to GSettings with setter methods.
+  and autosave toggle, all persisted to GSettings with setter methods.
 - **`Outcome` / `OpenOutcome` enums** in `FileManager`: file open and save
   operations now distinguish success, user cancellation, and I/O errors, with
   toasts shown for failures.
@@ -714,7 +663,7 @@ the editor is better for every one of them.
   tag in the HTML output. Replaced with `GtkTextView` + `GtkTextTag`.
 - File open/save errors are now surfaced as toasts instead of failing silently.
 
-## [Pre-alpha] — 2026-08-03
+## [Pre-alpha] - 2026-08-03
 
 Initial public commit (`1932282`). Proof-of-concept editor with GtkSourceView 5,
 sidebar, file open/save dialogs, GSettings persistence, and basic Markdown
