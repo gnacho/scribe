@@ -858,12 +858,12 @@ pub fn canvas_layout(
     for row in rows {
         let mut fila = Vec::with_capacity(row.cells.len());
         let mut alto = 1usize;
-        for (i, celda) in row.cells.iter().enumerate() {
+        for (i, celda) in row.cells.iter().take(columns.len()).enumerate() {
             // El texto no debe llegar al borde de su celda: al envolver se
             // descuenta el mismo padding que el pintado reserva por lado
             // (CANVAS_CELL_PAD, ~0.8 celdas), o la ultima letra pisa la
             // linea vertical vecina.
-            let ancho = (col_widths.get(i).copied().unwrap_or(8.0) - 1.6).max(2.0) as usize;
+            let ancho = (col_widths[i] - 1.6).max(2.0) as usize;
             let lineas = wrap_segments(celda, ancho);
             alto = alto.max(lineas.len());
             fila.push(lineas);
@@ -2838,6 +2838,30 @@ mod tests {
             "el tramo **Nutri** pinta en negrita"
         );
         assert_eq!(texto(&rows[1].cells[1]), "G000952966_Nutri.pdf");
+    }
+
+    #[test]
+    fn lienzo_ignora_las_celdas_que_sobran_de_una_fila() {
+        // Una fila con más celdas que columnas (la delimitadora define 4 y la
+        // fila trae 5) manda la tabla al lienzo, y el lienzo no puede emitir
+        // una fila con más celdas que columnas: al pintar se indexaría
+        // `col_widths[4]` y reventaría con "index out of bounds" (#176).
+        let text = "| a | b | c | d |\n|---|---|---|---|\n| 1 | 2 | 3 | 4 | 5 |\n";
+        let ornaments = analyze(text).ornaments;
+        let Some(Ornament::TableCanvas { columns, rows, .. }) = ornaments
+            .iter()
+            .find(|o| matches!(o, Ornament::TableCanvas { .. }))
+        else {
+            panic!("la tabla con celdas de sobra debería tener lienzo: {ornaments:?}");
+        };
+        let layout = canvas_layout(columns, rows, 40.0).expect("layout");
+        assert_eq!(layout.col_widths.len(), columns.len());
+        for fila in &layout.cells {
+            assert!(
+                fila.len() <= layout.col_widths.len(),
+                "ninguna fila puede tener más celdas que columnas: {fila:?}"
+            );
+        }
     }
 
     #[test]
