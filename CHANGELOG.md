@@ -5,6 +5,18 @@ All notable changes to Scribe will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.45] - 2026-11-10
+
+Thank you [@somepaulo](https://github.com/somepaulo) for shipping the symbolic
+app icon in the Debian package.
+
+### Changed
+
+- **Complete icon set in the .deb and .rpm packages** (#179): the packaged
+  assets only included two of the six action icons and were missing the
+  symbolic app icon. Both packages now match `make install`, so a packaged
+  install gets the full icon set.
+
 ## [0.3.40] - 2026-11-10
 
 Thank you [@HelloKolla2004](https://github.com/HelloKolla2004) for the bullet
