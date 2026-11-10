@@ -53,6 +53,12 @@
   </screenshots>
   <content_rating type="oars-1.1" />
   <releases>
+    <release version="0.3.40" date="2026-11-10">
+      <description>
+        <p>Bullet markers now center on their text, and a table with a row that has more cells than its header no longer crashes the app on startup. The changelog is now fully in English.</p>
+        <p xml:lang="es">Las marcas de vineta se centran ahora sobre su texto, y una tabla con una fila de mas celdas que su cabecera ya no hace que la aplicacion falle al abrir. El changelog queda por completo en ingles.</p>
+      </description>
+    </release>
     <release version="0.3.35" date="2026-10-28">
       <description>
         <p>Closing the window no longer aborts the app. On systems that report crashes, a normal close could end with a crash notification right after the window disappeared. The same abort was already fixed for quitting with Ctrl+Q, and this release covers the window close button and Alt+F4 on any desktop.</p>

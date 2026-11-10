@@ -5,6 +5,33 @@ All notable changes to Scribe will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.40] - 2026-11-10
+
+Thank you [@HelloKolla2004](https://github.com/HelloKolla2004) for the bullet
+marker report and [@WegDamit](https://github.com/WegDamit) for the startup
+crash report, which came with a backtrace that pointed straight at the culprit.
+
+### Fixed
+
+- **Bullet markers centered on the text** (#169): markers sat below the
+  vertical center of the text they precede, in every bulleted list. The line
+  origin was measured from the shrunken Markdown marker instead of the first
+  visible glyph, so the bullet drifted as the marker shrank. The bullet now
+  centers on the first glyph of the line.
+
+- **Crash on startup with an uneven table** (#176): a table row with more
+  cells than its delimiter row made the painted layout index past the last
+  column and crash on the first paint. The layout now ignores cells past the
+  delimiter column count, like GitHub Flavored Markdown, and the source text
+  is left untouched.
+
+### Changed
+
+- **Changelog in English** (#171): the historical entries were still partly in
+  Spanish; the whole changelog is now in English.
+- **GitHub Sponsors** (#173): added a funding file so the sponsor button points
+  somewhere real.
+
 ## [0.3.35] - 2026-10-28
 
 Thank you [@HelloKolla2004](https://github.com/HelloKolla2004) for the Fedora
