@@ -53,6 +53,12 @@
   </screenshots>
   <content_rating type="oars-1.1" />
   <releases>
+    <release version="0.3.45" date="2026-11-10">
+      <description>
+        <p>The .deb and .rpm packages now ship every application and action icon, matching a manual install.</p>
+        <p xml:lang="es">Los paquetes .deb y .rpm incluyen ahora todos los iconos de la aplicacion y de accion, igual que una instalacion manual.</p>
+      </description>
+    </release>
     <release version="0.3.40" date="2026-11-10">
       <description>
         <p>Bullet markers now center on their text, and a table with a row that has more cells than its header no longer crashes the app on startup. The changelog is now fully in English.</p>
