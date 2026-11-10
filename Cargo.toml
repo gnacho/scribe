@@ -38,6 +38,10 @@ assets = [
     ["data/icons/hicolor/symbolic/apps/io.github.gnacho.Scribe-symbolic.svg", "usr/share/icons/hicolor/symbolic/apps/", "644"],
     ["data/icons/hicolor/scalable/actions/io.github.gnacho.Scribe-preview-off-symbolic.svg", "usr/share/icons/hicolor/scalable/actions/", "644"],
     ["data/icons/hicolor/scalable/actions/io.github.gnacho.Scribe-preview-on-symbolic.svg", "usr/share/icons/hicolor/scalable/actions/", "644"],
+    ["data/icons/hicolor/scalable/actions/io.github.gnacho.Scribe-typewriter-symbolic.svg", "usr/share/icons/hicolor/scalable/actions/", "644"],
+    ["data/icons/hicolor/scalable/actions/document-edit-symbolic.svg", "usr/share/icons/hicolor/scalable/actions/", "644"],
+    ["data/icons/hicolor/scalable/actions/preferences-desktop-appearance-symbolic.svg", "usr/share/icons/hicolor/scalable/actions/", "644"],
+    ["data/icons/hicolor/scalable/actions/tab-new-symbolic.svg", "usr/share/icons/hicolor/scalable/actions/", "644"],
     ["target/scribe-locale/es/LC_MESSAGES/scribe.mo", "usr/share/locale/es/LC_MESSAGES/", "644"],
 ]
 
@@ -79,6 +83,11 @@ dest = "/usr/share/icons/hicolor/scalable/apps/io.github.gnacho.Scribe.svg"
 mode = "644"
 
 [[package.metadata.generate-rpm.assets]]
+source = "data/icons/hicolor/symbolic/apps/io.github.gnacho.Scribe-symbolic.svg"
+dest = "/usr/share/icons/hicolor/symbolic/apps/io.github.gnacho.Scribe-symbolic.svg"
+mode = "644"
+
+[[package.metadata.generate-rpm.assets]]
 source = "data/icons/hicolor/scalable/actions/io.github.gnacho.Scribe-preview-off-symbolic.svg"
 dest = "/usr/share/icons/hicolor/scalable/actions/io.github.gnacho.Scribe-preview-off-symbolic.svg"
 mode = "644"
@@ -86,6 +95,26 @@ mode = "644"
 [[package.metadata.generate-rpm.assets]]
 source = "data/icons/hicolor/scalable/actions/io.github.gnacho.Scribe-preview-on-symbolic.svg"
 dest = "/usr/share/icons/hicolor/scalable/actions/io.github.gnacho.Scribe-preview-on-symbolic.svg"
+mode = "644"
+
+[[package.metadata.generate-rpm.assets]]
+source = "data/icons/hicolor/scalable/actions/io.github.gnacho.Scribe-typewriter-symbolic.svg"
+dest = "/usr/share/icons/hicolor/scalable/actions/io.github.gnacho.Scribe-typewriter-symbolic.svg"
+mode = "644"
+
+[[package.metadata.generate-rpm.assets]]
+source = "data/icons/hicolor/scalable/actions/document-edit-symbolic.svg"
+dest = "/usr/share/icons/hicolor/scalable/actions/document-edit-symbolic.svg"
+mode = "644"
+
+[[package.metadata.generate-rpm.assets]]
+source = "data/icons/hicolor/scalable/actions/preferences-desktop-appearance-symbolic.svg"
+dest = "/usr/share/icons/hicolor/scalable/actions/preferences-desktop-appearance-symbolic.svg"
+mode = "644"
+
+[[package.metadata.generate-rpm.assets]]
+source = "data/icons/hicolor/scalable/actions/tab-new-symbolic.svg"
+dest = "/usr/share/icons/hicolor/scalable/actions/tab-new-symbolic.svg"
 mode = "644"
 
 [[package.metadata.generate-rpm.assets]]
