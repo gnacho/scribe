@@ -1119,9 +1119,19 @@ fn apply_focus_shade(buffer: &gtksourceview5::Buffer, cursor_line: i32) {
     buffer.apply_tag_by_name("unfocused", &after, &buffer.end_iter());
 }
 
+/// Datos del elemento de lista que hay en una línea, para continuarlo.
+struct Continuacion {
+    /// Marcador completo con su sangría, listo para empezar la línea nueva.
+    marker: String,
+    /// Longitud en caracteres de la sangría más el marcador. Si el cursor
+    /// queda antes de esta posición está editando el marcador y no se toca.
+    prefix_len: usize,
+    /// El elemento no tiene texto, así que Intro cierra la lista.
+    empty: bool,
+}
+
 /// Marcador que continúa una lista, o `None` si la línea no es un elemento.
-/// El `bool` indica que el elemento está vacío, en cuyo caso hay que cerrarlo.
-fn list_continuation(line: &str) -> Option<(String, bool)> {
+fn list_continuation(line: &str) -> Option<Continuacion> {
     let indent: String = line
         .chars()
         .take_while(|c| *c == ' ' || *c == '\t')
@@ -1165,7 +1175,75 @@ fn list_continuation(line: &str) -> Option<(String, bool)> {
         (marker, body)
     };
 
-    Some((format!("{indent}{marker}"), body.trim().is_empty()))
+    Some(Continuacion {
+        marker: format!("{indent}{marker}"),
+        prefix_len: indent.chars().count() + marker.chars().count(),
+        empty: body.trim().is_empty(),
+    })
+}
+
+/// Qué hacer al pulsar Intro dentro de una línea de lista.
+enum ContinuarLista {
+    /// Empezar una línea nueva con este marcador delante.
+    NuevaLinea(String),
+    /// El elemento está vacío: borrarlo para cerrar la lista.
+    Cerrar,
+}
+
+/// Decide qué hacer con Intro si el cursor está en `offset` (caracteres desde
+/// el principio de la línea). `None` significa no tocar nada y dejar que el
+/// buffer inserte el salto de línea por su cuenta.
+fn enter_en_lista(line: &str, offset: usize) -> Option<ContinuarLista> {
+    let cont = list_continuation(line)?;
+    // Con el cursor dentro de la sangría o del marcador el usuario está
+    // editando la lista, no escribiendo su contenido: se deja pasar.
+    if offset < cont.prefix_len {
+        return None;
+    }
+    Some(if cont.empty {
+        ContinuarLista::Cerrar
+    } else {
+        ContinuarLista::NuevaLinea(cont.marker)
+    })
+}
+
+/// Aplica Intro en la línea del cursor cuando es un elemento de lista.
+/// Devuelve `false` si la tecla no era suya y el buffer debe hacer lo de
+/// siempre.
+pub(crate) fn continuar_lista_en_buffer(buffer: &gtksourceview5::Buffer) -> bool {
+    if buffer.selection_bounds().is_some() {
+        return false;
+    }
+    let cursor = buffer.iter_at_offset(buffer.cursor_position());
+    let Some(line_start) = buffer.iter_at_line(cursor.line()) else {
+        return false;
+    };
+    let Some(mut line_end) = buffer.iter_at_line(cursor.line()) else {
+        return false;
+    };
+    line_end.forward_to_line_end();
+    // La línea entera, no solo lo que hay antes del cursor: con el cursor en
+    // medio del elemento hay que ver el marcador para repetirlo (issue #186).
+    let line = buffer.text(&line_start, &line_end, true).to_string();
+    let offset = (cursor.offset() - line_start.offset()).max(0) as usize;
+    let Some(accion) = enter_en_lista(&line, offset) else {
+        return false;
+    };
+
+    buffer.begin_user_action();
+    match accion {
+        ContinuarLista::Cerrar => {
+            let mut from = line_start;
+            let mut to = line_end;
+            buffer.delete(&mut from, &mut to);
+        }
+        ContinuarLista::NuevaLinea(marker) => {
+            let mut at = buffer.iter_at_offset(buffer.cursor_position());
+            buffer.insert(&mut at, &format!("\n{marker}"));
+        }
+    }
+    buffer.end_user_action();
+    true
 }
 
 // --- pegado y soltado de imágenes -------------------------------------------
@@ -1823,29 +1901,11 @@ impl Editor {
                 return glib::Propagation::Proceed;
             }
 
-            let cursor = buffer.iter_at_offset(buffer.cursor_position());
-            if !cursor.ends_line() || buffer.selection_bounds().is_some() {
-                return glib::Propagation::Proceed;
-            }
-            let Some(line_start) = buffer.iter_at_line(cursor.line()) else {
-                return glib::Propagation::Proceed;
-            };
-            let line = buffer.text(&line_start, &cursor, true).to_string();
-            let Some((marker, empty)) = list_continuation(&line) else {
-                return glib::Propagation::Proceed;
-            };
-
-            buffer.begin_user_action();
-            if empty {
-                let mut from = line_start;
-                let mut to = cursor;
-                buffer.delete(&mut from, &mut to);
+            if continuar_lista_en_buffer(&buffer) {
+                glib::Propagation::Stop
             } else {
-                let mut at = buffer.iter_at_offset(buffer.cursor_position());
-                buffer.insert(&mut at, &format!("\n{marker}"));
+                glib::Propagation::Proceed
             }
-            buffer.end_user_action();
-            glib::Propagation::Stop
         });
         self.view.add_controller(controller);
 
@@ -2488,6 +2548,108 @@ impl Editor {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Un elemento de lista con texto continúa con el mismo marcador y la
+    /// misma sangría.
+    #[test]
+    fn list_continuation_repite_marcador_y_sangria() {
+        let cont = list_continuation("- Anarchy (no world government)").expect("es un elemento");
+        assert_eq!(cont.marker, "- ");
+        assert_eq!(cont.prefix_len, 2);
+        assert!(!cont.empty);
+
+        let cont = list_continuation("    * sangrada").expect("es un elemento");
+        assert_eq!(cont.marker, "    * ");
+        assert_eq!(cont.prefix_len, 6);
+        assert!(!cont.empty);
+    }
+
+    /// Las listas numeradas avanzan el número y conservan el delimitador.
+    #[test]
+    fn list_continuation_numerada_avanza() {
+        let cont = list_continuation("3. tercero").expect("es un elemento");
+        assert_eq!(cont.marker, "4. ");
+        assert_eq!(cont.prefix_len, 3);
+        assert!(!cont.empty);
+
+        let cont = list_continuation("9) noveno").expect("es un elemento");
+        assert_eq!(cont.marker, "10) ");
+        assert!(!cont.empty);
+    }
+
+    /// Las casillas de tarea empiezan sin marcar y cuentan en el prefijo.
+    #[test]
+    fn list_continuation_tarea_sin_marcar() {
+        let cont = list_continuation("- [x] hecha").expect("es un elemento");
+        assert_eq!(cont.marker, "- [ ] ");
+        assert_eq!(cont.prefix_len, 6);
+        assert!(!cont.empty);
+    }
+
+    /// Un elemento sin texto se marca como vacío para que Intro cierre la lista.
+    #[test]
+    fn list_continuation_elemento_vacio() {
+        assert!(list_continuation("- ").expect("es un elemento").empty);
+        assert!(list_continuation("  -   ").expect("es un elemento").empty);
+        assert!(list_continuation("- [ ] ").expect("es un elemento").empty);
+    }
+
+    /// Lo que no es un elemento de lista no se toca.
+    #[test]
+    fn list_continuation_ignora_lo_que_no_es_lista() {
+        assert!(list_continuation("texto normal").is_none());
+        assert!(list_continuation("-sin espacio").is_none());
+        assert!(list_continuation("3.sin espacio").is_none());
+        assert!(list_continuation("").is_none());
+    }
+
+    /// Enter en medio de un elemento repite el marcador: la segunda mitad del
+    /// texto sigue siendo parte de la lista (issue #186).
+    #[test]
+    fn enter_en_medio_de_un_elemento_repite_el_marcador() {
+        let linea = "- Anarchy (no world government above sovereign states) produces uncertainty (the intentions of other states cannot be known for sure)";
+        let offset = linea
+            .find(" produces")
+            .expect("el texto de prueba lo tiene");
+        assert!(offset > 2, "el cursor va despues del marcador");
+        match enter_en_lista(linea, offset) {
+            Some(ContinuarLista::NuevaLinea(marker)) => assert_eq!(marker, "- "),
+            _ => panic!("Enter en medio deberia continuar la lista"),
+        }
+    }
+
+    /// Al final de la línea el comportamiento de siempre no cambia.
+    #[test]
+    fn enter_al_final_del_elemento_repite_el_marcador() {
+        let linea = "- primero";
+        match enter_en_lista(linea, linea.chars().count()) {
+            Some(ContinuarLista::NuevaLinea(marker)) => assert_eq!(marker, "- "),
+            _ => panic!("Enter al final deberia continuar la lista"),
+        }
+    }
+
+    /// Con el cursor dentro de la sangría o del marcador no se toca nada.
+    #[test]
+    fn enter_dentro_del_marcador_no_hace_nada() {
+        assert!(enter_en_lista("- elemento", 0).is_none());
+        assert!(enter_en_lista("- elemento", 1).is_none());
+        assert!(enter_en_lista("  - elemento", 3).is_none());
+    }
+
+    /// Enter en un elemento vacío cierra la lista.
+    #[test]
+    fn enter_en_elemento_vacio_cierra_la_lista() {
+        assert!(matches!(
+            enter_en_lista("- ", 2),
+            Some(ContinuarLista::Cerrar)
+        ));
+    }
+
+    /// Fuera de una lista Enter pasa de largo.
+    #[test]
+    fn enter_fuera_de_una_lista_no_hace_nada() {
+        assert!(enter_en_lista("texto normal", 6).is_none());
+    }
 
     /// El nombre de imagen evita colisiones añadiendo `-2`, `-3`… si el
     /// fichero ya existe.
