@@ -53,6 +53,12 @@
   </screenshots>
   <content_rating type="oars-1.1" />
   <releases>
+    <release version="0.3.50" date="2026-11-13">
+      <description>
+        <p>Pressing Enter in the middle of a list item continues the list, and the source of a block image or a video is visible on the cursor line instead of an empty gap. The orphaned Markdown language file is gone.</p>
+        <p xml:lang="es">Pulsar Intro en medio de un elemento de lista continua ahora la lista, y el fuente de una imagen en bloque o de un video se ve en la linea del cursor en vez de un hueco vacio. El fichero de lenguaje Markdown huerfano ya no esta.</p>
+      </description>
+    </release>
     <release version="0.3.45" date="2026-11-10">
       <description>
         <p>The .deb and .rpm packages now ship every application and action icon, matching a manual install.</p>

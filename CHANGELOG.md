@@ -5,6 +5,33 @@ All notable changes to Scribe will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.50] - 2026-11-13
+
+Thank you [@HelloKolla2004](https://github.com/HelloKolla2004) for the list
+report and [@pyluyten](https://github.com/pyluyten) for spotting the orphaned
+language file and sending the pull request that removes it.
+
+### Fixed
+
+- **Enter continues the list from anywhere in the item** (#186): pressing Enter
+  in the middle of a list item split the line without repeating the marker, so
+  the second half of the text landed outside the list. The handler now reads the
+  whole line instead of the text up to the cursor and repeats the marker
+  wherever the cursor sits, and it still leaves the key alone when the cursor is
+  inside the marker or the indent.
+
+- **Image and video marks are visible while editing them** (#185): with the
+  cursor on the line of a block image or a video card, the picture was not
+  painted and the mark stayed shrunk to about a pixel, so the line looked empty
+  while the 144 px gap below it stayed reserved. The mark is now revealed on the
+  cursor line and the gap collapses, so what you edit is what is in the buffer.
+
+### Changed
+
+- **Removed the orphaned `markdown.lang`** (#187): nothing had read the file
+  since the editor rewrite, and an editor that paints its own tags does not need
+  a language definition.
+
 ## [0.3.45] - 2026-11-10
 
 Thank you [@somepaulo](https://github.com/somepaulo) for shipping the symbolic
