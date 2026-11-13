@@ -816,6 +816,17 @@ fn decorate(
         .get(cursor_line as usize + 1)
         .copied()
         .unwrap_or(text.len());
+    // Imagen o tarjeta de vídeo en bloque: ocupan su línea entera. Con el
+    // cursor ahí la vista no pinta el adorno, así que la marca tiene que verse
+    // cruda y el hueco reservado tiene que colapsar. Si no, la línea queda
+    // vacía y el hueco de 144 px se queda sin nada dentro (issue #185).
+    let bloque_de_imagen = analysis.ornaments.iter().any(|o| match o {
+        Ornament::Image { line, .. } | Ornament::Youtube { line, .. } => {
+            *line == cursor_line as usize
+        }
+        _ => false,
+    });
+    let en_linea_del_cursor = |span: &Span| span.start >= linea_desde && span.end <= linea_hasta;
     let (cursor_table, cursor_from, cursor_to) = {
         let line = cursor_line as usize;
         let in_table = analysis.ornaments.iter().any(
@@ -852,6 +863,12 @@ fn decorate(
         if from >= to {
             continue;
         }
+        if span.tag == "imagegap" || span.tag == "youtubegap" {
+            // El hueco solo tiene sentido mientras el adorno se pinta.
+            if bloque_de_imagen && en_linea_del_cursor(span) {
+                continue;
+            }
+        }
         if span.tag == "tablerule" && revealed(span) {
             // La fila de guiones se está editando: sin encoger y sin filete,
             // para que se vea el fuente.
@@ -880,7 +897,8 @@ fn decorate(
                 // El revelado es por ELEMENTO en los tres modos (#117); el
                 // revelado por linea queda solo para `Replaced` (cabeceras,
                 // listas, citas), la excepcion que pide el live preview.
-                if revealed(span) || en_elemento {
+                if revealed(span) || en_elemento || (bloque_de_imagen && en_linea_del_cursor(span))
+                {
                     "syn_shown"
                 } else if gate {
                     "syn_hidden"
