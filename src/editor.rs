@@ -9,8 +9,9 @@ use std::rc::Rc;
 use std::time::Duration;
 
 use crate::markdown_render::{
-    analyze, canvas_layout, ornaments_for, pad_units, LinkRef, Ornament, Span, SpanKind,
-    UnclosedFence, CANVAS_ROW_PAD, MAX_LIVE_BYTES,
+    analyze, canvas_layout, ornaments_for, pad_units, rewrite_image_alt, ImageAlign, ImageOptions,
+    LinkRef, Ornament, Span, SpanKind, UnclosedFence, CANVAS_ROW_PAD, IMAGE_GAP_HEIGHT,
+    MAX_LIVE_BYTES,
 };
 use crate::markdown_view::{MarkdownView, OrnamentPalette, BLOCK_PADDING};
 use crate::settings::{gtk_hides_invisible_safely, FontFamily, MarkupVisibility};
@@ -680,6 +681,41 @@ fn revisa_ortografia(
     }
 }
 
+/// Aplica un ancho y/o una alineación al alt de la imagen en bloque que ocupa
+/// la línea del cursor. Solo cambia el texto alternativo: el destino, el título
+/// y el resto de la línea quedan intactos, así que el fichero sigue siendo
+/// Markdown plano y otros visores lo leen igual.
+fn aplicar_a_imagen(
+    buffer: &gtksourceview5::Buffer,
+    view: &MarkdownView,
+    width: Option<Option<u32>>,
+    align: Option<ImageAlign>,
+) {
+    let cursor = buffer.iter_at_mark(&buffer.get_insert());
+    let line = cursor.line();
+    if view.image_at_line(line).is_none() {
+        return;
+    }
+    let Some(mut desde) = buffer.iter_at_line(line) else {
+        return;
+    };
+    let mut hasta = desde;
+    if !hasta.ends_line() {
+        hasta.forward_to_line_end();
+    }
+    let texto = buffer.text(&desde, &hasta, true).to_string();
+    let Some(nuevo) = rewrite_image_alt(&texto, width, align) else {
+        return;
+    };
+    buffer.begin_user_action();
+    buffer.delete(&mut desde, &mut hasta);
+    buffer.insert(&mut desde, &nuevo);
+    buffer.end_user_action();
+    if let Some(inicio) = buffer.iter_at_line(line) {
+        buffer.place_cursor(&inicio);
+    }
+}
+
 /// Palabra (limites de Pango) que contiene el iterador, con su texto. `None`
 /// si el iterador no cae sobre una palabra.
 fn palabra_bajo_iter(
@@ -851,6 +887,23 @@ fn decorate(
         view.set_opacity(1.0);
     }
 
+    // Imágenes en bloque por línea, con el destino ya resuelto: el hueco que
+    // reserva `imagegap` depende del tamaño pedido en el alt, y esa altura solo
+    // se puede calcular con la textura delante.
+    let image_lines: std::collections::HashMap<usize, (String, ImageOptions)> = analysis
+        .images
+        .iter()
+        .map(|img| {
+            (
+                img.line,
+                (
+                    resolve_image_dest(&img.dest, &base_dir.borrow()),
+                    img.options,
+                ),
+            )
+        })
+        .collect();
+
     for span in &analysis.spans {
         // Los rangos del parser deberían estar siempre dentro del texto, pero
         // un cambio en pulldown-cmark o en analyze no debe convertirse en un
@@ -876,6 +929,19 @@ fn decorate(
         }
         let start_iter = buffer.iter_at_offset(from);
         let end_iter = buffer.iter_at_offset(to);
+        // El hueco de una imagen con tamaño pedido se reserva a su medida, con
+        // un tag `pixels_below_lines` por alto distinto (cacheado en la vista).
+        // Sin tamaño pedido se aplica el tag de siempre.
+        let gap_name = if span.tag == "imagegap" {
+            let linea = start_iter.line() as usize;
+            let px = match image_lines.get(&linea) {
+                Some((dest, options)) => view.image_gap(dest, *options),
+                None => IMAGE_GAP_HEIGHT,
+            };
+            (px != IMAGE_GAP_HEIGHT).then(|| view.gap_tag(px))
+        } else {
+            None
+        };
         // Visibilidad por elemento (#117): la marca se revela si el cursor
         // esta dentro del elemento que delimita o tocando cualquiera de sus
         // bordes (`**bo|ld**`, `|**bold**`, `**bold**|`), no si comparten
@@ -889,7 +955,7 @@ fn decorate(
                 _ => false,
             };
         let name = match span.kind {
-            SpanKind::Style => span.tag,
+            SpanKind::Style => gap_name.as_deref().unwrap_or(span.tag),
             SpanKind::Marker => {
                 // Las marcas se muestran dentro del elemento que delimitan (o
                 // tocando sus bordes) y se encogen en el resto: la escala
@@ -1784,6 +1850,38 @@ impl Editor {
         grupo.add_action(&anadir);
         view.insert_action_group("spellcheck", Some(&grupo));
 
+        // Tamaño y alineación de una imagen en bloque (issue #194): el menú
+        // contextual ofrece presets y todo se escribe en el alt, que sigue
+        // siendo Markdown plano y otros visores ignoran sin romperse.
+        let grupo_imagen = gio::SimpleActionGroup::new();
+        let tamano = gio::SimpleAction::new("tamano", Some(glib::VariantTy::UINT32));
+        {
+            let buffer = buffer.clone();
+            let view = view.clone();
+            tamano.connect_activate(move |_accion, parametro| {
+                let ancho = parametro.and_then(|p| p.get::<u32>()).filter(|w| *w > 0);
+                aplicar_a_imagen(&buffer, &view, Some(ancho), None);
+            });
+        }
+        grupo_imagen.add_action(&tamano);
+
+        let alinear = gio::SimpleAction::new("alinear", Some(glib::VariantTy::STRING));
+        {
+            let buffer = buffer.clone();
+            let view = view.clone();
+            alinear.connect_activate(move |_accion, parametro| {
+                let Some(valor) = parametro.and_then(|p| p.str()) else {
+                    return;
+                };
+                let Some(align) = ImageAlign::from_token(valor) else {
+                    return;
+                };
+                aplicar_a_imagen(&buffer, &view, None, Some(align));
+            });
+        }
+        grupo_imagen.add_action(&alinear);
+        view.insert_action_group("imagen", Some(&grupo_imagen));
+
         let editor = Self {
             widget,
             view,
@@ -2038,6 +2136,56 @@ impl Editor {
                 x as i32,
                 y as i32,
             );
+            // Imagen en bloque: tamaño y alineación, sin tocar nada mas que el
+            // alt. Se prueba primero el hueco pintado (que no es texto y por
+            // eso no da iter) y luego la linea de la imagen.
+            let linea_imagen = menu_view_click.image_line_at_position(x, y).or_else(|| {
+                menu_view_click
+                    .iter_at_position(bx, by)
+                    .and_then(|(iter, _)| {
+                        menu_view_click
+                            .image_at_line(iter.line())
+                            .map(|_| iter.line())
+                    })
+            });
+            if let Some(linea) = linea_imagen {
+                if let Some(inicio) = menu_buffer.iter_at_line(linea) {
+                    menu_buffer.place_cursor(&inicio);
+                }
+                let tamanos = gio::Menu::new();
+                for (etiqueta, px) in [("Small", 240u32), ("Medium", 480), ("Large", 720)] {
+                    let item = gio::MenuItem::new(Some(&gettext(etiqueta)), Some("imagen.tamano"));
+                    item.set_action_and_target_value(
+                        Some("imagen.tamano"),
+                        Some(&glib::Variant::from(px)),
+                    );
+                    tamanos.append_item(&item);
+                }
+                let original =
+                    gio::MenuItem::new(Some(&gettext("Original size")), Some("imagen.tamano"));
+                original.set_action_and_target_value(
+                    Some("imagen.tamano"),
+                    Some(&glib::Variant::from(0u32)),
+                );
+                tamanos.append_item(&original);
+                menu_modelo.append_section(Some(&gettext("Image size")), &tamanos);
+
+                let alineaciones = gio::Menu::new();
+                for (etiqueta, valor) in [
+                    ("Align left", "left"),
+                    ("Align centre", "center"),
+                    ("Align right", "right"),
+                ] {
+                    let item = gio::MenuItem::new(Some(&gettext(etiqueta)), Some("imagen.alinear"));
+                    item.set_action_and_target_value(
+                        Some("imagen.alinear"),
+                        Some(&glib::Variant::from(valor)),
+                    );
+                    alineaciones.append_item(&item);
+                }
+                menu_modelo.append_section(Some(&gettext("Alignment")), &alineaciones);
+                return;
+            }
             let Some((iter, _)) = menu_view_click.iter_at_position(bx, by) else {
                 return;
             };
@@ -2190,6 +2338,13 @@ impl Editor {
     #[allow(dead_code)]
     pub fn buffer(&self) -> gtksourceview5::Buffer {
         self.buffer.clone()
+    }
+
+    /// Vista que pinta los adornos y lleva las acciones del menú contextual
+    /// (smoke tests).
+    #[allow(dead_code)]
+    pub fn view(&self) -> &MarkdownView {
+        &self.view
     }
 
     // --- búsqueda ---------------------------------------------------------

@@ -36,6 +36,174 @@ pub const IMAGE_GAP_HEIGHT: i32 = 150;
 /// 16:9 (la miniatura de YouTube lo es).
 pub const YOUTUBE_GAP_HEIGHT: i32 = 260;
 
+/// Tope duro (px) del alto de una imagen con tamaño pedido: por encima se
+/// recorta la escala para no romper el desplazamiento del documento. El tope
+/// por defecto, sin tamaño pedido, sigue siendo el del hueco (144 px).
+pub const IMAGE_MAX_REQUESTED_HEIGHT: f32 = 900.0;
+
+/// Alineación horizontal de una imagen en bloque dentro de la columna.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ImageAlign {
+    Left,
+    #[default]
+    Center,
+    Right,
+}
+
+impl ImageAlign {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            ImageAlign::Left => "left",
+            ImageAlign::Center => "center",
+            ImageAlign::Right => "right",
+        }
+    }
+
+    /// La alineación escrita en el alt (`left`, `center`, `right`).
+    pub fn from_token(s: &str) -> Option<Self> {
+        match s.to_ascii_lowercase().as_str() {
+            "left" => Some(ImageAlign::Left),
+            "center" | "centre" => Some(ImageAlign::Center),
+            "right" => Some(ImageAlign::Right),
+            _ => None,
+        }
+    }
+}
+
+/// Tamaño y alineación pedidos en el texto alternativo de una imagen.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct ImageOptions {
+    pub width: Option<u32>,
+    pub height: Option<u32>,
+    pub align: ImageAlign,
+}
+
+impl ImageOptions {
+    pub fn is_default(self) -> bool {
+        self.width.is_none() && self.height.is_none() && self.align == ImageAlign::default()
+    }
+}
+
+/// Separa del texto alternativo las opciones escritas al final, tras una barra
+/// vertical: `foto|480`, `foto|480x320` y `foto|center`, hasta dos partes y en
+/// cualquier orden. Es la forma que usa Obsidian, así que otros visores o bien
+/// la entienden o bien enseñan la imagen a su tamaño natural sin romperse.
+///
+/// Devuelve el alt visible (sin las opciones) y las opciones. Un `|` que no
+/// cierre con un número o una alineación se queda en el alt.
+pub fn parse_alt_options(alt: &str) -> (String, ImageOptions) {
+    let mut out = ImageOptions::default();
+    let mut rest = alt;
+    for _ in 0..2 {
+        let (head, part) = match rest.rsplit_once('|') {
+            Some(pair) => pair,
+            None => break,
+        };
+        let token = part.trim();
+        if out.width.is_none() {
+            if let Some((w, h)) = parse_size_token(token) {
+                out.width = Some(w);
+                out.height = h;
+                rest = head;
+                continue;
+            }
+        }
+        if out.align == ImageAlign::default() {
+            if let Some(align) = ImageAlign::from_token(token) {
+                out.align = align;
+                rest = head;
+                continue;
+            }
+        }
+        break;
+    }
+    (rest.trim_end().to_string(), out)
+}
+
+/// `480` o `480x320` (también `480 x 320`). Cero se descarta: no es un ancho.
+fn parse_size_token(token: &str) -> Option<(u32, Option<u32>)> {
+    let (w, h) = match token.split_once(['x', 'X']) {
+        Some((w, h)) => (w.trim(), Some(h.trim())),
+        None => (token, None),
+    };
+    if w.is_empty() || !w.chars().all(|c| c.is_ascii_digit()) || w.len() > 5 {
+        return None;
+    }
+    let width: u32 = w.parse().ok()?;
+    if width == 0 {
+        return None;
+    }
+    let height = match h {
+        Some(h) => {
+            if h.is_empty() || !h.chars().all(|c| c.is_ascii_digit()) || h.len() > 5 {
+                return None;
+            }
+            let value: u32 = h.parse().ok()?;
+            (value > 0).then_some(value)
+        }
+        None => None,
+    };
+    Some((width, height))
+}
+
+/// Escribe las opciones en el texto alternativo. `None` en un campo lo deja
+/// como está, así que `with_alt_options(alt, None, None)` conserva las
+/// actuales y sirve para recomponer.
+pub fn with_alt_options(
+    alt: &str,
+    width: Option<Option<u32>>,
+    align: Option<ImageAlign>,
+) -> String {
+    let (base, mut current) = parse_alt_options(alt);
+    if let Some(width) = width {
+        current.width = width.filter(|w| *w > 0);
+        if current.width.is_none() {
+            current.height = None;
+        }
+    }
+    if let Some(align) = align {
+        current.align = align;
+    }
+    let mut out = base;
+    if let Some(w) = current.width {
+        out.push('|');
+        out.push_str(&w.to_string());
+        if let Some(h) = current.height {
+            out.push('x');
+            out.push_str(&h.to_string());
+        }
+    }
+    if current.align != ImageAlign::default() {
+        out.push('|');
+        out.push_str(current.align.as_str());
+    }
+    out
+}
+
+/// Reescribe el alt de la imagen en bloque que ocupa una línea entera,
+/// conservando el destino y el título tal cual. Devuelve la línea nueva, o
+/// `None` si la línea no es una imagen en bloque.
+pub fn rewrite_image_alt(
+    line: &str,
+    width: Option<Option<u32>>,
+    align: Option<ImageAlign>,
+) -> Option<String> {
+    let body = line.trim_end();
+    let src = body.trim_start();
+    let indent = &body[..body.len() - src.len()];
+    if !src.starts_with("![") {
+        return None;
+    }
+    let close = src.find(']')?;
+    let rest = &src[close..];
+    if !rest.starts_with("](") {
+        return None;
+    }
+    let alt = &src[2..close];
+    let nuevo = with_alt_options(alt, width, align);
+    Some(format!("{indent}![{nuevo}{rest}"))
+}
+
 /// Relleno vertical interior de una fila pintada del lienzo de tabla, en
 /// píxeles. El editor lo suma al alto del hueco de cada fila colapsada.
 pub const CANVAS_ROW_PAD: f32 = 6.0;
@@ -180,7 +348,10 @@ pub enum Ornament {
     Image {
         line: usize,
         dest: String,
+        /// Texto alternativo sin las opciones de tamaño y alineación.
         alt: String,
+        /// Tamaño y alineación pedidos en el alt (`![foto|480|right](x)`).
+        options: ImageOptions,
     },
     /// Referencia a un vídeo de YouTube que es el único contenido de su línea
     /// (enlace de markdown, URL suelta o `<iframe>`): se pinta como tarjeta con
@@ -254,7 +425,10 @@ pub struct ImageRef {
     pub start: usize,
     pub end: usize,
     pub dest: String,
+    /// Texto alternativo sin las opciones de tamaño y alineación.
     pub alt: String,
+    /// Tamaño y alineación pedidos en el alt.
+    pub options: ImageOptions,
 }
 
 /// Valla de código (``` o ~~~) que abre un bloque y nunca se cierra.
@@ -1620,11 +1794,18 @@ pub fn analyze(text: &str) -> Analysis {
                     // pintada es aditiva, no sustituye).
                     let sola = alone_in_line(text, range.start, range.end);
                     if sola {
-                        let alt = src
-                            .find(']')
-                            .map(|i| &src[2..i])
-                            .unwrap_or_default()
-                            .to_string();
+                        let raw_alt = src.find(']').map(|i| &src[2..i]).unwrap_or_default();
+                        let (alt, options) = parse_alt_options(raw_alt);
+                        // Las opciones son sintaxis, no contenido: se marcan
+                        // y se encogen como los corchetes, y se revelan en la
+                        // línea del cursor.
+                        if !options.is_default() {
+                            let fin_alt = range.start + 2 + raw_alt.len();
+                            let desde = range.start + 2 + alt.len();
+                            if desde < fin_alt {
+                                spans.push(marker(desde, fin_alt));
+                            }
+                        }
                         // pulldown-cmark ya ha resuelto las reference-style.
                         let dest = dest_url.to_string();
                         let line = lines.line_of(range.start);
@@ -1634,6 +1815,7 @@ pub fn analyze(text: &str) -> Analysis {
                             end: range.end,
                             dest: dest.clone(),
                             alt: alt.clone(),
+                            options,
                         });
                         // Una miniatura de YouTube en bloque no es una imagen
                         // cualquiera: es la tarjeta del vídeo.
@@ -1643,7 +1825,12 @@ pub fn analyze(text: &str) -> Analysis {
                                 url: youtube_watch_url(&id),
                                 id,
                             }),
-                            None => ornaments.push(Ornament::Image { line, dest, alt }),
+                            None => ornaments.push(Ornament::Image {
+                                line,
+                                dest,
+                                alt,
+                                options,
+                            }),
                         }
                         // Reserva bajo la línea el hueco donde se pinta.
                         spans.push(gap_span(text, range.start, "imagegap"));
@@ -3180,7 +3367,8 @@ mod tests {
             Ornament::Image {
                 line: 0,
                 dest: String::new(),
-                alt: String::new()
+                alt: String::new(),
+                options: ImageOptions::default()
             }
             .family(),
             OrnamentFamily::Additive
@@ -3219,12 +3407,14 @@ mod tests {
                 end: 19,
                 dest: "/tmp/g.png".to_string(),
                 alt: "gato".to_string(),
+                options: ImageOptions::default(),
             }]
         );
         assert!(a.ornaments.contains(&Ornament::Image {
             line: 0,
             dest: "/tmp/g.png".to_string(),
             alt: "gato".to_string(),
+            options: ImageOptions::default(),
         }));
         // El hueco lo reserva el span de estilo `imagegap`, sobre la línea.
         assert_eq!(find(&a.spans, "imagegap").len(), 1);
@@ -3609,5 +3799,130 @@ mod prueba_tmp {
                 println!("BULLET linea {line}");
             }
         }
+    }
+
+    #[test]
+    fn el_alt_sin_opciones_se_deja_intacto() {
+        let (alt, opciones) = parse_alt_options("una foto");
+        assert_eq!(alt, "una foto");
+        assert!(opciones.is_default());
+    }
+
+    #[test]
+    fn el_tamano_y_la_alineacion_salen_del_alt() {
+        let (alt, o) = parse_alt_options("A photo|480");
+        assert_eq!(alt, "A photo");
+        assert_eq!((o.width, o.height), (Some(480), None));
+        assert_eq!(o.align, ImageAlign::Center);
+
+        let (alt, o) = parse_alt_options("A photo|480x320|right");
+        assert_eq!(alt, "A photo");
+        assert_eq!((o.width, o.height), (Some(480), Some(320)));
+        assert_eq!(o.align, ImageAlign::Right);
+
+        // El orden de las dos partes no importa.
+        let (alt, o) = parse_alt_options("A photo|left|300");
+        assert_eq!(alt, "A photo");
+        assert_eq!(o.width, Some(300));
+        assert_eq!(o.align, ImageAlign::Left);
+
+        // Un alt vacío con tamaño también es válido: `![|480](x)`.
+        let (alt, o) = parse_alt_options("|480");
+        assert_eq!(alt, "");
+        assert_eq!(o.width, Some(480));
+
+        // Espacios alrededor del número.
+        let (_, o) = parse_alt_options("A photo| 600 x 400 ");
+        assert_eq!((o.width, o.height), (Some(600), Some(400)));
+    }
+
+    #[test]
+    fn una_barra_que_no_es_opcion_se_queda_en_el_alt() {
+        for alt in [
+            "a|b",
+            "tabla|dos columnas",
+            "100|",
+            "x|480x",
+            "a|480x9999999",
+            "a|0",
+        ] {
+            let (limpio, o) = parse_alt_options(alt);
+            assert!(o.is_default(), "{alt}");
+            assert_eq!(limpio, alt.trim_end(), "{alt}");
+        }
+    }
+
+    #[test]
+    fn las_opciones_se_escriben_y_se_quitan() {
+        assert_eq!(with_alt_options("foto", Some(Some(300)), None), "foto|300");
+        assert_eq!(
+            with_alt_options("foto|300", None, Some(ImageAlign::Right)),
+            "foto|300|right"
+        );
+        // Volver al centro quita la alineación escrita.
+        assert_eq!(
+            with_alt_options("foto|300|right", None, Some(ImageAlign::Center)),
+            "foto|300"
+        );
+        // Ancho cero es quitar el tamaño, y con él el alto.
+        assert_eq!(with_alt_options("foto|300x200", Some(None), None), "foto");
+        // Sin argumentos se conserva tal cual.
+        assert_eq!(
+            with_alt_options("foto|300|right", None, None),
+            "foto|300|right"
+        );
+    }
+
+    #[test]
+    fn reescribir_el_alt_conserva_destino_titulo_y_sangria() {
+        assert_eq!(
+            rewrite_image_alt(
+                "![foto](img/a.png \"Titulo\")",
+                Some(Some(480)),
+                Some(ImageAlign::Right)
+            ),
+            Some("![foto|480|right](img/a.png \"Titulo\")".to_string())
+        );
+        assert_eq!(
+            rewrite_image_alt("  ![foto|480](a.png)", Some(None), None),
+            Some("  ![foto](a.png)".to_string())
+        );
+        // Una imagen con texto alrededor no es un bloque: no se toca.
+        assert_eq!(
+            rewrite_image_alt("texto ![foto](a.png)", Some(Some(1)), None),
+            None
+        );
+        assert_eq!(
+            rewrite_image_alt("![foto](a.png)", Some(Some(1)), None).as_deref(),
+            Some("![foto|1](a.png)")
+        );
+    }
+
+    #[test]
+    fn una_imagen_con_tamano_deja_el_alt_limpio_en_el_analisis() {
+        let text = "![foto|480|right](/tmp/g.png)\n";
+        let a = analyze(text);
+        assert_eq!(a.images[0].alt, "foto");
+        assert_eq!(a.images[0].options.width, Some(480));
+        assert_eq!(a.images[0].options.align, ImageAlign::Right);
+        assert!(a.ornaments.contains(&Ornament::Image {
+            line: 0,
+            dest: "/tmp/g.png".to_string(),
+            alt: "foto".to_string(),
+            options: ImageOptions {
+                width: Some(480),
+                height: None,
+                align: ImageAlign::Right,
+            },
+        }));
+        // Las opciones del alt son sintaxis: se marcan como el resto.
+        let mut marcas: Vec<(usize, usize)> = a
+            .spans
+            .iter()
+            .filter(|s| s.kind == SpanKind::Marker)
+            .map(|s| (s.start, s.end))
+            .collect();
+        marcas.sort_unstable();
+        assert_eq!(marcas, vec![(0, 2), (6, 16), (16, 29)]);
     }
 }

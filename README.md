@@ -83,6 +83,13 @@ actually use to draft notes and docs.
   mark (max 144 px, 20 MB limit, cache of 64). Missing files show a discreet
   placeholder. The buffer is never modified: no widgets, no characters
   inserted.
+- **Image size and alignment from the alt**: write `![A photo|480](photo.png)` to
+  show it 480 px wide, `|480x320` to cap both sides, and `|center` or `|right`
+  to place it in the column. It is the form Obsidian uses, and other renderers
+  either honour it or show the image at its natural size, so the file stays
+  valid Markdown. The right-click menu on the image writes it for you (Small,
+  Medium, Large, Original size, and the three alignments). Without a size, an
+  image is never enlarged and the block gap fits the image.
 - **Remote images**: when the destination is a URL, Scribe asks for its size
   first (20 MB limit), downloads it and caches it on disk under
   `~/.cache/scribe/images`, so later runs paint it without going out again. A
