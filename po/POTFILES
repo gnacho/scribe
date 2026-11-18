@@ -2,4 +2,5 @@ src/main.rs
 src/window.rs
 src/editor.rs
 src/preferences.rs
+src/export_pdf.rs
 src/file_manager.rs

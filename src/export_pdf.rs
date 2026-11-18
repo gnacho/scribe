@@ -25,10 +25,20 @@
 //! `begin_print` (una sola pasada) y se cortan con la función pura sobre las
 //! alturas reales. `draw_page` solo pinta la página ya planificada.
 //!
+//! # Índice del PDF (issue #195)
+//!
+//! Con el ajuste activo, el PDF empieza con una página (o varias) de índice
+//! con los títulos y su número de página REAL. Sin dependencias nuevas y sin
+//! tocar el fichero escrito: el cuerpo se pagina igual que siempre, las
+//! páginas del índice se anteponen y su número desplaza la numeración. Ver
+//! [`entradas_indice`], [`paginar_indice`] y [`numerar_indice`].
+//!
 //! # Limitaciones conocidas (v1)
 //!
-//! - **Sin índice/outline del PDF**: `GtkPrintOperation` no expone marcadores
-//!   PDF, así que el PDF no lleva tabla de contenidos ni outline.
+//! - **Sin marcadores/outline del PDF**: `GtkPrintOperation` no expone
+//!   marcadores PDF, así que el índice es una página de texto y no un outline
+//!   navegable. Tampoco hay enlaces internos clicables: las dos cosas exigen
+//!   post-procesar el PDF escrito.
 //! - **Render con la API de texto de cairo**, no con `PangoLayout`: dibujar un
 //!   `PangoLayout` sobre cairo exige el crate `pangocairo` (no incluido y no
 //!   añadido por la restricción «sin dependencias nuevas»). El ajuste de
@@ -45,6 +55,7 @@ use std::cell::RefCell;
 use std::path::Path;
 use std::rc::Rc;
 
+use gettextrs::gettext;
 use gtk4::cairo;
 use gtk4::prelude::*;
 
@@ -87,6 +98,13 @@ const ESPACIADO_CABECERA: [f64; 5] = [0.0, 1.0, 0.8, 0.6, 0.4];
 const BANDA_ADORNO: f64 = 18.0;
 /// Cuerpo de los adornos de cabecera y pie.
 const TAMANO_ADORNO: f64 = 8.0;
+/// Nivel máximo de cabecera que entra en el índice del PDF. Un índice con h4
+/// en adelante deja de orientar y pasa a ser ruido.
+const NIVEL_MAX_INDICE: u8 = 3;
+/// Sangrado de una entrada del índice por nivel de cabecera (puntos).
+const INDENT_INDICE: f64 = 12.0;
+/// Aire a cada lado de los puntos guía de una entrada del índice (puntos).
+const HUECO_INDICE: f64 = 6.0;
 
 // ---------------------------------------------------------------------------
 // Configuración de exportación
@@ -107,6 +125,9 @@ pub struct ExportConfig {
     pub theme: ExportTheme,
     /// Hoja de estilo del usuario, aplicada encima del tema.
     pub css_path: Option<std::path::PathBuf>,
+    /// Empieza el PDF con una página de índice con los títulos y su número de
+    /// página real.
+    pub indice: bool,
 }
 
 impl ExportConfig {
@@ -123,6 +144,7 @@ impl ExportConfig {
             template: s.export_template(),
             theme: s.export_theme(),
             css_path: s.export_css_path(),
+            indice: s.export_toc(),
         }
     }
 
@@ -1244,6 +1266,127 @@ pub fn planificar_paginas(bloques: &[Bloque], alto_util: f64) -> Vec<Pagina> {
 }
 
 // ---------------------------------------------------------------------------
+// Índice del PDF
+// ---------------------------------------------------------------------------
+
+/// Una entrada del índice: una cabecera del cuerpo y su número de página.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct EntradaIndice {
+    /// Nivel de la cabecera (1..=[`NIVEL_MAX_INDICE`]).
+    pub nivel: u8,
+    /// Texto de la cabecera, sin marcas de Markdown.
+    pub titulo: String,
+    /// Índice del bloque de cabecera dentro del cuerpo.
+    pub bloque: usize,
+    /// Página del PDF donde cae la cabecera, contando el propio índice y con
+    /// base 1 (la primera hoja del PDF es la 1).
+    pub pagina: usize,
+}
+
+/// Cabeceras que forman el índice, en el orden del documento. Se descartan las
+/// de nivel posterior a [`NIVEL_MAX_INDICE`] y las que no tienen texto.
+pub fn entradas_indice(bloques: &[Bloque]) -> Vec<EntradaIndice> {
+    let mut entradas = Vec::new();
+    for (i, b) in bloques.iter().enumerate() {
+        let TipoBloque::Cabecera { nivel } = b.tipo else {
+            continue;
+        };
+        if nivel > NIVEL_MAX_INDICE {
+            continue;
+        }
+        let texto: String = b.frases.iter().map(|f| f.texto.as_str()).collect();
+        let titulo = texto.split_whitespace().collect::<Vec<_>>().join(" ");
+        if titulo.is_empty() {
+            continue;
+        }
+        entradas.push(EntradaIndice {
+            nivel,
+            titulo,
+            bloque: i,
+            pagina: 0,
+        });
+    }
+    entradas
+}
+
+/// Página (base 0) del plan del cuerpo que contiene el bloque, si alguna.
+pub fn pagina_de_bloque(paginas: &[Pagina], bloque: usize) -> Option<usize> {
+    paginas.iter().position(|p| p.bloques.contains(&bloque))
+}
+
+/// Reparte las filas del índice en páginas. La primera descuenta el alto del
+/// título, así que el índice ocupa tantas páginas como haga falta (una fila
+/// nunca es más alta que una página, pero si lo fuera quedaría sola).
+///
+/// Devuelve, por página, los índices de fila que le tocan en orden.
+pub fn paginar_indice(altos: &[f64], alto_util: f64, alto_titulo: f64) -> Vec<Vec<usize>> {
+    let mut paginas: Vec<Vec<usize>> = Vec::new();
+    if altos.is_empty() {
+        return paginas;
+    }
+    let mut actual: Vec<usize> = Vec::new();
+    let mut capacidad = (alto_util - alto_titulo).max(1.0);
+    let mut usado = 0.0f64;
+    for (i, alto) in altos.iter().enumerate() {
+        if !actual.is_empty() && usado + alto > capacidad {
+            paginas.push(std::mem::take(&mut actual));
+            usado = 0.0;
+            capacidad = alto_util.max(1.0);
+        }
+        actual.push(i);
+        usado += alto;
+    }
+    if !actual.is_empty() {
+        paginas.push(actual);
+    }
+    paginas
+}
+
+/// Numera las entradas con la página real del PDF: la del bloque en el cuerpo
+/// (que no cambia al añadir el índice) más las páginas que ocupa el índice.
+pub fn numerar_indice(
+    entradas: &mut [EntradaIndice],
+    paginas_cuerpo: &[Pagina],
+    paginas_indice: usize,
+) {
+    for entrada in entradas.iter_mut() {
+        // Una cabecera siempre cae en alguna página: el `unwrap_or` es la red
+        // por si el plan llegara incoherente, y la deja en la primera del
+        // cuerpo antes que imprimir un cero.
+        entrada.pagina = pagina_de_bloque(paginas_cuerpo, entrada.bloque)
+            .map(|p| p + 1 + paginas_indice)
+            .unwrap_or(1 + paginas_indice);
+    }
+}
+
+/// Índice ya paginado y numerado, listo para dibujar.
+#[derive(Debug, Default)]
+struct Indice {
+    /// Páginas del índice, cada una con sus filas ya numeradas.
+    paginas: Vec<Vec<EntradaIndice>>,
+    /// Título del índice, medido como una cabecera de nivel 1 para que tome el
+    /// tamaño, el filete y el espaciado de la plantilla activa.
+    titulo: Bloque,
+}
+
+/// Título del índice como bloque de cabecera de nivel 1.
+fn bloque_indice(titulo: &str) -> Bloque {
+    Bloque {
+        tipo: TipoBloque::Cabecera { nivel: 1 },
+        frases: vec![Frase {
+            texto: titulo.to_string(),
+            estilo: Estilo::default(),
+        }],
+        ..Default::default()
+    }
+}
+
+/// Alto de una fila del índice: una línea del cuerpo.
+fn alto_fila_indice(config: &ExportConfig, plantilla: &Plantilla) -> f64 {
+    config.tamano_cuerpo * plantilla.interlinea
+}
+
+// ---------------------------------------------------------------------------
 // Medición y dibujado con cairo
 // ---------------------------------------------------------------------------
 
@@ -1902,6 +2045,110 @@ fn recortar_a_ancho(cr: &cairo::Context, texto: &str, ancho: f64) -> String {
     String::new()
 }
 
+/// Prepara el índice: mide el título, reparte las filas en páginas y numera
+/// cada una con la página del cuerpo donde cae su cabecera, desplazada por las
+/// páginas que ocupa el índice. Un documento sin cabeceras no lleva índice.
+fn preparar_indice(
+    bloques: &[Bloque],
+    paginas_cuerpo: &[Pagina],
+    cr: &cairo::Context,
+    config: &ExportConfig,
+    plantilla: &Plantilla,
+    ancho_util: f64,
+    alto_util: f64,
+) -> Indice {
+    let mut entradas = entradas_indice(bloques);
+    if entradas.is_empty() {
+        return Indice::default();
+    }
+    let mut titulo = bloque_indice(&gettext("Table of contents"));
+    medir_bloque(&mut titulo, config, plantilla, cr, ancho_util);
+    let altos = vec![alto_fila_indice(config, plantilla); entradas.len()];
+    let paginas = paginar_indice(&altos, alto_util, titulo.alto);
+    numerar_indice(&mut entradas, paginas_cuerpo, paginas.len());
+    Indice {
+        paginas: paginas
+            .into_iter()
+            .map(|filas| filas.into_iter().map(|i| entradas[i].clone()).collect())
+            .collect(),
+        titulo,
+    }
+}
+
+/// Dibuja una página del índice: el título (solo en la primera, la paginación
+/// ya lo descuenta ahí) con el estilo de la plantilla y una fila por entrada,
+/// con puntos guía hasta el número de página alineado a la derecha. Devuelve
+/// la `y` final.
+fn dibujar_pagina_indice(
+    cr: &cairo::Context,
+    filas: &[EntradaIndice],
+    titulo: Option<&Bloque>,
+    lienzo: Lienzo,
+    y_top: f64,
+) -> f64 {
+    let Lienzo {
+        config,
+        plantilla,
+        paleta,
+        ancho,
+    } = lienzo;
+    let mut y = match titulo {
+        Some(titulo) => dibujar_bloque(cr, titulo, lienzo, 0.0, y_top),
+        None => y_top,
+    };
+    let tamano = config.tamano_cuerpo;
+    let alto_linea = alto_fila_indice(config, plantilla);
+    seleccionar_fuente(cr, config, Estilo::default(), tamano);
+    let ascent = cr.font_extents().map(|e| e.ascent()).unwrap_or(tamano);
+
+    for entrada in filas {
+        let sangria = INDENT_INDICE * entrada.nivel.saturating_sub(1) as f64;
+        let numero = entrada.pagina.to_string();
+        let ancho_numero = cr
+            .text_extents(&numero)
+            .map(|e| e.x_advance())
+            .unwrap_or(0.0);
+        let x_numero = ancho - ancho_numero;
+        // El título se recorta con puntos suspensivos: una fila es siempre una
+        // línea, así que el alto del índice no depende de lo largos que sean
+        // los títulos.
+        let disponible = (x_numero - 2.0 * HUECO_INDICE - sangria).max(1.0);
+        let texto = recortar_a_ancho(cr, &entrada.titulo, disponible);
+        let ancho_texto = cr
+            .text_extents(&texto)
+            .map(|e| e.x_advance())
+            .unwrap_or(0.0);
+        let baseline = y + ascent;
+
+        cr.set_source_rgb(paleta.texto.0, paleta.texto.1, paleta.texto.2);
+        cr.move_to(sangria, baseline);
+        let _ = cr.show_text(&texto);
+        cr.move_to(x_numero, baseline);
+        let _ = cr.show_text(&numero);
+
+        // Puntos guía: línea discontinua de puntos, no glifos, para no meter
+        // ruido en el texto extraíble del PDF.
+        let x_desde = sangria + ancho_texto + HUECO_INDICE;
+        let x_hasta = x_numero - HUECO_INDICE;
+        if x_hasta > x_desde {
+            cr.set_source_rgb(paleta.atenuado.0, paleta.atenuado.1, paleta.atenuado.2);
+            cr.set_line_width(1.0);
+            cr.set_line_cap(cairo::LineCap::Round);
+            cr.set_dash(&[0.5, 3.5], 0.0);
+            let y_guia = baseline - ascent * 0.25;
+            cr.move_to(x_desde, y_guia);
+            cr.line_to(x_hasta, y_guia);
+            let _ = cr.stroke();
+            cr.set_dash(&[], 0.0);
+        }
+        y += alto_linea;
+    }
+    // Los remates redondos eran solo para los puntos: se devuelven al estado
+    // normal para no afectar a lo que se pinte después en la misma página.
+    cr.set_line_cap(cairo::LineCap::Butt);
+    y
+}
+
 /// Prepara la operación de impresión. `draw_page` pinta la página ya
 /// planificada. `sistema_oscuro` resuelve el esquema `system`.
 pub fn crear_operacion(
@@ -1970,32 +2217,52 @@ pub fn crear_operacion(
 
     let bloques: Rc<RefCell<Vec<Bloque>>> = Rc::new(RefCell::new(iniciales));
     let paginas: Rc<RefCell<Vec<Pagina>>> = Rc::new(RefCell::new(Vec::new()));
+    let indice: Rc<RefCell<Indice>> = Rc::new(RefCell::new(Indice::default()));
     let banda_sup = plantilla.banda_superior();
     let banda_inf = plantilla.banda_inferior();
     let titulo_adorno = titulo.to_string();
+    let con_indice = config.indice;
 
     {
         let bloques = bloques.clone();
         let paginas = paginas.clone();
+        let indice = indice.clone();
         let config = config.clone();
         op.connect_begin_print(move |op, ctx| {
             let cr = ctx.cairo_context();
             let ancho = ctx.width();
             let alto_util = (ctx.height() - banda_sup - banda_inf).max(1.0);
-            {
+            let cuerpo = {
                 let mut bloques = bloques.borrow_mut();
                 for b in bloques.iter_mut() {
                     medir_bloque(b, &config, &plantilla, &cr, ancho);
                 }
-                *paginas.borrow_mut() = planificar_paginas(&bloques, alto_util);
-            }
-            op.set_n_pages(paginas.borrow().len() as i32);
+                planificar_paginas(&bloques, alto_util)
+            };
+            let indice_nuevo = if con_indice {
+                preparar_indice(
+                    &bloques.borrow(),
+                    &cuerpo,
+                    &cr,
+                    &config,
+                    &plantilla,
+                    ancho,
+                    alto_util,
+                )
+            } else {
+                Indice::default()
+            };
+            let total = cuerpo.len() + indice_nuevo.paginas.len();
+            op.set_n_pages(total as i32);
+            *paginas.borrow_mut() = cuerpo;
+            *indice.borrow_mut() = indice_nuevo;
         });
     }
 
     {
         let bloques = bloques.clone();
         let paginas = paginas.clone();
+        let indice = indice.clone();
         let config = config.clone();
         op.connect_draw_page(move |_op, ctx, nr| {
             let cr = ctx.cairo_context();
@@ -2018,26 +2285,37 @@ pub fn crear_operacion(
 
             let paginas = paginas.borrow();
             let bloques = bloques.borrow();
-            let Some(pagina) = paginas.get(nr as usize) else {
-                return;
-            };
-            let total = paginas.len();
-            let mut y = banda_sup;
+            let indice = indice.borrow();
+            // El índice va delante: las primeras páginas no son del cuerpo y
+            // su número ya está contado.
+            let n_indice = indice.paginas.len();
+            let total = paginas.len() + n_indice;
             let lienzo = Lienzo {
                 config: &config,
                 plantilla: &plantilla,
                 paleta: &paleta,
                 ancho,
             };
-            for &idx in &pagina.bloques {
-                if let Some(b) = bloques.get(idx) {
-                    y = dibujar_bloque(&cr, b, lienzo, 0.0, y);
+            if (nr as usize) < n_indice {
+                // El título solo encabeza la primera página del índice: la
+                // paginación ya lo descuenta ahí.
+                let titulo = (nr == 0).then_some(&indice.titulo);
+                dibujar_pagina_indice(&cr, &indice.paginas[nr as usize], titulo, lienzo, banda_sup);
+            } else {
+                let Some(pagina) = paginas.get(nr as usize - n_indice) else {
+                    return;
+                };
+                let mut y = banda_sup;
+                for &idx in &pagina.bloques {
+                    if let Some(b) = bloques.get(idx) {
+                        y = dibujar_bloque(&cr, b, lienzo, 0.0, y);
+                    }
                 }
             }
 
-            // Cabecera: en la primera página se omite si la portada ya lleva
-            // el título.
-            if !(nr == 0 && plantilla.bloque_titulo) {
+            // Cabecera: en la primera página del cuerpo se omite si la portada
+            // ya lleva el título.
+            if !(nr as usize == n_indice && plantilla.bloque_titulo) {
                 if let Some(t) =
                     texto_adorno(plantilla.cabecera, &titulo_adorno, nr as usize, total)
                 {
@@ -2364,6 +2642,7 @@ mod tests {
             template,
             theme: ExportTheme::None,
             css_path: None,
+            indice: false,
         }
     }
 
@@ -2630,5 +2909,123 @@ mod tests {
         std::fs::write(&ruta, "body { color: black }").expect("escribir css");
         assert!(cargar_hoja(&config).is_some());
         let _ = std::fs::remove_file(&ruta);
+    }
+
+    // ------------------------------------------------------------------
+    // Índice del PDF (#195)
+    // ------------------------------------------------------------------
+
+    /// Cabecera de prueba con su texto y su altura ya medida.
+    fn cab(nivel: u8, texto: &str, alto: f64) -> Bloque {
+        Bloque {
+            tipo: TipoBloque::Cabecera { nivel },
+            alto,
+            frases: vec![Frase {
+                texto: texto.to_string(),
+                estilo: Estilo::default(),
+            }],
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn pdf_el_indice_recoge_las_cabeceras_hasta_el_nivel_tres() {
+        let bloques = [
+            p(10.0),
+            cab(1, "Uno", 10.0),
+            cab(2, "Dos", 10.0),
+            cab(3, "Tres", 10.0),
+            cab(4, "Cuatro", 10.0),
+        ];
+        let entradas = entradas_indice(&bloques);
+        let titulos: Vec<&str> = entradas.iter().map(|e| e.titulo.as_str()).collect();
+        assert_eq!(titulos, vec!["Uno", "Dos", "Tres"]);
+        assert_eq!(entradas[1].nivel, 2);
+        assert_eq!(entradas[2].bloque, 3);
+    }
+
+    #[test]
+    fn pdf_sin_cabeceras_no_hay_pagina_de_indice() {
+        assert!(entradas_indice(&[p(10.0), codigo(20.0)]).is_empty());
+        assert!(paginar_indice(&[], 700.0, 30.0).is_empty());
+    }
+
+    #[test]
+    fn pdf_el_titulo_del_indice_junta_las_frases_sin_marcas() {
+        let bloque = Bloque {
+            tipo: TipoBloque::Cabecera { nivel: 2 },
+            frases: vec![
+                Frase {
+                    texto: "un ".to_string(),
+                    estilo: Estilo::default(),
+                },
+                Frase {
+                    texto: "texto ".to_string(),
+                    estilo: Estilo {
+                        negrita: true,
+                        ..Default::default()
+                    },
+                },
+                Frase {
+                    texto: "largo".to_string(),
+                    estilo: Estilo::default(),
+                },
+            ],
+            ..Default::default()
+        };
+        let entradas = entradas_indice(&[bloque]);
+        assert_eq!(entradas.len(), 1);
+        assert_eq!(entradas[0].titulo, "un texto largo");
+    }
+
+    #[test]
+    fn pdf_el_indice_pasa_a_dos_paginas_y_la_primera_descuenta_el_titulo() {
+        // 12 filas de 10 puntos, 100 de alto útil y 20 de título: 8 filas en la
+        // primera página y 4 en la segunda.
+        let altos = vec![10.0; 12];
+        let paginas = paginar_indice(&altos, 100.0, 20.0);
+        assert_eq!(paginas.len(), 2);
+        assert_eq!(paginas[0], vec![0, 1, 2, 3, 4, 5, 6, 7]);
+        assert_eq!(paginas[1], vec![8, 9, 10, 11]);
+    }
+
+    #[test]
+    fn pdf_las_paginas_del_indice_desplazan_los_numeros_del_cuerpo() {
+        // Tres páginas de cuerpo con la cabecera en la segunda: con dos
+        // páginas de índice por delante, el título cae en la página 4.
+        let bloques = [p(40.0), cab(1, "Intro", 40.0), p(40.0)];
+        let cuerpo = planificar_paginas(&bloques, 50.0);
+        assert_eq!(cuerpo.len(), 3);
+        let mut entradas = entradas_indice(&bloques);
+        numerar_indice(&mut entradas, &cuerpo, 2);
+        assert_eq!(entradas[0].pagina, 4);
+    }
+
+    #[test]
+    fn pdf_cada_entrada_lleva_la_pagina_donde_esta_su_bloque() {
+        let bloques = [cab(1, "A", 10.0), p(30.0), cab(2, "B", 10.0), p(30.0)];
+        let cuerpo = planificar_paginas(&bloques, 50.0);
+        let mut entradas = entradas_indice(&bloques);
+        let paginas_indice = 1;
+        numerar_indice(&mut entradas, &cuerpo, paginas_indice);
+        for entrada in &entradas {
+            let pagina =
+                pagina_de_bloque(&cuerpo, entrada.bloque).expect("el bloque está paginado");
+            assert_eq!(entrada.pagina, pagina + 1 + paginas_indice);
+        }
+        // A abre el documento y B cae en la página siguiente.
+        assert_eq!(entradas[0].pagina, 2);
+        assert_eq!(entradas[1].pagina, 3);
+    }
+
+    #[test]
+    fn pdf_el_indice_no_cambia_la_paginacion_del_cuerpo() {
+        let bloques = [cab(1, "A", 10.0), p(30.0), cab(2, "B", 10.0), p(30.0)];
+        let sin = planificar_paginas(&bloques, 50.0);
+        let mut entradas = entradas_indice(&bloques);
+        numerar_indice(&mut entradas, &sin, 3);
+        // El plan del cuerpo es el mismo: el índice solo desplaza los números.
+        assert_eq!(planificar_paginas(&bloques, 50.0), sin);
+        assert_eq!(entradas[0].pagina, 4);
     }
 }

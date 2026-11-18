@@ -178,5 +178,9 @@
       <default>''</default>
       <summary>Path of the user stylesheet applied on top of the page template</summary>
     </key>
+    <key name="export-toc" type="b">
+      <default>false</default>
+      <summary>Start the PDF with a table of contents with the page numbers of each heading</summary>
+    </key>
   </schema>
 </schemalist>

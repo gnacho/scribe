@@ -2158,8 +2158,12 @@ impl Editor {
                     menu_buffer.place_cursor(&inicio);
                 }
                 let tamanos = gio::Menu::new();
-                for (etiqueta, px) in [("Small", 240u32), ("Medium", 480), ("Large", 720)] {
-                    let item = gio::MenuItem::new(Some(&gettext(etiqueta)), Some("imagen.tamano"));
+                for (etiqueta, px) in [
+                    (gettext("Small"), 240u32),
+                    (gettext("Medium"), 480),
+                    (gettext("Large"), 720),
+                ] {
+                    let item = gio::MenuItem::new(Some(etiqueta.as_str()), Some("imagen.tamano"));
                     item.set_action_and_target_value(
                         Some("imagen.tamano"),
                         Some(&glib::Variant::from(px)),
@@ -2177,11 +2181,11 @@ impl Editor {
 
                 let alineaciones = gio::Menu::new();
                 for (etiqueta, valor) in [
-                    ("Align left", "left"),
-                    ("Align centre", "center"),
-                    ("Align right", "right"),
+                    (gettext("Align left"), "left"),
+                    (gettext("Align centre"), "center"),
+                    (gettext("Align right"), "right"),
                 ] {
-                    let item = gio::MenuItem::new(Some(&gettext(etiqueta)), Some("imagen.alinear"));
+                    let item = gio::MenuItem::new(Some(etiqueta.as_str()), Some("imagen.alinear"));
                     item.set_action_and_target_value(
                         Some("imagen.alinear"),
                         Some(&glib::Variant::from(valor)),

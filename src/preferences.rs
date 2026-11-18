@@ -484,6 +484,13 @@ fn export_page(settings: &Rc<AppSettings>, apply: &Rc<dyn Fn()>) -> adw::Prefere
         &[gettext("Portrait"), gettext("Landscape")],
         settings.export_orientation().index(),
     );
+    let indice = adw::SwitchRow::builder()
+        .title(gettext("Table of contents"))
+        .subtitle(gettext(
+            "Starts the PDF with the headings and the page where each one falls",
+        ))
+        .active(settings.export_toc())
+        .build();
 
     let tema = combo_i18n(
         &gettext("PDF theme"),
@@ -526,6 +533,7 @@ fn export_page(settings: &Rc<AppSettings>, apply: &Rc<dyn Fn()>) -> adw::Prefere
     }
 
     group.add(&template);
+    group.add(&indice);
     for row in [
         page_size.upcast_ref::<gtk4::Widget>(),
         orientation.upcast_ref::<gtk4::Widget>(),
@@ -614,6 +622,14 @@ fn export_page(settings: &Rc<AppSettings>, apply: &Rc<dyn Fn()>) -> adw::Prefere
         let apply = apply.clone();
         tema.connect_selected_notify(move |row| {
             settings.set_export_theme(ExportTheme::from_index(row.selected()));
+            apply();
+        });
+    }
+    {
+        let settings = settings.clone();
+        let apply = apply.clone();
+        indice.connect_active_notify(move |row| {
+            settings.set_export_toc(row.is_active());
             apply();
         });
     }
