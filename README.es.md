@@ -144,6 +144,9 @@ con GTK4 y ha terminado siendo algo que uso de verdad para borradores y notas.
   cabeceras huérfanas, soporte de `\newpage`).
 - **Vista previa de impresión**: la misma maquetación del PDF, paginada, antes
   de imprimir.
+- **Índice**: con la opción de Preferencias > Exportar, el PDF empieza con una
+  página de índice con las cabeceras de h1 a h3 y la página donde cae cada una.
+  Los números son los reales y, si no cabe, el índice sigue en otra página.
 - **Archivos**: abrir, guardar y guardar como con `GtkFileDialog`, escritura
   atómica, aviso de cambios sin guardar y autoguardado configurable.
 - **Barra lateral** (F9) con documentos recientes filtrables e índice del
@@ -230,9 +233,9 @@ salida anterior tal cual.
   expresiones regulares como opciones. Ctrl+H despliega una segunda fila con
   Reemplazar y Reemplazar todo, así que el reemplazo se hace en el sitio, no en
   un diálogo aparte.
-- **La exportación a PDF no lleva índice ni marcadores.** `GtkPrintOperation`
-  no expone marcadores de PDF, así que el PDF exportado no tiene tabla de
-  contenidos ni outline.
+- **La exportación a PDF no lleva marcadores.** `GtkPrintOperation` no expone
+  marcadores de PDF, así que el índice es una página impresa: no hay outline en
+  el visor ni enlaces internos clicables.
 - **Imágenes**: los ficheros locales de hasta 20 MB se pintan, como máximo
   144 px de alto, y las URLs remotas se descargan con los mismos límites. Las
   imágenes inline (no solas en su línea), los ficheros ausentes y las descargas
