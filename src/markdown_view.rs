@@ -194,6 +194,22 @@ pub fn image_x(left: f32, max_w: f32, width: f32, align: ImageAlign) -> f32 {
     left + BLOCK_PADDING + offset.max(0.0)
 }
 
+/// Y donde empieza el hueco reservado bajo la línea de una imagen o tarjeta.
+///
+/// GTK suma el `pixels_below_lines` del tag del hueco a la altura de la línea,
+/// así que el hueco empieza al final de la línea menos su propio alto. La
+/// comparación es `>=` a propósito: con un alt vacío la línea solo tiene marcas
+/// encogidas y mide justo el hueco, y exigir que además hubiera texto dejaba la
+/// imagen un hueco más abajo (#202). Si la altura no llega a cubrir el hueco
+/// (textura recién llegada, línea aún sin maquetar) el adorno va justo debajo.
+pub fn gap_top_for(line_y: f32, line_h: f32, gap: f32) -> f32 {
+    if line_h >= gap {
+        line_y + line_h - gap
+    } else {
+        line_y + line_h
+    }
+}
+
 mod imp {
     use super::*;
     use std::cell::{Cell, RefCell};
@@ -1301,12 +1317,8 @@ mod imp {
             }
             let (line_y, line_h) = self.line_extent(line)?;
             // El hueco queda al final de la línea. Si la altura reportada ya lo
-            // incluye, el adorno va pegado al final; si no, justo debajo.
-            Some(if line_h > gap + 8.0 {
-                line_y + line_h - gap
-            } else {
-                line_y + line_h
-            })
+            // incluye, el adorno va pegado al final, si no, justo debajo.
+            Some(gap_top_for(line_y, line_h, gap))
         }
     }
 
@@ -1899,6 +1911,22 @@ pub(crate) mod tests {
         assert!(cache.is_file(), "la descarga no se guardó en la caché");
         let textura = imp::load_texture(url).expect("la caché debería cargarse del disco");
         assert!(textura.width() > 0 && textura.height() > 0);
+    }
+
+    // #202: con un alt vacío la línea de la imagen solo tiene marcas encogidas,
+    // así que su altura es exactamente el hueco. El adorno tiene que empezar
+    // ahí, no un hueco más abajo.
+    #[test]
+    fn el_hueco_de_la_imagen_empieza_donde_acaba_la_linea() {
+        // Alt vacío: la línea mide justo el hueco y no hay texto que enseñar.
+        assert_eq!(gap_top_for(100.0, 144.0, 144.0), 100.0);
+        // Línea con texto: la altura incluye el hueco y el adorno va debajo del
+        // texto, no debajo del hueco.
+        assert_eq!(gap_top_for(100.0, 172.0, 144.0), 128.0);
+        // Altura que todavía no cubre el hueco (textura recién llegada).
+        assert_eq!(gap_top_for(100.0, 30.0, 144.0), 130.0);
+        // Hueco pequeño pedido a mano: no se confunde con una línea con texto.
+        assert_eq!(gap_top_for(100.0, 43.0, 15.0), 128.0);
     }
 
     #[test]
