@@ -911,7 +911,12 @@ fn decorate(
                 // el `# ` de los titulos) se muestran en la línea del cursor y
                 // se encogen en el resto. Sin la puerta GTK, encoger es el
                 // ocultado seguro.
-                let en_cursor = span.start >= linea_desde && span.end <= linea_hasta;
+                // El subrayado setext (`Titulo` + `---`) empieza en el salto de
+                // línea anterior, así que no queda contenido dentro de su
+                // propia línea: se revela también cuando el tramo entra en la
+                // línea del cursor, o no habría forma de editarlo (#200).
+                let en_cursor = (span.start >= linea_desde && span.end <= linea_hasta)
+                    || (span.start < linea_desde && span.end > linea_desde);
                 if revealed(span) {
                     "syn_shown"
                 } else {

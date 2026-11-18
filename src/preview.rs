@@ -3,6 +3,8 @@ use gtk4::prelude::*;
 use libadwaita as adw;
 use pulldown_cmark::{CodeBlockKind, Event, HeadingLevel, Options, Parser, Tag, TagEnd};
 
+use crate::markdown_render::subrayado_de_un_caracter;
+
 /// Panel de previsualización.
 ///
 /// Renderiza el Markdown sobre un GtkTextView usando GtkTextTags.
@@ -83,14 +85,22 @@ fn render(markdown: &str) -> (String, Vec<(i32, i32, &'static str)>) {
     opts.insert(Options::ENABLE_FOOTNOTES);
 
     let mut d = Doc::default();
+    // Subrayado de un carácter degradado a texto: el panel enseña lo mismo que
+    // el editor, que no lo toma por cabecera (#200).
+    let mut degradada: Option<char> = None;
 
-    for event in Parser::new_ext(markdown, opts) {
+    for (event, range) in Parser::new_ext(markdown, opts).into_offset_iter() {
         match event {
             Event::Start(tag) => match tag {
                 Tag::Paragraph => d.block_gap(),
                 Tag::Heading { level, .. } => {
                     d.block_gap();
-                    d.open_tag(heading_tag(level));
+                    degradada = subrayado_de_un_caracter(markdown, range.start, range.end);
+                    // Sin subrayado no hay adorno que pintar: el párrafo sale
+                    // con el texto por defecto.
+                    if degradada.is_none() {
+                        d.open_tag(heading_tag(level));
+                    }
                 }
                 Tag::BlockQuote(_) => {
                     d.block_gap();
@@ -145,8 +155,20 @@ fn render(markdown: &str) -> (String, Vec<(i32, i32, &'static str)>) {
             Event::End(tag) => match tag {
                 TagEnd::Paragraph => d.push("\n"),
                 TagEnd::Heading(level) => {
-                    d.close_tag(heading_tag(level));
-                    d.push("\n");
+                    match degradada.take() {
+                        Some(c) => {
+                            // El párrafo de arriba y el subrayado en su propia
+                            // línea, tal cual se escribió.
+                            d.push("\n");
+                            d.block_gap();
+                            d.push(&c.to_string());
+                            d.push("\n");
+                        }
+                        None => {
+                            d.close_tag(heading_tag(level));
+                            d.push("\n");
+                        }
+                    }
                 }
                 TagEnd::BlockQuote(_) => {
                     d.close_tag("quote");
@@ -388,5 +410,37 @@ fn apply_theme_to(tags: &gtk4::TextTagTable, dark: bool) {
         set("quote", Some("#5e5c64"), None);
         set("link", Some("#1c71d8"), None);
         set("dim", Some("#77767b"), None);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::render;
+
+    fn etiquetas(texto: &str) -> Vec<&'static str> {
+        render(texto).1.into_iter().map(|(_, _, tag)| tag).collect()
+    }
+
+    // #200: un `-` o un `=` suelto debajo de un párrafo no es una cabecera, y
+    // el panel tiene que enseñar lo mismo que el editor.
+    #[test]
+    fn un_subrayado_de_un_caracter_no_se_pinta_como_cabecera() {
+        for texto in ["Frase\n-\n", "Frase\n- \n", "Frase\n=\n"] {
+            let tags = etiquetas(texto);
+            assert!(
+                !tags.iter().any(|t| t.starts_with('h')),
+                "{texto:?} sin cabecera, tags: {tags:?}"
+            );
+        }
+        assert_eq!(render("Frase\n-\n").0, "Frase\n-\n");
+        assert_eq!(render("Frase\n=\n").0, "Frase\n=\n");
+    }
+
+    #[test]
+    fn un_subrayado_largo_sigue_siendo_cabecera() {
+        let tags = etiquetas("Frase\n---\n");
+        assert!(tags.contains(&"h2"), "tags: {tags:?}");
+        let tags = etiquetas("Frase\n===\n");
+        assert!(tags.contains(&"h1"), "tags: {tags:?}");
     }
 }
