@@ -559,6 +559,24 @@ fn line_ranges(text: &str, start: usize, end: usize) -> Vec<(usize, usize)> {
     out
 }
 
+/// ¿La cabecera que abarca `start..end` lleva un subrayado setext de un solo
+/// carácter? Un `-` o un `=` suelto debajo de un párrafo es casi siempre una
+/// lista o una regla que se está escribiendo, no el subrayado de una cabecera
+/// (#200). Devuelve el carácter, o `None` en las cabeceras con almohadillas y
+/// en los subrayados de dos o más caracteres.
+pub(crate) fn subrayado_de_un_caracter(text: &str, start: usize, end: usize) -> Option<char> {
+    let end = trim_nl(text, end);
+    let &(ls, le) = line_ranges(text, start, end).last()?;
+    if ls <= start {
+        return None;
+    }
+    match text[ls..le].trim() {
+        "-" => Some('-'),
+        "=" => Some('='),
+        _ => None,
+    }
+}
+
 /// Segmentos de texto (offsets relativos a la fila, ya sin espacios a los
 /// lados) de cada celda. Los pipes — incluidos los exteriores — quedan fuera;
 /// los escapados (`\|`) no cortan.
@@ -1504,6 +1522,13 @@ pub fn analyze(text: &str) -> Analysis {
                 if end <= range.start {
                     continue;
                 }
+                // Un subrayado de un solo carácter (`Frase` + `-` o `=`) no es
+                // una cabecera: es una lista o una regla que se está
+                // escribiendo. Se deja el párrafo y el carácter a la vista, sin
+                // estilo de cabecera, sin filete y sin marca sustituida.
+                if subrayado_de_un_caracter(text, range.start, end).is_some() {
+                    continue;
+                }
                 spans.push(style(range.start, end, heading_tag(level)));
                 // Filete fino bajo los títulos H1/H2, estilo GitHub.
                 if matches!(level, HeadingLevel::H1 | HeadingLevel::H2) {
@@ -2268,6 +2293,54 @@ mod tests {
         // El subrayado y el salto que lo precede quedan como marca sustituida
         // (ojo: «í» ocupa dos bytes, el subrayado empieza en el byte 8).
         assert_eq!(syntax(text), vec![(7, 14, SpanKind::Replaced)]);
+    }
+
+    /// #200: un `-` suelto debajo de un párrafo se está escribiendo (una lista
+    /// o una regla), no es el subrayado de una cabecera.
+    #[test]
+    fn un_guion_suelto_no_convierte_el_parrafo_en_cabecera() {
+        for text in ["Frase\n-\n", "Frase\n- \n", "Frase\n-"] {
+            assert!(find(&spans(text), "h1").is_empty(), "{text:?} no es h1");
+            assert!(find(&spans(text), "h2").is_empty(), "{text:?} no es h2");
+            assert!(
+                analyze(text).ornaments.is_empty(),
+                "{text:?} no pide filete de cabecera"
+            );
+            // El guion queda como texto llano: ninguna marca lo esconde.
+            assert!(syntax(text).is_empty(), "{text:?} deja ver el guion");
+        }
+    }
+
+    /// #200: lo mismo con el subrayado de nivel 1, que es el que salía como H1.
+    #[test]
+    fn un_igual_suelto_no_convierte_el_parrafo_en_cabecera() {
+        for text in ["Frase\n=\n", "Frase\n= \n"] {
+            assert!(find(&spans(text), "h1").is_empty(), "{text:?} no es h1");
+            assert!(
+                analyze(text).ornaments.is_empty(),
+                "{text:?} no pide filete de cabecera"
+            );
+            assert!(syntax(text).is_empty(), "{text:?} deja ver el subrayado");
+        }
+    }
+
+    /// El subrayado de dos o más caracteres sigue siendo setext: es la forma
+    /// normal de escribir la cabecera sin almohadillas.
+    #[test]
+    fn un_subrayado_largo_sigue_siendo_cabecera() {
+        let text = "Frase\n--\n";
+        assert_eq!(find(&spans(text), "h2").len(), 1);
+        assert!(analyze(text)
+            .ornaments
+            .contains(&Ornament::HeadingRule { line: 0 }));
+        assert_eq!(syntax(text), vec![(5, 8, SpanKind::Replaced)]);
+    }
+
+    /// Un `-` tras línea en blanco es un elemento de lista vacío, no un
+    /// subrayado, y la regla nueva no debe tocarlo.
+    #[test]
+    fn un_guion_tras_linea_en_blanco_sigue_siendo_item_vacio() {
+        assert_eq!(find(&spans("Frase\n\n-\n"), "li1").len(), 1);
     }
 
     #[test]
