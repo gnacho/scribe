@@ -762,6 +762,38 @@ msgstr "Ampliar o reducir"
 msgid "Preferences"
 msgstr "Preferencias"
 
+#: src/editor.rs
+msgid "Small"
+msgstr "Pequeña"
+
+#: src/editor.rs
+msgid "Medium"
+msgstr "Mediana"
+
+#: src/editor.rs
+msgid "Large"
+msgstr "Grande"
+
+#: src/editor.rs
+msgid "Original size"
+msgstr "Tamaño original"
+
+#: src/editor.rs
+msgid "Image size"
+msgstr "Tamaño de la imagen"
+
+#: src/editor.rs
+msgid "Align left"
+msgstr "Alinear a la izquierda"
+
+#: src/editor.rs
+msgid "Align centre"
+msgstr "Alinear al centro"
+
+#: src/editor.rs
+msgid "Align right"
+msgstr "Alinear a la derecha"
+
 #~ msgid "Custom file…"
 #~ msgstr "Fichero propio…"
 

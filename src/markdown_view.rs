@@ -37,7 +37,8 @@ use gtk4::{gdk, graphene, gsk};
 use gtksourceview5 as sourceview;
 
 use crate::markdown_render::{
-    canvas_layout, Align, LinkRef, Ornament, CANVAS_CELL_PAD, CANVAS_ROW_PAD,
+    canvas_layout, Align, ImageAlign, ImageOptions, LinkRef, Ornament, CANVAS_CELL_PAD,
+    CANVAS_ROW_PAD, IMAGE_MAX_REQUESTED_HEIGHT,
 };
 
 /// Colores de los adornos. Los fija la aplicación para que casen con su tema.
@@ -107,6 +108,10 @@ const YOUTUBE_MAX_WIDTH: f32 = 480.0;
 const PLAY_RADIUS: f32 = 26.0;
 /// Alto máximo de la imagen pintada en ese hueco (se escala manteniendo ratio).
 const IMAGE_MAX_HEIGHT: f32 = 144.0;
+/// Ancho mínimo con el que se pinta una imagen cuando el alt pide un tamaño:
+/// por debajo no se distingue nada, así que el `|10` de un despiste no deja
+/// una raya.
+const IMAGE_MIN_WIDTH: f32 = 24.0;
 /// Entradas máximas de la caché de texturas; al superarlo se vacía entera.
 const MAX_TEXTURE_CACHE: usize = 64;
 /// Entradas máximas de la caché de tags de relleno; al superarlo se vacía.
@@ -116,6 +121,78 @@ const MAX_PAD_TAGS: usize = 64;
 const ADVANCE_SAMPLE: usize = 40;
 /// Tamaño máximo de fichero de imagen que se intenta cargar (20 MB).
 const MAX_IMAGE_BYTES: u64 = 20 * 1024 * 1024;
+
+/// Tamaño final de una imagen en bloque y alto del hueco reservado.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct ImageBox {
+    pub width: f32,
+    pub height: f32,
+    /// Alto (px) que el tag `imagegap` reserva bajo la línea. Es el de la caja
+    /// más un aire arriba y abajo, para que el borde no toque el texto.
+    pub gap: f32,
+}
+
+/// Aire por encima y por debajo de la textura dentro del hueco.
+const IMAGE_GAP_PAD: f32 = 3.0;
+
+/// Calcula la caja de una imagen a partir de su tamaño natural, lo pedido en el
+/// alt y el ancho de la columna. Sin tamaño pedido se mantiene el
+/// comportamiento de siempre: no se agranda y el alto máximo es el del hueco.
+/// Con tamaño pedido se respeta el ancho (y el alto, si se dio) hasta el tope
+/// duro [`IMAGE_MAX_REQUESTED_HEIGHT`], conservando siempre el ratio.
+pub fn image_box(
+    texture_w: f32,
+    texture_h: f32,
+    options: ImageOptions,
+    max_w: f32,
+) -> Option<ImageBox> {
+    if texture_w <= 0.0 || texture_h <= 0.0 || max_w <= 0.0 {
+        return None;
+    }
+    let (mut scale, max_height) = match (options.width, options.height) {
+        // Sin tamaño pedido: como siempre.
+        (None, _) => (
+            (max_w / texture_w)
+                .min(IMAGE_MAX_HEIGHT / texture_h)
+                .min(1.0),
+            0.0,
+        ),
+        // Solo ancho: se respeta, con el aire de la columna como único límite.
+        (Some(w), None) => {
+            let target = (w as f32).clamp(IMAGE_MIN_WIDTH, max_w.max(IMAGE_MIN_WIDTH));
+            (target / texture_w, IMAGE_MAX_REQUESTED_HEIGHT)
+        }
+        // Ancho y alto: la caja pedida, encogida para que quepa el documento.
+        (Some(w), Some(h)) => {
+            let target_w = (w as f32).clamp(IMAGE_MIN_WIDTH, max_w.max(IMAGE_MIN_WIDTH));
+            let target_h = (h as f32).clamp(1.0, IMAGE_MAX_REQUESTED_HEIGHT);
+            ((target_w / texture_w).min(target_h / texture_h), 0.0)
+        }
+    };
+    if max_height > 0.0 {
+        scale = scale.min(max_height / texture_h);
+    }
+    let width = texture_w * scale;
+    if width <= 0.0 {
+        return None;
+    }
+    let height = texture_h * scale;
+    Some(ImageBox {
+        width,
+        height,
+        gap: height + 2.0 * IMAGE_GAP_PAD,
+    })
+}
+
+/// X de la imagen dentro de la columna según su alineación.
+pub fn image_x(left: f32, max_w: f32, width: f32, align: ImageAlign) -> f32 {
+    let offset = match align {
+        ImageAlign::Left => 0.0,
+        ImageAlign::Center => (max_w - width) / 2.0,
+        ImageAlign::Right => max_w - width,
+    };
+    left + BLOCK_PADDING + offset.max(0.0)
+}
 
 mod imp {
     use super::*;
@@ -837,6 +914,74 @@ mod imp {
             None
         }
 
+        /// Línea de la imagen en bloque cuyo hueco (la textura o el
+        /// placeholder) contiene un punto, en coordenadas de buffer. La usa el
+        /// menú contextual: el hueco no es texto, así que el iter de debajo es
+        /// el de la línea siguiente.
+        pub(super) fn image_line_at(&self, bx: f64, by: f64) -> Option<i32> {
+            let ornaments = self.ornaments.borrow();
+            if ornaments.is_empty() || self.stale() {
+                return None;
+            }
+            let (first, last) = self.visible_lines();
+            let (left, right) = self.column();
+            let max_w = (right - left - BLOCK_PADDING * 2.0).max(0.0);
+            if max_w <= 0.0 {
+                return None;
+            }
+            let punto = graphene::Point::new(bx as f32, by as f32);
+            for o in ornaments.iter() {
+                let Ornament::Image {
+                    line,
+                    dest,
+                    options,
+                    ..
+                } = o
+                else {
+                    continue;
+                };
+                let linea = *line as i32;
+                let gap = self
+                    .image_box_for(dest, *options, max_w)
+                    .map(|c| c.gap)
+                    .unwrap_or(IMAGE_GAP_HEIGHT);
+                let Some(top) = self.gap_top(linea, first, last, gap) else {
+                    continue;
+                };
+                if graphene::Rect::new(left, top, right - left, gap).contains_point(&punto) {
+                    return Some(linea);
+                }
+            }
+            None
+        }
+
+        /// Caja final de una imagen en bloque, si su textura está disponible.
+        pub(super) fn image_box_for(
+            &self,
+            dest: &str,
+            options: ImageOptions,
+            max_w: f32,
+        ) -> Option<ImageBox> {
+            let texture = self.texture_for(dest)?;
+            image_box(
+                texture.width() as f32,
+                texture.height() as f32,
+                options,
+                max_w,
+            )
+        }
+
+        /// Alto (px) del hueco bajo la línea de una imagen, según lo pedido en
+        /// el alt. Sin textura todavía (una remota en curso) devuelve el alto
+        /// de siempre.
+        pub(super) fn image_gap_px(&self, dest: &str, options: ImageOptions) -> i32 {
+            let (left, right) = self.column();
+            let max_w = (right - left - BLOCK_PADDING * 2.0).max(0.0);
+            self.image_box_for(dest, options, max_w)
+                .map(|c| c.gap.ceil() as i32)
+                .unwrap_or(crate::markdown_render::IMAGE_GAP_HEIGHT)
+        }
+
         /// Imágenes en bloque: se pintan en el hueco que el tag `imagegap`
         /// reserva bajo su línea, centradas y escaladas manteniendo ratio.
         /// Si el fichero no existe o no carga, un placeholder gris.
@@ -855,31 +1000,39 @@ mod imp {
             let view = self.obj();
 
             for ornament in ornaments.iter() {
-                let Ornament::Image { line, dest, alt } = ornament else {
+                let Ornament::Image {
+                    line,
+                    dest,
+                    alt,
+                    options,
+                } = ornament
+                else {
                     continue;
                 };
                 let line = *line as i32;
                 if line == self.cursor_line() {
                     continue;
                 }
-                let Some(top) = self.gap_top(line, first_visible, last_visible, IMAGE_GAP_HEIGHT)
-                else {
+                let caja = self.image_box_for(dest, *options, max_w);
+                let gap = caja.map(|c| c.gap).unwrap_or(IMAGE_GAP_HEIGHT);
+                let Some(top) = self.gap_top(line, first_visible, last_visible, gap) else {
                     continue;
                 };
 
                 match self.texture_for(dest) {
                     Some(texture) => {
+                        let Some(caja) = caja else {
+                            continue;
+                        };
                         let tw = texture.width() as f32;
                         let th = texture.height() as f32;
                         if tw <= 0.0 || th <= 0.0 {
                             continue;
                         }
-                        // Escala para caber en (ancho visible) × 144px; las
-                        // imágenes pequeñas no se agrandan.
-                        let scale = (max_w / tw).min(IMAGE_MAX_HEIGHT / th).min(1.0);
-                        let (w, h) = (tw * scale, th * scale);
-                        let x = left + BLOCK_PADDING + ((max_w - w) / 2.0).max(0.0);
-                        let y = top + ((IMAGE_GAP_HEIGHT - h) / 2.0).max(0.0);
+                        let (w, h) = (caja.width, caja.height);
+                        let scale = w / tw;
+                        let x = image_x(left, max_w, w, options.align);
+                        let y = top + ((gap - h) / 2.0).max(0.0);
                         snapshot.save();
                         snapshot.translate(&graphene::Point::new(x, y));
                         snapshot.scale(scale, scale);
@@ -1618,6 +1771,36 @@ impl MarkdownView {
         })
     }
 
+    /// Alto (px) del hueco que hay que reservar bajo la línea de una imagen,
+    /// según el tamaño pedido en su alt. El editor lo aplica con un tag
+    /// `pixels_below_lines` a medida. Sin textura disponible (una remota que se
+    /// está descargando) devuelve el alto de siempre.
+    pub fn image_gap(&self, dest: &str, options: ImageOptions) -> i32 {
+        self.imp().image_gap_px(dest, options)
+    }
+
+    /// Destino y opciones de la imagen en bloque que ocupa una línea, si la
+    /// hay. Lo consulta el menú contextual para ofrecer tamaño y alineación.
+    pub fn image_at_line(&self, line: i32) -> Option<(String, ImageOptions)> {
+        self.imp().ornaments.borrow().iter().find_map(|o| match o {
+            Ornament::Image {
+                line: suya,
+                dest,
+                options,
+                ..
+            } if *suya as i32 == line => Some((dest.clone(), *options)),
+            _ => None,
+        })
+    }
+
+    /// Línea de la imagen en bloque cuyo hueco está bajo un punto del widget.
+    /// El hueco no es texto, así que el menú contextual la necesita aparte.
+    pub fn image_line_at_position(&self, x: f64, y: f64) -> Option<i32> {
+        let (bx, by) =
+            self.window_to_buffer_coords(gtk4::TextWindowType::Widget, x as i32, y as i32);
+        self.imp().image_line_at(bx as f64, by as f64)
+    }
+
     /// Tag de relleno de tabla para un avance en unidades Pango; el editor lo
     /// aplica sobre el `|` que precede a cada celda.
     pub fn pad_tag(&self, units: i32) -> glib::GString {
@@ -1716,5 +1899,71 @@ pub(crate) mod tests {
         assert!(cache.is_file(), "la descarga no se guardó en la caché");
         let textura = imp::load_texture(url).expect("la caché debería cargarse del disco");
         assert!(textura.width() > 0 && textura.height() > 0);
+    }
+
+    #[test]
+    fn la_caja_de_una_imagen_respeta_el_tamano_pedido() {
+        // Sin tamaño: como siempre, sin agrandar y con el tope de 144 de alto.
+        let caja = image_box(1200.0, 800.0, ImageOptions::default(), 700.0).unwrap();
+        assert!((caja.width - 216.0).abs() < 0.01);
+        assert!((caja.height - 144.0).abs() < 0.01);
+        assert!(caja.gap > caja.height);
+        let caja = image_box(100.0, 50.0, ImageOptions::default(), 700.0).unwrap();
+        assert!((caja.width - 100.0).abs() < 0.01);
+
+        // Con ancho pedido se respeta, conservando el ratio.
+        let caja = image_box(
+            1200.0,
+            800.0,
+            ImageOptions {
+                width: Some(480),
+                height: None,
+                align: ImageAlign::Center,
+            },
+            700.0,
+        )
+        .unwrap();
+        assert!((caja.width - 480.0).abs() < 0.01);
+        assert!((caja.height - 320.0).abs() < 0.01);
+
+        // Ancho y alto: manda el más restrictivo.
+        let caja = image_box(
+            1200.0,
+            800.0,
+            ImageOptions {
+                width: Some(700),
+                height: Some(300),
+                align: ImageAlign::Left,
+            },
+            700.0,
+        )
+        .unwrap();
+        assert!((caja.height - 300.0).abs() < 0.01);
+        assert!((caja.width - 450.0).abs() < 0.01);
+
+        // Nunca más ancho que la columna.
+        let caja = image_box(
+            1000.0,
+            500.0,
+            ImageOptions {
+                width: Some(5000),
+                height: None,
+                align: ImageAlign::Left,
+            },
+            600.0,
+        )
+        .unwrap();
+        assert!((caja.width - 600.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn la_alineacion_coloca_la_imagen_en_la_columna() {
+        let (left, max_w, width) = (10.0_f32, 400.0_f32, 100.0_f32);
+        let centro = image_x(left, max_w, width, ImageAlign::Center);
+        let derecha = image_x(left, max_w, width, ImageAlign::Right);
+        let izquierda = image_x(left, max_w, width, ImageAlign::Left);
+        assert!((centro - (left + BLOCK_PADDING + 150.0)).abs() < 0.01);
+        assert!((derecha - (left + BLOCK_PADDING + 300.0)).abs() < 0.01);
+        assert!((izquierda - (left + BLOCK_PADDING)).abs() < 0.01);
     }
 }

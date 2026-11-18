@@ -88,6 +88,14 @@ con GTK4 y ha terminado siendo algo que uso de verdad para borradores y notas.
   marca (máx. 144 px, límite de 20 MB, caché de 64). Los ficheros ausentes
   muestran un placeholder discreto. El buffer nunca se modifica: no se insertan
   widgets ni caracteres.
+- **Tamaño y alineación desde el alt**: escribe `![Una foto|480](foto.png)` para
+  verla a 480 px de ancho, `|480x320` para limitar los dos lados, y `|center` o
+  `|right` para colocarla en la columna. Es la forma que usa Obsidian, y los
+  demás visores o la respetan o enseñan la imagen a su tamaño natural, así que
+  el fichero sigue siendo Markdown válido. El menú contextual de la imagen la
+  escribe por ti (Pequeña, Mediana, Grande, Tamaño original y las tres
+  alineaciones). Sin tamaño, la imagen no se agranda y el hueco se ajusta a
+  ella.
 - **Imágenes remotas**: cuando el destino es una URL, Scribe pregunta primero su
   tamaño (límite de 20 MB), la descarga y la cachea en disco en
   `~/.cache/scribe/images`, de modo que las siguientes veces se pinta sin salir

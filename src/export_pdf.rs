@@ -832,7 +832,9 @@ fn construir_bloques(texto: &str, analisis: &Analysis) -> Vec<Bloque> {
             Ornament::Table { first, last } => tablas.push((*first, *last)),
             Ornament::Quote { first, last } => citas.push((*first, *last)),
             Ornament::Rule { line } => reglas.push(*line),
-            Ornament::Image { line, dest, alt } => {
+            Ornament::Image {
+                line, dest, alt, ..
+            } => {
                 imagenes.insert(*line, (alt.clone(), dest.clone()));
             }
             _ => {}
