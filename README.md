@@ -134,6 +134,9 @@ actually use to draft notes and docs.
   file and the preview, so what you see is what prints.
 - **Print preview** (menu, next to Export to PDF) renders the real pages through
   the export pipeline before committing to paper or a file.
+- **Table of contents**: with the Preferences > Export switch, the PDF starts
+  with an index page listing the h1 to h3 headings with the page where each one
+  falls. The numbers are the real ones, and a long index flows onto more pages.
 - **Your own stylesheet**: an optional CSS file applies on top of the chosen
   template (see [Stylesheets](#stylesheets)).
 - **Files**: open, save and save-as with `GtkFileDialog`, atomic writes,
@@ -228,7 +231,8 @@ pre { background-color: #f5f5f5 }
   options. Ctrl+H reveals a second row with Replace and Replace All, so the
   replacement is done in place, not in a dialog.
 - **PDF export has no outline/bookmarks.** `GtkPrintOperation` does not expose
-  PDF bookmarks, so the exported PDF carries no table of contents or outline.
+  PDF bookmarks, so the table of contents is a printed page: the viewer outline
+  and clickable internal links are not there.
 - **Images**: local files up to 20 MB are painted, at most 144 px tall, and
   remote URLs are downloaded with the same limits. Inline images (not alone on
   their line), missing files and downloads that fail show the placeholder.

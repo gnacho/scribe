@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PACKAGE VERSION\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-27 16:20+0100\n"
+"POT-Creation-Date: 2026-11-18 19:34+0100\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -17,19 +17,19 @@ msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
 
-#: src/main.rs:278
+#: src/main.rs:293
 msgid "Recover unsaved documents?"
 msgstr ""
 
-#: src/main.rs:281
+#: src/main.rs:296
 msgid "_Recover All"
 msgstr ""
 
-#: src/main.rs:282
+#: src/main.rs:297
 msgid "_Discard All"
 msgstr ""
 
-#: src/main.rs:283
+#: src/main.rs:298
 msgid "Decide Later"
 msgstr ""
 
@@ -253,27 +253,63 @@ msgstr ""
 msgid "Could not autosave: {e}"
 msgstr ""
 
-#: src/editor.rs:1356 src/editor.rs:1361 src/editor.rs:1366
+#: src/editor.rs:1525 src/editor.rs:1530 src/editor.rs:1535
 msgid "Could not save the image"
 msgstr ""
 
-#: src/editor.rs:1406
+#: src/editor.rs:1575
 msgid "Save the document before pasting images"
 msgstr ""
 
-#: src/editor.rs:1426 src/editor.rs:1443 src/editor.rs:1482
+#: src/editor.rs:1595 src/editor.rs:1612 src/editor.rs:1651
 msgid "Save the document before dropping images"
 msgstr ""
 
-#: src/editor.rs:1986
+#: src/editor.rs:2162
+msgid "Small"
+msgstr ""
+
+#: src/editor.rs:2163
+msgid "Medium"
+msgstr ""
+
+#: src/editor.rs:2164
+msgid "Large"
+msgstr ""
+
+#: src/editor.rs:2175
+msgid "Original size"
+msgstr ""
+
+#: src/editor.rs:2181
+msgid "Image size"
+msgstr ""
+
+#: src/editor.rs:2185
+msgid "Align left"
+msgstr ""
+
+#: src/editor.rs:2186
+msgid "Align centre"
+msgstr ""
+
+#: src/editor.rs:2187
+msgid "Align right"
+msgstr ""
+
+#: src/editor.rs:2197
+msgid "Alignment"
+msgstr ""
+
+#: src/editor.rs:2225
 msgid "Ignore word"
 msgstr ""
 
-#: src/editor.rs:1993
+#: src/editor.rs:2232
 msgid "Add to dictionary"
 msgstr ""
 
-#: src/editor.rs:2020
+#: src/editor.rs:2259
 #, rust-format
 msgid "Ctrl+click to open {url}"
 msgstr ""
@@ -494,7 +530,7 @@ msgstr ""
 msgid "Clears the list shown in the sidebar"
 msgstr ""
 
-#: src/preferences.rs:403 src/preferences.rs:492
+#: src/preferences.rs:403 src/preferences.rs:499
 msgid "None"
 msgstr ""
 
@@ -586,57 +622,65 @@ msgstr ""
 msgid "Landscape"
 msgstr ""
 
-#: src/preferences.rs:489
-msgid "PDF theme"
+#: src/preferences.rs:488 src/export_pdf.rs:2064
+msgid "Table of contents"
 msgstr ""
 
 #: src/preferences.rs:490
-msgid "Typography and colours on top of the template"
-msgstr ""
-
-#: src/preferences.rs:493
-msgid "Sepia"
-msgstr ""
-
-#: src/preferences.rs:494
-msgid "High contrast"
-msgstr ""
-
-#: src/preferences.rs:495
-msgid "Technical"
+msgid "Starts the PDF with the headings and the page where each one falls"
 msgstr ""
 
 #: src/preferences.rs:496
-msgid "Academic"
+msgid "PDF theme"
+msgstr ""
+
+#: src/preferences.rs:497
+msgid "Typography and colours on top of the template"
+msgstr ""
+
+#: src/preferences.rs:500
+msgid "Sepia"
 msgstr ""
 
 #: src/preferences.rs:501
+msgid "High contrast"
+msgstr ""
+
+#: src/preferences.rs:502
+msgid "Technical"
+msgstr ""
+
+#: src/preferences.rs:503
+msgid "Academic"
+msgstr ""
+
+#: src/preferences.rs:508
 msgid "Stylesheet"
 msgstr ""
 
-#: src/preferences.rs:505
+#: src/preferences.rs:512
 msgid "Load…"
 msgstr ""
 
-#: src/preferences.rs:510
+#: src/preferences.rs:517
 msgid "Use the template as is"
 msgstr ""
 
-#: src/preferences.rs:542
+#: src/preferences.rs:550
 msgid "Typography and colour"
 msgstr ""
 
-#: src/preferences.rs:544
+#: src/preferences.rs:552
 msgid ""
 "A theme changes type and colours on top of the template. Your own stylesheet "
 "is applied last, so it wins over both"
 msgstr ""
 
-#: src/preferences.rs:628
+#: src/preferences.rs:644
 msgid "CSS stylesheets"
 msgstr ""
 
-#: src/preferences.rs:633
+#: src/preferences.rs:649
 msgid "Choose a stylesheet"
 msgstr ""
 

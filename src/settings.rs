@@ -751,4 +751,7 @@ impl AppSettings {
             }
         });
     }
+
+    // Índice al principio del PDF con los títulos y su número de página real.
+    prop!(export_toc, set_export_toc, "export-toc", bool, false);
 }
