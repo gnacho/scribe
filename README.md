@@ -220,7 +220,8 @@ pre { background-color: #f5f5f5 }
 ## Limitations
 
 - **UTF-8 only.** Files are read as UTF-8 and written back byte for byte. A
-  file in another encoding (Latin-1, UTF-16, and so on) does not open.
+  file in another encoding (Latin-1, UTF-16, and so on) does not open. A
+  leading UTF-8 BOM is kept as it is, and Scribe never adds one.
 - **The source is the preview.** Rendering is a set of `GtkTextTag` spans and
   painted ornaments over the buffer, not a layout engine. HTML in the source is
   not interpreted: it stays as dimmed text in the editor and is dropped in the

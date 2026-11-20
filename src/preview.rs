@@ -78,6 +78,10 @@ impl Doc {
 }
 
 fn render(markdown: &str) -> (String, Vec<(i32, i32, &'static str)>) {
+    // Un BOM inicial no es espacio para pulldown: sin quitarlo, el primer
+    // bloque sale como párrafo también en la vista previa (#208).
+    let markdown = markdown.strip_prefix('\u{feff}').unwrap_or(markdown);
+
     let mut opts = Options::empty();
     opts.insert(Options::ENABLE_STRIKETHROUGH);
     opts.insert(Options::ENABLE_TABLES);
@@ -442,5 +446,14 @@ mod tests {
         assert!(tags.contains(&"h2"), "tags: {tags:?}");
         let tags = etiquetas("Frase\n===\n");
         assert!(tags.contains(&"h1"), "tags: {tags:?}");
+    }
+
+    // #208: el BOM inicial no debe dejar la primera cabecera como párrafo.
+    #[test]
+    fn una_cabecera_tras_el_bom_sigue_siendo_cabecera() {
+        let tags = etiquetas("\u{feff}# Título\n");
+        assert!(tags.contains(&"h1"), "tags: {tags:?}");
+        // Y el BOM no se cuela en el texto pintado.
+        assert_eq!(render("\u{feff}# Título\n").0, "Título\n");
     }
 }
