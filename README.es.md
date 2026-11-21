@@ -130,6 +130,7 @@ con GTK4 y ha terminado siendo algo que uso de verdad para borradores y notas.
   para que las columnas cuadren en el fuente.
 - **Continuación de listas**: al pulsar Intro se crea el siguiente elemento y
   se renumeran las listas ordenadas. Dejar un elemento vacío cierra la lista.
+  Tab añade un nivel de sangría al elemento y Mayús+Tab se lo quita.
 - **Zoom** (Ctrl +/&minus;/0).
 - **Cabecera** al estilo de GNOME Text Editor: botón de abrir con desplegable
   de recientes, botón de nueva pestaña, título centrado, botón de vista

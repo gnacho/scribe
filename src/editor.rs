@@ -1335,6 +1335,89 @@ pub(crate) fn continuar_lista_en_buffer(buffer: &gtksourceview5::Buffer) -> bool
     true
 }
 
+/// Indenta la línea del cursor cuando es un elemento de lista, o le quita una
+/// sangría (Shift+Tab). Devuelve `false` si la línea no es de lista: entonces
+/// la tecla sigue su camino normal y el buffer inserta tabulación o mueve el
+/// foco como siempre.
+pub(crate) fn sangrar_lista_en_buffer(buffer: &gtksourceview5::Buffer, desindentar: bool) -> bool {
+    if buffer.selection_bounds().is_some() {
+        return false;
+    }
+    let numero_linea = buffer.iter_at_offset(buffer.cursor_position()).line();
+    // Cada iterador vive dentro de su bloque: GTK avisa si queda alguno vivo
+    // cuando el contenido del buffer cambia.
+    let (line, columna) = {
+        let Some(desde) = buffer.iter_at_line(numero_linea) else {
+            return false;
+        };
+        let Some(mut hasta) = buffer.iter_at_line(numero_linea) else {
+            return false;
+        };
+        hasta.forward_to_line_end();
+        let texto = buffer.text(&desde, &hasta, true).to_string();
+        let columna = (buffer.cursor_position() - desde.offset()).max(0) as usize;
+        (texto, columna)
+    };
+    let Some(nueva) = linea_sangrada(&line, desindentar) else {
+        return false;
+    };
+    if nueva == line {
+        // Ya está al ras: la tecla es de la lista aunque no haya nada que
+        // mover, así que no se deja pasar (Shift+Tab no debe cambiar el foco).
+        return true;
+    }
+    let delta = nueva.chars().count() as i64 - line.chars().count() as i64;
+    let destino_columna = if delta < 0 {
+        columna.saturating_sub(delta.unsigned_abs() as usize)
+    } else {
+        columna + delta as usize
+    };
+    buffer.begin_user_action();
+    {
+        let Some(mut desde) = buffer.iter_at_line(numero_linea) else {
+            buffer.end_user_action();
+            return false;
+        };
+        let Some(mut hasta) = buffer.iter_at_line(numero_linea) else {
+            buffer.end_user_action();
+            return false;
+        };
+        hasta.forward_to_line_end();
+        buffer.delete(&mut desde, &mut hasta);
+    }
+    {
+        let Some(mut at) = buffer.iter_at_line(numero_linea) else {
+            buffer.end_user_action();
+            return false;
+        };
+        buffer.insert(&mut at, &nueva);
+    }
+    let Some(mut destino) = buffer.iter_at_line(numero_linea) else {
+        buffer.end_user_action();
+        return false;
+    };
+    destino.forward_chars(destino_columna.min(nueva.chars().count()) as i32);
+    buffer.place_cursor(&destino);
+    buffer.end_user_action();
+    true
+}
+
+/// Línea de lista con un nivel más de sangría (cuatro espacios) o con uno
+/// menos. `None` si la línea no es un elemento de lista.
+fn linea_sangrada(line: &str, desindentar: bool) -> Option<String> {
+    list_continuation(line)?;
+    if !desindentar {
+        return Some(format!("    {line}"));
+    }
+    if let Some(resto) = line.strip_prefix("    ") {
+        return Some(resto.to_string());
+    }
+    if let Some(resto) = line.strip_prefix('\t') {
+        return Some(resto.to_string());
+    }
+    Some(line.to_string())
+}
+
 // --- pegado y soltado de imágenes -------------------------------------------
 //
 // Las imágenes se guardan en `images/`, junto al documento, y se inserta un
@@ -2003,26 +2086,34 @@ impl Editor {
             }
         });
 
-        // Continuar listas al pulsar Intro. Fase de captura para adelantarnos
-        // al manejador propio del GtkTextView.
+        // Continuar listas al pulsar Intro e indentarlas con Tab. Fase de
+        // captura para adelantarnos al manejador propio del GtkTextView.
         let controller = gtk4::EventControllerKey::new();
         controller.set_propagation_phase(gtk4::PropagationPhase::Capture);
         let buffer = self.buffer.clone();
         let continue_lists = self.continue_lists.clone();
         controller.connect_key_pressed(move |_, key, _, state| {
-            let plain = !state.intersects(
-                gdk4::ModifierType::CONTROL_MASK
-                    | gdk4::ModifierType::SHIFT_MASK
-                    | gdk4::ModifierType::ALT_MASK,
-            );
             if !continue_lists.get()
-                || !plain
-                || !matches!(key, gdk4::Key::Return | gdk4::Key::KP_Enter)
+                || state.intersects(gdk4::ModifierType::CONTROL_MASK | gdk4::ModifierType::ALT_MASK)
             {
                 return glib::Propagation::Proceed;
             }
-
-            if continuar_lista_en_buffer(&buffer) {
+            let shift = state.contains(gdk4::ModifierType::SHIFT_MASK);
+            if matches!(key, gdk4::Key::Return | gdk4::Key::KP_Enter) && !shift {
+                return if continuar_lista_en_buffer(&buffer) {
+                    glib::Propagation::Stop
+                } else {
+                    glib::Propagation::Proceed
+                };
+            }
+            // Shift+Tab llega como ISO_Left_Tab en X11 y como Tab con el
+            // modificador en otros backends: se aceptan las dos formas.
+            let tab = matches!(key, gdk4::Key::Tab);
+            let desindentar = key == gdk4::Key::ISO_Left_Tab || (tab && shift);
+            if !tab && !desindentar {
+                return glib::Propagation::Proceed;
+            }
+            if sangrar_lista_en_buffer(&buffer, desindentar) {
                 glib::Propagation::Stop
             } else {
                 glib::Propagation::Proceed
@@ -2816,6 +2907,53 @@ mod tests {
         assert!(enter_en_lista("- elemento", 0).is_none());
         assert!(enter_en_lista("- elemento", 1).is_none());
         assert!(enter_en_lista("  - elemento", 3).is_none());
+    }
+
+    /// Tab añade un nivel de sangría al elemento de lista (issue #210).
+    #[test]
+    fn tab_indenta_un_elemento_de_lista() {
+        assert_eq!(
+            linea_sangrada("- algo", false).as_deref(),
+            Some("    - algo")
+        );
+        assert_eq!(
+            linea_sangrada("* algo", false).as_deref(),
+            Some("    * algo")
+        );
+        assert_eq!(
+            linea_sangrada("1. algo", false).as_deref(),
+            Some("    1. algo")
+        );
+        assert_eq!(
+            linea_sangrada("    - algo", false).as_deref(),
+            Some("        - algo")
+        );
+    }
+
+    /// Shift+Tab quita un nivel, sea de cuatro espacios o de un tabulador.
+    #[test]
+    fn shift_tab_desindenta_un_elemento_de_lista() {
+        assert_eq!(
+            linea_sangrada("    - algo", true).as_deref(),
+            Some("- algo")
+        );
+        assert_eq!(linea_sangrada("\t- algo", true).as_deref(), Some("- algo"));
+        assert_eq!(
+            linea_sangrada("        - algo", true).as_deref(),
+            Some("    - algo")
+        );
+        // Sin sangría no hay nada que mover, pero la línea sigue siendo de la
+        // lista: la tecla se consume y no cambia el foco.
+        assert_eq!(linea_sangrada("- algo", true).as_deref(), Some("- algo"));
+    }
+
+    /// Fuera de las listas la tecla no es nuestra: el buffer decide.
+    #[test]
+    fn tab_no_toca_lo_que_no_es_lista() {
+        assert!(linea_sangrada("texto normal", false).is_none());
+        assert!(linea_sangrada("texto normal", true).is_none());
+        assert!(linea_sangrada("", false).is_none());
+        assert!(linea_sangrada("-sin espacio", false).is_none());
     }
 
     /// Enter en un elemento vacío cierra la lista.
