@@ -118,7 +118,8 @@ actually use to draft notes and docs.
 - **Align tables** (Ctrl+Alt+T) reformats all tables in the document so their
   columns line up in the source.
 - **List continuation**: pressing Enter starts the next item and re-numbers
-  ordered lists. Leaving an item empty closes the list.
+  ordered lists. Leaving an item empty closes the list. Tab indents an item one
+  level and Shift+Tab takes it back out.
 - **Zoom** (Ctrl +/&minus;/0).
 - **Header bar** follows GNOME Text Editor: open button with recent files
   dropdown, new tab button, centered title, split preview toggle and main menu.
