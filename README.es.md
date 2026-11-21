@@ -222,7 +222,8 @@ salida anterior tal cual.
 ## Limitaciones
 
 - **Solo UTF-8.** Los ficheros se leen como UTF-8 y se escriben de vuelta byte
-  a byte. Un fichero en otra codificación (Latin-1, UTF-16, etc.) no se abre.
+  a byte. Un fichero en otra codificación (Latin-1, UTF-16, etc.) no se abre. Un
+  BOM UTF-8 al principio se conserva tal cual y Scribe nunca añade uno.
 - **El fuente es la previsualización.** El render es un conjunto de tramos
   `GtkTextTag` y adornos pintados sobre el buffer, no un motor de maquetación.
   El HTML del fuente no se interpreta: queda como texto atenuado en el editor y

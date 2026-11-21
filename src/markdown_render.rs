@@ -1652,7 +1652,9 @@ fn collect_unclosed_fences(text: &str) -> Vec<UnclosedFence> {
     opts.insert(Options::ENABLE_TABLES);
     opts.insert(Options::ENABLE_TASKLISTS);
     opts.insert(Options::ENABLE_FOOTNOTES);
-    let normalized = normalize_fences(text);
+
+    let (texto, desplazamiento) = sin_bom(text);
+    let normalized = normalize_fences(texto);
     let text: &str = &normalized;
     let lines = LineIndex::new(text);
     let mut out = Vec::new();
@@ -1661,7 +1663,7 @@ fn collect_unclosed_fences(text: &str) -> Vec<UnclosedFence> {
             if !fenced_block_is_closed(text, range.start, range.end) {
                 out.push(UnclosedFence {
                     line: lines.line_of(range.start) + 1,
-                    offset: range.start,
+                    offset: range.start + desplazamiento,
                 });
             }
         }
@@ -1676,7 +1678,14 @@ pub fn analyze(text: &str) -> Analysis {
     opts.insert(Options::ENABLE_TASKLISTS);
     opts.insert(Options::ENABLE_FOOTNOTES);
 
-    let normalized = normalize_fences(text);
+    // El BOM que algunos editores escriben al principio (U+FEFF) no es espacio
+    // para pulldown-cmark: pegado a `#`, `-` o `|` convierte el primer bloque
+    // en un párrafo (issue #208). Se analiza el texto sin él y los offsets
+    // vuelven al texto original con el desplazamiento. El buffer y el fichero
+    // no se tocan: el BOM sigue en su sitio y se guarda byte a byte.
+    let (texto, desplazamiento) = sin_bom(text);
+
+    let normalized = normalize_fences(texto);
     let text: &str = &normalized;
 
     let lines = LineIndex::new(text);
@@ -2185,12 +2194,61 @@ pub fn analyze(text: &str) -> Analysis {
         spans.retain(|s| !(s.tag == "imagegap" && tarjetas.contains(&lines.line_of(s.start))));
     }
 
-    Analysis {
+    let mut analysis = Analysis {
         spans,
         ornaments,
         images,
         unclosed_fences,
         links,
+    };
+    desplazar_offsets(&mut analysis, desplazamiento);
+    analysis
+}
+
+/// Separa un BOM inicial del texto que se analiza.
+///
+/// Devuelve el texto sin él y su longitud en bytes, que es lo que hay que
+/// sumar a cada offset para volver a hablar en coordenadas del buffer.
+fn sin_bom(text: &str) -> (&str, usize) {
+    match text.strip_prefix('\u{feff}') {
+        Some(resto) => (resto, '\u{feff}'.len_utf8()),
+        None => (text, 0),
+    }
+}
+
+/// Devuelve los offsets de un análisis al texto original cuando se analizó sin
+/// un BOM inicial. Los adornos se indexan por línea, y el BOM no añade líneas:
+/// solo hay que mover los que guardan bytes (marcas de salto en tablas y
+/// relleno de celdas).
+fn desplazar_offsets(analysis: &mut Analysis, desplazamiento: usize) {
+    if desplazamiento == 0 {
+        return;
+    }
+    for span in &mut analysis.spans {
+        span.start += desplazamiento;
+        span.end += desplazamiento;
+    }
+    for imagen in &mut analysis.images {
+        imagen.start += desplazamiento;
+        imagen.end += desplazamiento;
+    }
+    for enlace in &mut analysis.links {
+        enlace.start += desplazamiento;
+        enlace.end += desplazamiento;
+    }
+    for valla in &mut analysis.unclosed_fences {
+        valla.offset += desplazamiento;
+    }
+    for adorno in &mut analysis.ornaments {
+        match adorno {
+            Ornament::Break { offset } => *offset += desplazamiento,
+            Ornament::TableGrid { pads, .. } => {
+                for pad in pads {
+                    pad.offset += desplazamiento;
+                }
+            }
+            _ => {}
+        }
     }
 }
 
@@ -3800,6 +3858,17 @@ mod tests {
     }
 
     #[test]
+    fn cerrar_valla_tras_el_bom_usa_offsets_del_texto_original() {
+        // #208: los offsets de `UnclosedFence` vuelven desplazados por el BOM.
+        // Si no, la inserción cae tres bytes antes de la valla.
+        let text = "\u{feff}```\ncodigo sin cerrar\n";
+        let out = close_unclosed_fences(text).unwrap();
+        assert!(out.starts_with("\u{feff}```\n"), "{out}");
+        assert!(out.ends_with("```\n"), "{out}");
+        assert!(analyze(&out).unclosed_fences.is_empty());
+    }
+
+    #[test]
     fn cerrar_vallas_respeta_la_valla_de_tabulador_de_apertura() {
         // Apertura con tab tras la valla (como la del usuario): normalize la
         // convierte en espacio y el bloque queda abierto; se debe cerrar.
@@ -3997,5 +4066,87 @@ mod prueba_tmp {
             .collect();
         marcas.sort_unstable();
         assert_eq!(marcas, vec![(0, 2), (6, 16), (16, 29)]);
+    }
+
+    #[test]
+    fn un_bom_inicial_desplaza_los_offsets_y_no_cambia_el_analisis() {
+        // Un documento con todos los elementos que guardan offsets: cabecera,
+        // lista, casilla, imagen, enlace, cita, regla y bloque de código.
+        let sin_bom = "# Título\n\n- uno\n- [x] dos\n\n![foto](x.png)\n\n[enlace](https://ej.com)\n\n> cita\n\n---\n\n```\ncodigo\n```\n";
+        let con_bom = format!("\u{feff}{sin_bom}");
+        let a = analyze(&con_bom);
+        let b = analyze(sin_bom);
+
+        // Los adornos van por línea y el BOM no añade ninguna.
+        assert_eq!(a.ornaments, b.ornaments);
+
+        assert_eq!(a.spans.len(), b.spans.len(), "mismos tramos");
+        for (x, y) in a.spans.iter().zip(&b.spans) {
+            assert_eq!((x.tag, x.kind), (y.tag, y.kind));
+            assert_eq!(x.start, y.start + 3);
+            assert_eq!(x.end, y.end + 3);
+            let elemento = if y.elemento == (0, 0) {
+                (0, 0)
+            } else {
+                (y.elemento.0 + 3, y.elemento.1 + 3)
+            };
+            assert_eq!(x.elemento, elemento);
+        }
+
+        assert_eq!(a.images.len(), b.images.len());
+        for (x, y) in a.images.iter().zip(&b.images) {
+            assert_eq!((x.start, x.end), (y.start + 3, y.end + 3));
+            assert_eq!((x.line, &x.alt), (y.line, &y.alt));
+        }
+
+        assert_eq!(a.links.len(), b.links.len());
+        for (x, y) in a.links.iter().zip(&b.links) {
+            assert_eq!((x.start, x.end), (y.start + 3, y.end + 3));
+            assert_eq!(x.dest, y.dest);
+        }
+    }
+
+    #[test]
+    fn una_cabecera_tras_el_bom_se_renderiza_como_cabecera() {
+        // #208: sin el desplazamiento, pulldown devuelve un párrafo y la
+        // cabecera pierde su estilo.
+        let a = analyze("\u{feff}# Título\n");
+        assert_eq!(
+            a.spans
+                .iter()
+                .filter(|s| s.tag == "h1")
+                .map(|s| (s.start, s.end))
+                .collect::<Vec<_>>(),
+            vec![(3, 12)]
+        );
+        assert_eq!(a.ornaments, vec![Ornament::HeadingRule { line: 0 }]);
+    }
+
+    #[test]
+    fn una_tabla_al_principio_con_bom_conserva_sus_anclas() {
+        let sin_bom = "| aaa | bbb |\n|-----|-----|\n| 111 | 222 |\n";
+        let con_bom = format!("\u{feff}{sin_bom}");
+        let a = analyze(&con_bom);
+        let b = analyze(sin_bom);
+
+        let pads = |analysis: &Analysis| -> Vec<usize> {
+            analysis
+                .ornaments
+                .iter()
+                .find_map(|o| match o {
+                    Ornament::TableGrid { pads, .. } => {
+                        Some(pads.iter().map(|p| p.offset).collect())
+                    }
+                    _ => None,
+                })
+                .expect("una tabla con geometría suficiente deja rejilla")
+        };
+        let con = pads(&a);
+        let sin = pads(&b);
+        assert_eq!(con.len(), sin.len());
+        for (x, y) in con.iter().zip(&sin) {
+            assert_eq!(*x, y + 3);
+            assert_eq!(con_bom.as_bytes()[*x], b'|', "el ancla cae en su pipe");
+        }
     }
 }
