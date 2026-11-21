@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: scribe\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-11-18 19:34+0100\n"
+"POT-Creation-Date: 2026-11-21 11:04+0100\n"
 "PO-Revision-Date: 2026-09-19 19:58+0200\n"
 "Last-Translator: Automatically generated\n"
 "Language-Team: none\n"
@@ -33,222 +33,226 @@ msgstr "_Descartar todo"
 msgid "Decide Later"
 msgstr "Decidir más tarde"
 
-#: src/window.rs:290 src/window.rs:771 src/window.rs:1251 src/window.rs:1523
+#: src/window.rs:290 src/window.rs:778 src/window.rs:1258 src/window.rs:1530
 msgid "Untitled"
 msgstr "Sin título"
 
-#: src/window.rs:334
+#: src/window.rs:341
 msgid "Draft"
 msgstr "Borrador"
 
-#: src/window.rs:338
+#: src/window.rs:345
 msgid "Unsaved draft"
 msgstr "Borrador sin guardar"
 
-#: src/window.rs:428 src/window.rs:2316
+#: src/window.rs:435 src/window.rs:2334
 #, rust-format
 msgid "Save changes to “{name}”?"
 msgstr "¿Guardar los cambios en «{name}»?"
 
-#: src/window.rs:430 src/window.rs:2318
+#: src/window.rs:437 src/window.rs:2336
 msgid "If you close without saving, you will lose what you have written."
 msgstr "Si cierras sin guardar, perderás lo que hayas escrito."
 
-#: src/window.rs:433 src/window.rs:1052 src/window.rs:2321
+#: src/window.rs:440 src/window.rs:1059 src/window.rs:2339
 msgid "_Cancel"
 msgstr "_Cancelar"
 
-#: src/window.rs:434 src/window.rs:2322
+#: src/window.rs:441 src/window.rs:2340
 msgid "_Discard"
 msgstr "_Descartar"
 
-#: src/window.rs:435 src/window.rs:818 src/window.rs:2323
+#: src/window.rs:442 src/window.rs:825 src/window.rs:2341
 msgid "_Save"
 msgstr "_Guardar"
 
-#: src/window.rs:464 src/window.rs:498 src/window.rs:2353 src/window.rs:2381
+#: src/window.rs:471 src/window.rs:505 src/window.rs:2371 src/window.rs:2399
 #, rust-format
 msgid "Could not save: {e}"
 msgstr "No se pudo guardar: {e}"
 
-#: src/window.rs:546
+#: src/window.rs:553
 msgid "Documents"
 msgstr "Documentos"
 
-#: src/window.rs:552
+#: src/window.rs:559
 msgid "Filter recents…"
 msgstr "Filtrar recientes…"
 
-#: src/window.rs:581
+#: src/window.rs:588
 msgid "Recents"
 msgstr "Recientes"
 
-#: src/window.rs:583
+#: src/window.rs:590
 msgid "Contents"
 msgstr "Contenido"
 
-#: src/window.rs:641
+#: src/window.rs:648
 msgid "Search"
 msgstr "Buscar"
 
-#: src/window.rs:648
+#: src/window.rs:655
 msgid "Match Case"
 msgstr "Distinguir mayúsculas y minúsculas"
 
-#: src/window.rs:652
+#: src/window.rs:659
 msgid "Regular Expression"
 msgstr "Expresión regular"
 
-#: src/window.rs:659 src/shortcuts.ui:114
+#: src/window.rs:666 src/shortcuts.ui:114
 msgid "Find Previous"
 msgstr "Buscar anterior"
 
-#: src/window.rs:664 src/shortcuts.ui:108
+#: src/window.rs:671 src/shortcuts.ui:108
 msgid "Find Next"
 msgstr "Buscar siguiente"
 
-#: src/window.rs:671
+#: src/window.rs:678
 msgid "Search & Replace"
 msgstr "Buscar y reemplazar"
 
-#: src/window.rs:685 src/shortcuts.ui:102
+#: src/window.rs:692 src/shortcuts.ui:102
 msgid "Replace"
 msgstr "Reemplazar"
 
-#: src/window.rs:689
+#: src/window.rs:696
 msgid "_Replace"
 msgstr "_Reemplazar"
 
-#: src/window.rs:693
+#: src/window.rs:700
 msgid "Replace _All"
 msgstr "Reemplazar _todo"
 
-#: src/window.rs:748 src/window.rs:1127
+#: src/window.rs:755 src/window.rs:1134
 msgid "No recent documents"
 msgstr "Sin documentos recientes"
 
-#: src/window.rs:763
+#: src/window.rs:770
 msgid "_Open"
 msgstr "_Abrir"
 
-#: src/window.rs:765
+#: src/window.rs:772
 msgid "Open a document (Ctrl+O)"
 msgstr "Abrir un documento (Ctrl+O)"
 
-#: src/window.rs:779
+#: src/window.rs:786
 msgid "New Tab (Ctrl+N)"
 msgstr "Nueva pestaña (Ctrl+N)"
 
-#: src/window.rs:787
+#: src/window.rs:794
 msgid "Main menu"
 msgstr "Menú principal"
 
-#: src/window.rs:795
+#: src/window.rs:802
 msgid "Find in the document (Ctrl+F)"
 msgstr "Buscar en el documento (Ctrl+F)"
 
-#: src/window.rs:809
+#: src/window.rs:816
 msgid "Typewriter Mode (Ctrl+Shift+T)"
 msgstr "Modo máquina de escribir (Ctrl+Mayús+T)"
 
-#: src/window.rs:819
+#: src/window.rs:826
 msgid "Save _As…"
 msgstr "Guardar _como…"
 
-#: src/window.rs:820
+#: src/window.rs:827
 msgid "Export to _PDF…"
 msgstr "Exportar a _PDF…"
 
-#: src/window.rs:821
+#: src/window.rs:828
 msgid "Print Pre_view…"
 msgstr "Vista pre_via de impresión…"
 
-#: src/window.rs:825 src/shortcuts.ui:160
+#: src/window.rs:832 src/shortcuts.ui:160
 msgid "Sidebar"
 msgstr "Barra lateral"
 
-#: src/window.rs:826 src/shortcuts.ui:172
+#: src/window.rs:833 src/shortcuts.ui:172
 msgid "Focus Mode"
 msgstr "Modo foco"
 
-#: src/window.rs:828 src/shortcuts.ui:178
+#: src/window.rs:835 src/shortcuts.ui:178
 msgid "Typewriter Mode"
 msgstr "Máquina de escribir"
 
-#: src/window.rs:834
+#: src/window.rs:841
 msgid "_Preferences"
 msgstr "_Preferencias"
 
-#: src/window.rs:836
+#: src/window.rs:843
 msgid "_Keyboard Shortcuts"
 msgstr "_Atajos de teclado"
 
-#: src/window.rs:839
+#: src/window.rs:846
 msgid "_About Scribe"
 msgstr "_Acerca de Scribe"
 
-#: src/window.rs:913
+#: src/window.rs:920
 #, rust-format
 msgid "{0} of {1}"
 msgstr "{0} de {1}"
 
-#: src/window.rs:988 src/window.rs:1032 src/window.rs:1069
+#: src/window.rs:995 src/window.rs:1039 src/window.rs:1076
 #, rust-format
 msgid "Could not reload: {e}"
 msgstr "No se pudo recargar: {e}"
 
-#: src/window.rs:995 src/window.rs:1025
+#: src/window.rs:1002 src/window.rs:1032
 msgid "File deleted on disk; save to recreate it"
 msgstr "El fichero se borró en disco; guárdalo para recrearlo"
 
-#: src/window.rs:1017
+#: src/window.rs:1024
 msgid "This document is not linked to a file"
 msgstr "Este documento no está asociado a un fichero"
 
-#: src/window.rs:1047
+#: src/window.rs:1054
 #, rust-format
 msgid "Reload “{name}” and discard changes?"
 msgstr "¿Recargar «{name}» y descartar los cambios?"
 
-#: src/window.rs:1049
+#: src/window.rs:1056
 msgid "The file changed on disk. Reloading discards your unsaved edits."
 msgstr "El fichero cambió en disco. Recargar descarta tus cambios sin guardar."
 
-#: src/window.rs:1053
+#: src/window.rs:1060
 msgid "_Reload"
 msgstr "_Recargar"
 
-#: src/window.rs:1108
+#: src/window.rs:1115
 msgid "Not found"
 msgstr "No encontrado"
 
-#: src/window.rs:1129
+#: src/window.rs:1136
 msgid "No results"
 msgstr "Ningún resultado"
 
-#: src/window.rs:1433
+#: src/window.rs:1440
 #, rust-format
 msgid "Could not open: {e}"
 msgstr "No se pudo abrir: {e}"
 
-#: src/window.rs:1703
+#: src/window.rs:1710
 msgid "Code fences closed"
 msgstr "Vallas de código cerradas"
 
-#: src/window.rs:1705
+#: src/window.rs:1712
 msgid "No unclosed fences"
 msgstr "No hay vallas abiertas"
 
-#: src/window.rs:1927
+#: src/window.rs:1894
+msgid "The open file is read-only. Choose where to save a copy."
+msgstr "El fichero abierto es de solo lectura. Elige dónde guardar una copia."
+
+#: src/window.rs:1945
 msgid "That file is already open in another tab"
 msgstr "Ese fichero ya está abierto en otra pestaña"
 
-#: src/window.rs:2061
+#: src/window.rs:2079
 #, rust-format
 msgid "{n} occurrences replaced"
 msgstr "{n} coincidencias reemplazadas"
 
-#: src/window.rs:2472
+#: src/window.rs:2490
 #, rust-format
 msgid "Could not autosave: {e}"
 msgstr "No se pudo autoguardar: {e}"
@@ -277,39 +281,39 @@ msgstr "Mediana"
 msgid "Large"
 msgstr "Grande"
 
-#: src/editor.rs:2175
+#: src/editor.rs:2174
 msgid "Original size"
 msgstr "Tamaño original"
 
-#: src/editor.rs:2181
+#: src/editor.rs:2180
 msgid "Image size"
 msgstr "Tamaño de la imagen"
 
-#: src/editor.rs:2185
+#: src/editor.rs:2184
 msgid "Align left"
 msgstr "Alinear a la izquierda"
 
-#: src/editor.rs:2186
+#: src/editor.rs:2185
 msgid "Align centre"
 msgstr "Alinear al centro"
 
-#: src/editor.rs:2187
+#: src/editor.rs:2186
 msgid "Align right"
 msgstr "Alinear a la derecha"
 
-#: src/editor.rs:2197
+#: src/editor.rs:2195
 msgid "Alignment"
 msgstr "Alineación"
 
-#: src/editor.rs:2225
+#: src/editor.rs:2223
 msgid "Ignore word"
 msgstr "Ignorar palabra"
 
-#: src/editor.rs:2232
+#: src/editor.rs:2230
 msgid "Add to dictionary"
 msgstr "Aniadir al diccionario"
 
-#: src/editor.rs:2259
+#: src/editor.rs:2257
 #, rust-format
 msgid "Ctrl+click to open {url}"
 msgstr "Ctrl+clic para abrir {url}"
