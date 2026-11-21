@@ -328,7 +328,14 @@ fn refresh_doc_tab(
     let (name, subtitle) = match file.as_ref() {
         Some(p) => (
             file_name_of(p),
-            p.parent().map(shorten_home).unwrap_or_default(),
+            // El portal de documentos del Flatpak sirve el fichero desde un
+            // montaje temporal: su directorio no dice dónde vive el documento
+            // y solo confunde en la cabecera (#212).
+            if crate::guardado::ruta_de_portal(p) {
+                String::new()
+            } else {
+                p.parent().map(shorten_home).unwrap_or_default()
+            },
         ),
         // Sin fichero, el borrador usa el nombre cacheado ("Untitled").
         None => (doc.display_name.borrow().clone(), gettext("Draft")),
@@ -1873,11 +1880,22 @@ impl ScribeWindow {
                     return;
                 };
                 let content = doc.editor.text();
-                let path = if force_dialog {
+                let mut path = if force_dialog {
                     None
                 } else {
                     doc.current_file.borrow().clone()
                 };
+                // Un documento que presta el portal del Flatpak puede estar
+                // exportado de solo lectura: si no se puede escribir, «Guardar»
+                // pasa a ser «Guardar como» en vez de fallar con EACCES (#211).
+                if let Some(p) = path.as_ref() {
+                    if !crate::guardado::es_escribible(p) {
+                        toast(&gettext(
+                            "The open file is read-only. Choose where to save a copy.",
+                        ));
+                        path = None;
+                    }
+                }
                 let settings = settings.clone();
                 let refresh_recents = refresh_recents.clone();
                 let refresh_tabs = refresh_tabs.clone();
