@@ -208,12 +208,14 @@ fn editor_page(settings: &Rc<AppSettings>, apply: &Rc<dyn Fn()>) -> adw::Prefere
         ))
         .build();
     // Mientras `gtk_hides_invisible_safely()` sea falso (mitigación de
-    // GNOME/gtk#8346), «Ocultar» y «Al enfocar» no ocultan de verdad: las
-    // marcas sustituidas se encogen (tag `syn_shrink`) y las demás se
-    // atenúan, y «Al enfocar» equivale a «Ocultar» porque ya no hay revelado
-    // por línea. Con un GTK sano, sin sufijo y ocultado real.
-    let markup = if gtk_hides_invisible_safely() {
-        combo_i18n(
+    // GNOME/gtk#8346) solo existen dos comportamientos reales: las marcas
+    // encogidas (tag `syn_shrink`, invisibles) o atenuadas. No hay revelado
+    // por línea, así que «ocultar» y «al enfocar» serían la misma opción: se
+    // ofrece un interruptor con lenguaje de usuario en vez de un desplegable
+    // con tres entradas y una nota de mantenimiento. Con un GTK sano vuelve
+    // el desplegable completo.
+    if gtk_hides_invisible_safely() {
+        let markup = combo_i18n(
             &gettext("Markdown marks"),
             &gettext("“On focus” reveals them only on the cursor line"),
             &[
@@ -222,20 +224,41 @@ fn editor_page(settings: &Rc<AppSettings>, apply: &Rc<dyn Fn()>) -> adw::Prefere
                 gettext("Always dim"),
             ],
             settings.markup_visibility().index(),
-        )
+        );
+        {
+            let settings = settings.clone();
+            let apply = apply.clone();
+            markup.connect_selected_notify(move |row| {
+                settings.set_markup_visibility(MarkupVisibility::from_index(row.selected()));
+                apply();
+            });
+        }
+        markup_group.add(&markup);
     } else {
-        combo_i18n(
-            &gettext("Markdown marks"),
-            &gettext("Hiding text still crashes this GTK: the marks shrink instead"),
-            &[
-                gettext("Always hide (shrinks the marks; GTK cannot hide them yet)"),
-                gettext("Show on focus (shrinks the marks; GTK cannot hide them yet)"),
-                gettext("Always dim"),
-            ],
-            settings.markup_visibility().index(),
-        )
-    };
-    markup_group.add(&markup);
+        let markup = adw::SwitchRow::builder()
+            .title(gettext("Hide Markdown marks"))
+            .subtitle(gettext(
+                "Asterisks, hashes and URLs disappear while you write. Off keeps them dimmed instead.",
+            ))
+            .active(matches!(
+                settings.markup_visibility(),
+                MarkupVisibility::Hidden | MarkupVisibility::Focus
+            ))
+            .build();
+        {
+            let settings = settings.clone();
+            let apply = apply.clone();
+            markup.connect_active_notify(move |row| {
+                settings.set_markup_visibility(if row.is_active() {
+                    MarkupVisibility::Hidden
+                } else {
+                    MarkupVisibility::Dim
+                });
+                apply();
+            });
+        }
+        markup_group.add(&markup);
+    }
     page.add(&markup_group);
 
     let writing_group = adw::PreferencesGroup::builder()
@@ -330,14 +353,6 @@ fn editor_page(settings: &Rc<AppSettings>, apply: &Rc<dyn Fn()>) -> adw::Prefere
         });
     }
 
-    {
-        let settings = settings.clone();
-        let apply = apply.clone();
-        markup.connect_selected_notify(move |row| {
-            settings.set_markup_visibility(MarkupVisibility::from_index(row.selected()));
-            apply();
-        });
-    }
     for (row, setter) in [
         (
             &lists,
